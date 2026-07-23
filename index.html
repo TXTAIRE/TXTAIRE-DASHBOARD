@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TxTAIRE HQ · HR & Operations</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<div id="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="assets/logo.svg" alt="TxTAIRE Refrigeration and Air-conditioning Services" class="brand-logo" />
+    </div>
+
+    <nav id="sidebar-nav">
+      <div class="nav-group">
+        <div class="nav-label">General</div>
+        <a class="nav-item" data-route="overview"><span class="ic">&#9635;</span> Overview</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">HR</div>
+        <a class="nav-item" data-route="staff"><span class="ic">&#128100;</span> Employees</a>
+        <a class="nav-item" data-route="recruitment"><span class="ic">&#128203;</span> Recruitment</a>
+        <a class="nav-item" data-route="probation"><span class="ic">&#128197;</span> Probation / Regularization</a>
+        <a class="nav-item" data-route="disciplinary"><span class="ic">&#9888;</span> Disciplinary / NTE</a>
+        <a class="nav-item" data-route="attendance"><span class="ic">&#128197;</span> Attendance</a>
+        <a class="nav-item" data-route="payroll"><span class="ic">&#128179;</span> Payroll</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Records</div>
+        <a class="nav-item" data-route="complaints"><span class="ic">&#128172;</span> Complaints</a>
+      </div>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="avatar-chip">HR</div>
+      <div>
+        <div style="color:var(--text); font-weight:600;">HR Admin</div>
+        <div style="font-size:11px;">TxTAIRE HQ</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main" id="main-content"></main>
+</div>
+
+<script src="js/store.js"></script>
+<script src="js/views/overview.js"></script>
+<script src="js/views/staff.js"></script>
+<script src="js/views/recruitment.js"></script>
+<script src="js/views/probation.js"></script>
+<script src="js/views/disciplinary.js"></script>
+<script src="js/views/attendance.js"></script>
+<script src="js/views/payroll.js"></script>
+<script src="js/views/complaints.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

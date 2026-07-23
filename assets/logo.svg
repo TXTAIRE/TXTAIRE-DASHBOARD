@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 190">
+  <g fill="none" stroke-linecap="round" stroke-width="10">
+    <path d="M20 95 C 110 40, 170 40, 230 70 C 290 100, 350 100, 410 55" stroke="#1a4fb4"/>
+    <path d="M20 78 C 110 25, 170 25, 230 55 C 290 85, 350 85, 410 40" stroke="#2f6fed"/>
+    <path d="M20 61 C 110 12, 170 12, 230 40 C 290 68, 350 68, 410 25" stroke="#6ea3ff"/>
+  </g>
+  <text x="10" y="150" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="70" fill="#1a4fb4">TXT<tspan fill="#1b8a4b">AIRE</tspan></text>
+  <path d="M410 100 C 424 78, 448 78, 452 100 C 452 116, 434 126, 424 126 C 424 116, 416 110, 410 100 Z" fill="#3fae5a"/>
+  <path d="M424 126 L 430 108" stroke="#1b8a4b" stroke-width="4"/>
+  <rect x="10" y="160" width="470" height="4" fill="#1b8a4b"/>
+  <text x="10" y="184" font-family="Arial, Helvetica, sans-serif" font-weight="600" font-size="20" fill="#1a4fb4">Refrigeration and Air-conditioning Services</text>
+</svg>
