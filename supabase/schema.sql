@@ -1,4 +1,4 @@
--- TxTAIRE HQ — Supabase schema
+-- TxTAIRE — Supabase schema
 -- Run this once in the Supabase SQL Editor (Project → SQL Editor → New query → paste → Run).
 --
 -- Column names are quoted camelCase to match the JSON shapes js/store.js already produces,

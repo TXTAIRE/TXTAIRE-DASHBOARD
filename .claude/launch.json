@@ -5,7 +5,7 @@
       "name": "static-server",
       "runtimeExecutable": "powershell",
       "runtimeArgs": ["-ExecutionPolicy", "Bypass", "-File", "serve.ps1"],
-      "port": 8347
+      "port": 8765
     }
   ]
 }
