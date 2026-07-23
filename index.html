@@ -3,11 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>TxTAIRE HQ · HR & Operations</title>
+<title>TxTAIRE · HR & Operations</title>
 <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-<div id="app">
+<div id="auth-screen" class="hidden"></div>
+
+<div id="app" class="hidden">
   <aside class="sidebar">
     <div class="brand">
       <img src="assets/logo.svg" alt="TxTAIRE Refrigeration and Air-conditioning Services" class="brand-logo" />
@@ -35,16 +37,19 @@
 
     <div class="sidebar-foot">
       <div class="avatar-chip">HR</div>
-      <div>
-        <div style="color:var(--text); font-weight:600;">HR Admin</div>
-        <div style="font-size:11px;">TxTAIRE HQ</div>
+      <div style="flex:1; min-width:0;">
+        <div id="user-email" style="color:var(--text); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">&nbsp;</div>
+        <div style="font-size:11px;">TxTAIRE</div>
       </div>
+      <button id="btn-logout" class="link-btn" title="Sign out">Sign out</button>
     </div>
   </aside>
 
   <main class="main" id="main-content"></main>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-config.js"></script>
 <script src="js/store.js"></script>
 <script src="js/views/overview.js"></script>
 <script src="js/views/staff.js"></script>
@@ -54,6 +59,7 @@
 <script src="js/views/attendance.js"></script>
 <script src="js/views/payroll.js"></script>
 <script src="js/views/complaints.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

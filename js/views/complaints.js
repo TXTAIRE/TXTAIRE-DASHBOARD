@@ -78,7 +78,7 @@ window.Views.complaints = (function () {
         <button class="btn btn-ghost btn-sm" id="btn-del-complaint">Delete</button>
       </div>
     `, (dr) => {
-      qs('#btn-save-complaint', dr).addEventListener('click', () => {
+      qs('#btn-save-complaint', dr).addEventListener('click', async () => {
         const status = qs('#status-select', dr).value;
         const patch = {
           assignedTo: qs('#assign-select', dr).value || null,
@@ -86,14 +86,14 @@ window.Views.complaints = (function () {
           resolutionNotes: qs('#notes-input', dr).value.trim(),
         };
         if (status === 'Resolved' && c.status !== 'Resolved') patch.resolvedDate = todayISO();
-        Store.updateComplaint(c.id, patch);
+        await Store.updateComplaint(c.id, patch);
         toast('Complaint updated.');
         closeDrawer();
         renderList(main);
       });
-      qs('#btn-del-complaint', dr).addEventListener('click', () => {
+      qs('#btn-del-complaint', dr).addEventListener('click', async () => {
         if (confirm('Delete this complaint?')) {
-          Store.deleteComplaint(c.id);
+          await Store.deleteComplaint(c.id);
           closeDrawer();
           toast('Complaint deleted.');
           renderList(main);
@@ -122,10 +122,10 @@ window.Views.complaints = (function () {
         </div>
       </form>
     `, (bd) => {
-      qs('#complaint-form', bd).addEventListener('submit', (ev) => {
+      qs('#complaint-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
-        Store.addComplaint({
+        await Store.addComplaint({
           customerName: fd.get('customerName').trim(),
           contact: fd.get('contact').trim(),
           dateReceived: fd.get('dateReceived'),

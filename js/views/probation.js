@@ -154,8 +154,8 @@ window.Views.probation = (function () {
         <button class="btn btn-ghost btn-sm" id="btn-del-probation">Remove from tracking</button>
       </div>
     `, (dr) => {
-      qs('#btn-save-third', dr).addEventListener('click', () => {
-        Store.updateProbation(r.id, {
+      qs('#btn-save-third', dr).addEventListener('click', async () => {
+        await Store.updateProbation(r.id, {
           thirdMonthStatus: qs('#third-status', dr).value,
           thirdMonthEvaluatedDate: qs('#third-date', dr).value,
           thirdMonthNotes: qs('#third-notes', dr).value.trim(),
@@ -164,8 +164,8 @@ window.Views.probation = (function () {
         closeDrawer();
         renderList(main);
       });
-      qs('#btn-save-sixth', dr).addEventListener('click', () => {
-        Store.updateProbation(r.id, {
+      qs('#btn-save-sixth', dr).addEventListener('click', async () => {
+        await Store.updateProbation(r.id, {
           sixthMonthStatus: qs('#sixth-status', dr).value,
           sixthMonthEvaluatedDate: qs('#sixth-date', dr).value,
           sixthMonthNotes: qs('#sixth-notes', dr).value.trim(),
@@ -174,27 +174,27 @@ window.Views.probation = (function () {
         closeDrawer();
         renderList(main);
       });
-      qsa('#seg-finalize button', dr).forEach(b => b.addEventListener('click', () => {
+      qsa('#seg-finalize button', dr).forEach(b => b.addEventListener('click', async () => {
         if (!emp) return;
         if (b.dataset.val === 'regular') {
           if (confirm('Confirm regularizing ' + emp.name + '? This sets their employment status to Regular.')) {
-            Store.updateEmployee(emp.id, { employmentStatus: 'Regular' });
+            await Store.updateEmployee(emp.id, { employmentStatus: 'Regular' });
             toast(emp.name + ' is now Regular.');
             closeDrawer();
             renderList(main);
           }
         } else {
           if (confirm('Confirm end of contract for ' + emp.name + '? This sets their status to Terminated on the Employees page.')) {
-            Store.updateEmployee(emp.id, { status: 'Terminated' });
+            await Store.updateEmployee(emp.id, { status: 'Terminated' });
             toast(emp.name + '\'s contract has been ended.');
             closeDrawer();
             renderList(main);
           }
         }
       }));
-      qs('#btn-del-probation', dr).addEventListener('click', () => {
+      qs('#btn-del-probation', dr).addEventListener('click', async () => {
         if (confirm('Remove this employee from probation tracking?')) {
-          Store.deleteProbation(r.id);
+          await Store.deleteProbation(r.id);
           closeDrawer();
           toast('Removed from tracking.');
           renderList(main);
@@ -232,10 +232,10 @@ window.Views.probation = (function () {
         </div>
       </form>
     `, (bd) => {
-      qs('#probation-form', bd).addEventListener('submit', (ev) => {
+      qs('#probation-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
-        Store.addProbation({
+        await Store.addProbation({
           employeeId: fd.get('employeeId'),
           startDate: fd.get('startDate'),
           thirdMonthStatus: 'Pending', thirdMonthEvaluatedDate: null, thirdMonthNotes: '',

@@ -20,17 +20,24 @@ window.Views.payroll = (function () {
   }
 
   function computeRow(emp, from, to) {
-    const attendanceDays = Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id && (a.status === 'Present' || a.status === 'Late')).length;
+    const presentRecords = Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id && (a.status === 'Present' || a.status === 'Late'));
+    const attendanceDays = presentRecords.length;
     const override = Store.getPayrollOverride(emp.id, from);
     const daysPresent = override ? Number(override.daysPresent) : attendanceDays;
     const isOverridden = !!override;
     const basePay = emp.payType === 'Daily' ? emp.rate * daysPresent : emp.rate;
     const allowance = (emp.allowancePerDay || 0) * daysPresent + (emp.fixedAllowance || 0);
-    const gross = basePay + allowance;
+    // Night shift differential = (hours ÷ 8) × (daily rate × 10%), summed per logged attendance day.
+    // Always computed from actual attendance records (needs real hours logged that day) even if
+    // "days present" above was manually overridden for base pay/allowance purposes.
+    const nightDiff = emp.nightShiftDifferential
+      ? presentRecords.reduce((s, r) => s + (Number(r.hours) || 0) / 8 * (emp.rate * 0.10), 0)
+      : 0;
+    const gross = basePay + allowance + nightDiff;
     const tax = withholdingTax(gross);
     const dedTotal = Store.deductionsInRange(from, to).filter(d => d.employeeId === emp.id).reduce((s, d) => s + Number(d.amount), 0);
     const net = gross - tax - dedTotal;
-    return { emp, daysPresent, isOverridden, basePay, allowance, gross, tax, dedTotal, net };
+    return { emp, daysPresent, isOverridden, basePay, allowance, nightDiff, gross, tax, dedTotal, net };
   }
 
   function renderView(main) {
@@ -39,7 +46,7 @@ window.Views.payroll = (function () {
       <div class="page-head">
         <div>
           <h1 class="page-title">Payroll</h1>
-          <div class="page-sub">Engineers, Managers, and Admins are paid every 10th &amp; 20th of the month. Technicians are paid every 15th &amp; 30th/31st. Gross pay = base pay + allowance; net pay = gross pay − withholding tax − deductions.</div>
+          <div class="page-sub">Engineers, Managers, and Admins are paid every 10th &amp; 20th of the month. Technicians are paid every 15th &amp; 30th/31st. Gross pay = base pay + allowance + night shift differential; net pay = gross pay − withholding tax − deductions.</div>
         </div>
         ${activeTab === 'deductions' ? '<button class="btn btn-primary" id="btn-new-deduction">+ New deduction</button>' : ''}
       </div>
@@ -72,6 +79,7 @@ window.Views.payroll = (function () {
 
     const totalGross = rows.reduce((s, r) => s + r.gross, 0);
     const totalAllowance = rows.reduce((s, r) => s + r.allowance, 0);
+    const totalNightDiff = rows.reduce((s, r) => s + r.nightDiff, 0);
     const totalTax = rows.reduce((s, r) => s + r.tax, 0);
     const totalDed = rows.reduce((s, r) => s + r.dedTotal, 0);
     const totalNet = rows.reduce((s, r) => s + r.net, 0);
@@ -102,19 +110,19 @@ window.Views.payroll = (function () {
       <div class="page-sub" style="margin-bottom:10px;">${monthLabel} · ${selected.label} · payday ${fmtDate(selected.payDate)} · ${rows.length} staff on this schedule</div>
 
       <div class="kpi-row">
-        <div class="kpi-card"><div class="kpi-label">Total Base + Allowance (Gross)</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(totalGross)}</div><div class="kpi-sub">incl. ${fmtMoney(totalAllowance)} allowance</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Gross</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(totalGross)}</div><div class="kpi-sub">incl. ${fmtMoney(totalAllowance)} allowance, ${fmtMoney(totalNightDiff)} night diff.</div></div>
         <div class="kpi-card"><div class="kpi-label">Total Withholding Tax</div><div class="kpi-value ${totalTax ? 'red' : ''}" style="font-size:20px;">${fmtMoney(totalTax)}</div></div>
         <div class="kpi-card"><div class="kpi-label">Total Deductions</div><div class="kpi-value ${totalDed ? 'red' : ''}" style="font-size:20px;">${fmtMoney(totalDed)}</div></div>
         <div class="kpi-card"><div class="kpi-label">Total Net Pay</div><div class="kpi-value green" style="font-size:20px;">${fmtMoney(totalNet)}</div></div>
         <div class="kpi-card"><div class="kpi-label">Staff on Schedule</div><div class="kpi-value">${rows.length}</div></div>
       </div>
 
-      <div class="hint">Days present is editable — type over it and press Enter or click away to recompute allowance, gross, tax, and net pay for that cutoff. Edited values are saved and override the attendance-derived count.</div>
+      <div class="hint">Days present is editable — type over it and press Enter or click away to recompute base pay, allowance, gross, tax, and net pay for that cutoff. Edited values are saved and override the attendance-derived count. Night shift differential is the exception: it's always computed from actual logged attendance hours for that cutoff, regardless of any days-present override.</div>
 
       <div class="panel">
         ${rows.length ? `
         <table>
-          <thead><tr><th>Staff</th><th>Position</th><th class="num">Days Present</th><th class="num">Base Pay</th><th class="num">Allowance</th><th class="num">Gross Pay</th><th class="num">Withholding Tax</th><th class="num">Deductions</th><th class="num">Net Pay</th></tr></thead>
+          <thead><tr><th>Staff</th><th>Position</th><th class="num">Days Present</th><th class="num">Base Pay</th><th class="num">Allowance</th><th class="num">Night Diff.</th><th class="num">Gross Pay</th><th class="num">Withholding Tax</th><th class="num">Deductions</th><th class="num">Net Pay</th></tr></thead>
           <tbody>
             ${rows.map(r => `
               <tr>
@@ -125,6 +133,7 @@ window.Views.payroll = (function () {
                 </td>
                 <td class="num">${fmtMoney(r.basePay)}</td>
                 <td class="num ${r.allowance ? '' : 'dim'}">${r.allowance ? fmtMoney(r.allowance) : '—'}</td>
+                <td class="num ${r.nightDiff ? '' : 'dim'}">${r.nightDiff ? fmtMoney(r.nightDiff) : '—'}</td>
                 <td class="num" style="font-weight:600;">${fmtMoney(r.gross)}</td>
                 <td class="num ${r.tax ? '' : 'dim'}">${r.tax ? fmtMoney(r.tax) : '—'}</td>
                 <td class="num ${r.dedTotal ? '' : 'dim'}">${r.dedTotal ? fmtMoney(r.dedTotal) : '—'}</td>
@@ -137,10 +146,10 @@ window.Views.payroll = (function () {
     `;
 
     qsa('.days-input', body).forEach(input => {
-      input.addEventListener('change', () => {
+      input.addEventListener('change', async () => {
         const val = Number(input.value);
         if (!isNaN(val) && val >= 0) {
-          Store.setPayrollOverride(input.dataset.emp, selected.from, val);
+          await Store.setPayrollOverride(input.dataset.emp, selected.from, val);
           renderPayrollTab(body, main);
         }
       });
@@ -183,9 +192,9 @@ window.Views.payroll = (function () {
       </div>
     `;
 
-    qsa('[data-del]', body).forEach(b => b.addEventListener('click', () => {
+    qsa('[data-del]', body).forEach(b => b.addEventListener('click', async () => {
       if (confirm('Delete this deduction?')) {
-        Store.deleteDeduction(b.dataset.del);
+        await Store.deleteDeduction(b.dataset.del);
         toast('Deduction deleted.');
         renderDeductionsTab(body, main);
       }
@@ -211,10 +220,10 @@ window.Views.payroll = (function () {
         </div>
       </form>
     `, (bd) => {
-      qs('#ded-form', bd).addEventListener('submit', (ev) => {
+      qs('#ded-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
-        Store.addDeduction({
+        await Store.addDeduction({
           employeeId: fd.get('employeeId'),
           date: fd.get('date'),
           kind: fd.get('kind'),

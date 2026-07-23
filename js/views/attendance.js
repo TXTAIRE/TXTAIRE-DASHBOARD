@@ -43,8 +43,8 @@ window.Views.attendance = (function () {
                 <td class="name">${escapeHtml(e.name)}</td>
                 <td class="dim">${e.category}</td>
                 <td>${r ? `<span class="status-dot ${statusDotClass(r.status)}">${r.status}</span>` : '<span class="status-dot">Not logged</span>'}</td>
-                <td class="dim">${r ? r.timeIn : '—'}</td>
-                <td class="dim">${r ? r.timeOut : '—'}</td>
+                <td class="dim">${r ? to12Hour(r.timeIn) : '—'}</td>
+                <td class="dim">${r ? to12Hour(r.timeOut) : '—'}</td>
                 <td class="num">${r ? r.hours : '—'}</td>
                 <td><button class="link-btn" data-emp="${e.id}" data-rec="${r ? r.id : ''}">${r ? 'Edit →' : 'Log →'}</button></td>
               </tr>
@@ -75,8 +75,8 @@ window.Views.attendance = (function () {
           <div class="field"><label>Status</label>
             <select name="status">${['Present', 'Late', 'Absent', 'On Leave'].map(s => `<option ${s === r.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
           </div>
-          <div class="field"><label>Time in</label><input name="timeIn" value="${r.timeIn}" placeholder="08:00" /></div>
-          <div class="field"><label>Time out</label><input name="timeOut" value="${r.timeOut}" placeholder="17:00" /></div>
+          <div class="field"><label>Time in</label><input type="time" name="timeIn" value="${r.timeIn}" /></div>
+          <div class="field"><label>Time out</label><input type="time" name="timeOut" value="${r.timeOut}" /></div>
           <div class="field"><label>Hours</label><input type="number" step="0.1" name="hours" value="${r.hours}" /></div>
         </div>
         <div class="modal-actions">
@@ -86,7 +86,7 @@ window.Views.attendance = (function () {
         </div>
       </form>
     `, (bd) => {
-      qs('#att-form', bd).addEventListener('submit', (ev) => {
+      qs('#att-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
         const patch = {
@@ -97,14 +97,14 @@ window.Views.attendance = (function () {
           timeOut: fd.get('timeOut'),
           hours: Number(fd.get('hours')) || 0,
         };
-        if (rec) { Store.updateAttendance(rec.id, patch); toast('Attendance updated.'); }
-        else { Store.addAttendance(patch); toast('Attendance logged.'); }
+        if (rec) { await Store.updateAttendance(rec.id, patch); toast('Attendance updated.'); }
+        else { await Store.addAttendance(patch); toast('Attendance logged.'); }
         closeModal();
         renderView(main);
       });
       const delBtn = qs('#btn-del-att', bd);
-      if (delBtn) delBtn.addEventListener('click', () => {
-        Store.deleteAttendance(rec.id);
+      if (delBtn) delBtn.addEventListener('click', async () => {
+        await Store.deleteAttendance(rec.id);
         closeModal();
         toast('Record deleted.');
         renderView(main);

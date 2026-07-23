@@ -27,7 +27,7 @@ window.Views.overview = {
     const recentComplaints = complaints.slice().sort((a, b) => b.dateReceived.localeCompare(a.dateReceived)).slice(0, 4);
 
     main.innerHTML = `
-      <div class="crumb">TxTAIRE HQ</div>
+      <div class="crumb">TxTAIRE</div>
       <div class="page-head">
         <div>
           <h1 class="page-title">Overview</h1>

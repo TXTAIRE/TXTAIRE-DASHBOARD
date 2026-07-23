@@ -52,7 +52,7 @@ window.Views.staff = (function () {
           <thead>
             <tr>
               <th>Name</th><th>Category</th><th>Position</th><th>Status</th><th>Employment</th>
-              <th>Rate</th><th>Allowance</th><th>Payday</th><th></th>
+              <th>Rate</th><th>Allowance</th><th>Night Diff.</th><th>Payday</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -65,6 +65,7 @@ window.Views.staff = (function () {
                 <td>${employmentStatusBadge(e.employmentStatus)}</td>
                 <td class="dim">${e.payType === 'Daily' ? fmtMoney(e.rate) + '/day' : fmtMoney(e.rate) + '/cutoff'}</td>
                 <td class="dim">${(e.allowancePerDay || e.fixedAllowance) ? [e.allowancePerDay ? fmtMoney(e.allowancePerDay) + '/day' : null, e.fixedAllowance ? fmtMoney(e.fixedAllowance) + '/cutoff' : null].filter(Boolean).join(' + ') : '—'}</td>
+                <td class="dim">${e.nightShiftDifferential ? 'Yes' : '—'}</td>
                 <td class="dim">${PAY_CYCLES[e.payCycle] ? PAY_CYCLES[e.payCycle].cutoffLabels.join(' & ') : '—'}</td>
                 <td><button class="link-btn" data-edit="${e.id}">Edit →</button></td>
               </tr>
@@ -101,6 +102,7 @@ window.Views.staff = (function () {
         Rate: ${e.payType === 'Daily' ? fmtMoney(e.rate) + ' / day' : fmtMoney(e.rate) + ' / cutoff'}<br/>
         ${e.allowancePerDay ? 'Allowance: ' + fmtMoney(e.allowancePerDay) + ' / day<br/>' : ''}
         ${e.fixedAllowance ? 'Fixed allowance: ' + fmtMoney(e.fixedAllowance) + ' / cutoff<br/>' : ''}
+        ${e.nightShiftDifferential ? 'Night shift differential: eligible (hours ÷ 8 × rate × 10%, per attendance day)<br/>' : ''}
         Payday: ${PAY_CYCLES[e.payCycle] ? PAY_CYCLES[e.payCycle].cutoffLabels.join(' & ') : '—'}
       </div>
       ${e.notes ? `<div class="section-title">Notes</div><div class="page-sub">${escapeHtml(e.notes)}</div>` : ''}
@@ -121,7 +123,7 @@ window.Views.staff = (function () {
 
   function openEmployeeModal(main, id) {
     const editing = id ? Store.getEmployee(id) : null;
-    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, payCycle: '10-20', notes: '' };
+    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '10-20', notes: '' };
 
     openModal(`
       <h2>${editing ? 'Edit employee' : 'Add employee'}</h2>
@@ -154,6 +156,10 @@ window.Views.staff = (function () {
           <div class="field"><label>Rate (PHP)</label><input type="number" name="rate" min="0" step="0.01" value="${e.rate}" /></div>
           <div class="field"><label>Allowance / day (PHP)</label><input type="number" name="allowancePerDay" min="0" step="0.01" value="${e.allowancePerDay || 0}" /></div>
           <div class="field"><label>Fixed allowance / cutoff (PHP)</label><input type="number" name="fixedAllowance" min="0" step="0.01" value="${e.fixedAllowance || 0}" /></div>
+          <div class="field full" style="flex-direction:row; align-items:center; gap:8px;">
+            <input type="checkbox" name="nightShiftDifferential" id="chk-nsd" style="width:auto;" ${e.nightShiftDifferential ? 'checked' : ''} />
+            <label for="chk-nsd" style="text-transform:none; letter-spacing:0; font-size:13px;">Eligible for night shift differential (adds hours ÷ 8 × rate × 10% per attendance day in payroll)</label>
+          </div>
           <div class="field full"><label>Notes</label><textarea name="notes" rows="2">${escapeHtml(e.notes || '')}</textarea></div>
         </div>
         <div class="modal-actions">
@@ -163,7 +169,7 @@ window.Views.staff = (function () {
         </div>
       </form>
     `, (bd) => {
-      qs('#employee-form', bd).addEventListener('submit', (ev) => {
+      qs('#employee-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
         const patch = {
@@ -180,22 +186,23 @@ window.Views.staff = (function () {
           rate: Number(fd.get('rate')) || 0,
           allowancePerDay: Number(fd.get('allowancePerDay')) || 0,
           fixedAllowance: Number(fd.get('fixedAllowance')) || 0,
+          nightShiftDifferential: fd.get('nightShiftDifferential') === 'on',
           notes: fd.get('notes').trim(),
         };
         if (editing) {
-          Store.updateEmployee(editing.id, patch);
+          await Store.updateEmployee(editing.id, patch);
           toast('Employee updated.');
         } else {
-          Store.addEmployee(patch);
+          await Store.addEmployee(patch);
           toast('Employee added.');
         }
         closeModal();
         renderList(main);
       });
       const delBtn = qs('#btn-del-emp', bd);
-      if (delBtn) delBtn.addEventListener('click', () => {
+      if (delBtn) delBtn.addEventListener('click', async () => {
         if (confirm('Delete ' + editing.name + '? This cannot be undone.')) {
-          Store.deleteEmployee(editing.id);
+          await Store.deleteEmployee(editing.id);
           closeModal();
           toast('Employee deleted.');
           renderList(main);

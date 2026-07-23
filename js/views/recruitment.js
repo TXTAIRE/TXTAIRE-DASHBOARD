@@ -121,36 +121,36 @@ window.Views.recruitment = (function () {
       </div>
     `, (dr) => {
       const adv = qs('#btn-advance', dr);
-      if (adv) adv.addEventListener('click', () => {
-        Store.moveCandidateStage(c.id, next);
+      if (adv) adv.addEventListener('click', async () => {
+        await Store.moveCandidateStage(c.id, next);
         toast('Moved to ' + next + '.');
         closeDrawer();
         renderBoard(main);
       });
       const hire = qs('#btn-hire', dr);
-      if (hire) hire.addEventListener('click', () => {
-        Store.decideCandidate(c.id, 'Hired', 'Endorsed by HR and Department Head; approved by Management.');
+      if (hire) hire.addEventListener('click', async () => {
+        await Store.decideCandidate(c.id, 'Hired', 'Endorsed by HR and Department Head; approved by Management.');
         toast(c.name + ' marked as Hired.');
         closeDrawer();
         renderBoard(main);
       });
       const hold = qs('#btn-hold', dr);
-      if (hold) hold.addEventListener('click', () => {
-        Store.decideCandidate(c.id, 'On Hold', 'Placed on hold pending further review.');
+      if (hold) hold.addEventListener('click', async () => {
+        await Store.decideCandidate(c.id, 'On Hold', 'Placed on hold pending further review.');
         toast(c.name + ' placed on hold.');
         closeDrawer();
         renderBoard(main);
       });
       const rej = qs('#btn-reject', dr);
-      if (rej) rej.addEventListener('click', () => {
-        Store.decideCandidate(c.id, 'Rejected', 'Not recommended for hiring.');
+      if (rej) rej.addEventListener('click', async () => {
+        await Store.decideCandidate(c.id, 'Rejected', 'Not recommended for hiring.');
         toast(c.name + ' marked as Rejected.');
         closeDrawer();
         renderBoard(main);
       });
-      qs('#btn-del-candidate', dr).addEventListener('click', () => {
+      qs('#btn-del-candidate', dr).addEventListener('click', async () => {
         if (confirm('Remove ' + c.name + ' from the pipeline?')) {
-          Store.deleteCandidate(c.id);
+          await Store.deleteCandidate(c.id);
           closeDrawer();
           toast('Candidate removed.');
           renderBoard(main);
@@ -180,10 +180,10 @@ window.Views.recruitment = (function () {
         </div>
       </form>
     `, (bd) => {
-      qs('#candidate-form', bd).addEventListener('submit', (ev) => {
+      qs('#candidate-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
-        Store.addCandidate({
+        await Store.addCandidate({
           name: fd.get('name').trim(),
           category: fd.get('category'),
           positionAppliedFor: fd.get('positionAppliedFor').trim(),

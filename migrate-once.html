@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>TxTAIRE — one-time data migration</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", Arial, sans-serif; background: #0a0a0a; color: #eee; padding: 32px; max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 20px; }
+  p { color: #aaa; font-size: 13.5px; line-height: 1.6; }
+  button { background: #2f6fed; color: #fff; border: none; padding: 10px 20px; border-radius: 999px; font-weight: 600; cursor: pointer; font-size: 14px; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #log { margin-top: 20px; background: #151515; border: 1px solid #2a2a2a; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 12.5px; white-space: pre-wrap; max-height: 60vh; overflow-y: auto; }
+  .ok { color: #4ade80; }
+  .err { color: #f87171; }
+  .warn { color: #fbbf24; }
+</style>
+</head>
+<body>
+  <h1>TxTAIRE — one-time data migration</h1>
+  <p>
+    Inserts the starting employee roster, recruitment pipeline demo, probation tracking, and a month of
+    neutral "present" attendance into your Supabase project. <strong>Run this once</strong> against a fresh
+    project (empty tables), then delete this file — it embeds real employee names and pay rates in plain text.
+    Requires <code>js/supabase-config.js</code> to already have your real Project URL and anon key filled in.
+  </p>
+  <button id="run">Run migration</button>
+  <div id="log"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script>
+    const logEl = document.getElementById('log');
+    function log(msg, cls) {
+      const line = document.createElement('div');
+      if (cls) line.className = cls;
+      line.textContent = msg;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function todayISO() {
+      const d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    function addDaysISO(iso, n) {
+      const d = new Date(iso + 'T00:00:00');
+      d.setDate(d.getDate() + n);
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    function genId(prefix) {
+      return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    }
+
+    // ---- Employees (20) ----
+    const employees = [
+      { id: 'e6', name: 'Rica Mae Nabora', category: 'Admin', position: 'Service Specialist / HR', status: 'Active', employmentStatus: 'Regular', dateHired: null, phone: '', email: '', payType: 'Daily', rate: 1000, allowancePerDay: 0, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '10-20', notes: '' },
+      { id: 'e7', name: 'Jennifer D. Cosme', category: 'Admin', position: 'Admin Assistant', status: 'Active', employmentStatus: 'Probationary', dateHired: null, phone: '', email: '', payType: 'Daily', rate: 600, allowancePerDay: 0, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '10-20', notes: '' },
+      { id: 'e5', name: 'Odilon T. Soriano', category: 'Admin', position: 'Logistic Manager', status: 'Active', employmentStatus: 'Regular', dateHired: null, phone: '', email: '', payType: 'Monthly', rate: 12500, allowancePerDay: 0, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '10-20', notes: '' },
+      { id: 'e1', name: 'John Rodolfo R. Bultron', category: 'Admin', position: 'Vice President - Operations and Shared Services', status: 'Active', employmentStatus: 'Regular', dateHired: null, phone: '', email: '', payType: 'Monthly', rate: 22170.83, allowancePerDay: 0, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '10-20', notes: '' },
+      { id: 'e2', name: 'Joshua L. Casano', category: 'Admin', position: 'Engineering Manager', status: 'Active', employmentStatus: 'Regular', dateHired: null, phone: '', email: '', payType: 'Monthly', rate: 16954.17, allowancePerDay: 100, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '10-20', notes: '' },
+      { id: 'e3', name: 'Julaisa S. Sangcupan', category: 'Admin', position: 'Engineering Officer', status: 'Active', employmentStatus: 'Regular', dateHired: null, phone: '', email: '', payType: 'Monthly', rate: 12550, allowancePerDay: 100, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '10-20', notes: '' },
+      { id: 'e4', name: 'Idine S. Famini', category: 'Admin', position: 'Service Engineer', status: 'Active', employmentStatus: 'Probationary', dateHired: null, phone: '', email: '', payType: 'Monthly', rate: 11923.92, allowancePerDay: 0, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '10-20', notes: '' },
+
+      { id: 'e8', name: 'Arnel V. Parala', category: 'Technician', position: 'Service Technician Supervisor', status: 'Active', employmentStatus: 'Regular', dateHired: null, phone: '', email: '', payType: 'Daily', rate: 1000, allowancePerDay: 200, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '15-30', notes: '' },
+      { id: 'e9', name: 'Argee V. Parala', category: 'Technician', position: 'Lead Service Technician', status: 'Active', employmentStatus: 'Regular', dateHired: null, phone: '', email: '', payType: 'Daily', rate: 1000, allowancePerDay: 200, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '15-30', notes: '' },
+      { id: 'e10', name: 'Michael V. Parala', category: 'Technician', position: 'Service Technician', status: 'Active', employmentStatus: 'Regular', dateHired: null, phone: '', email: '', payType: 'Daily', rate: 800, allowancePerDay: 200, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '15-30', notes: '' },
+      { id: 'e11', name: 'Aldrin V. Parala', category: 'Technician', position: 'Service Personnel - Welder', status: 'Active', employmentStatus: 'Regular', dateHired: null, phone: '', email: '', payType: 'Daily', rate: 700, allowancePerDay: 70, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '15-30', notes: '' },
+      { id: 'e12', name: 'Erasmo L. Cabañez Jr.', category: 'Technician', position: 'Service Personnel - Mason', status: 'Active', employmentStatus: 'Regular', dateHired: null, phone: '', email: '', payType: 'Daily', rate: 700, allowancePerDay: 70, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '15-30', notes: '' },
+      { id: 'e13', name: 'Franny R. Rotazo', category: 'Technician', position: 'Service Personnel', status: 'Active', employmentStatus: 'Regular', dateHired: null, phone: '', email: '', payType: 'Daily', rate: 700, allowancePerDay: 100, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '15-30', notes: '' },
+      { id: 'e14', name: 'George J. Dela Cruz', category: 'Technician', position: 'Company Driver', status: 'Active', employmentStatus: 'Regular', dateHired: null, phone: '', email: '', payType: 'Daily', rate: 645, allowancePerDay: 100, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '15-30', notes: '' },
+      { id: 'e15', name: 'Cruzel Albano', category: 'Technician', position: 'Electrician', status: 'Active', employmentStatus: 'Regular', dateHired: null, phone: '', email: '', payType: 'Daily', rate: 1350, allowancePerDay: 0, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '15-30', notes: '' },
+      { id: 'e16', name: 'Dante B. Dulfo', category: 'Technician', position: 'Lead Service Technician', status: 'Active', employmentStatus: 'Regular', dateHired: null, phone: '', email: '', payType: 'Daily', rate: 1200, allowancePerDay: 100, fixedAllowance: 500, nightShiftDifferential: true, payCycle: '15-30', notes: 'Fixed house allowance of ₱500 added every cutoff, on top of the ₱100/day field allowance.' },
+      { id: 'e17', name: 'Benedict B. Alomia', category: 'Technician', position: 'Utility and Warehouse Officer', status: 'Active', employmentStatus: 'Probationary', dateHired: null, phone: '', email: '', payType: 'Daily', rate: 600, allowancePerDay: 0, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '15-30', notes: '' },
+      { id: 'e18', name: 'Jayson S. Francisco', category: 'Technician', position: 'Service Personnel', status: 'Active', employmentStatus: 'Probationary', dateHired: null, phone: '', email: '', payType: 'Daily', rate: 700, allowancePerDay: 0, fixedAllowance: 0, nightShiftDifferential: true, payCycle: '15-30', notes: '' },
+      { id: 'e19', name: 'Michael C. Dean', category: 'Technician', position: 'Service Technician', status: 'Active', employmentStatus: 'Probationary', dateHired: null, phone: '', email: '', payType: 'Daily', rate: 750, allowancePerDay: 0, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '15-30', notes: '' },
+      { id: 'e20', name: 'Alvin R. Vargas', category: 'Technician', position: 'Service Personnel', status: 'Active', employmentStatus: 'Probationary', dateHired: null, phone: '', email: '', payType: 'Daily', rate: 700, allowancePerDay: 0, fixedAllowance: 0, nightShiftDifferential: true, payCycle: '15-30', notes: '' },
+    ];
+
+    // ---- Recruitment candidates (demo pipeline, fictional applicants) ----
+    const candidates = [
+      { id: 'c1', name: 'Patricia Gomez', category: 'HR', positionAppliedFor: 'HR Assistant', phone: '0917 555 2001', email: 'patricia.g@gmail.com', appliedDate: '2026-07-10', stage: 'Phone Interview', decision: null, tradeTestStart: null, tradeTestEnd: null, history: [
+        { date: '2026-07-10', stage: 'Screening', note: 'Resume passed initial screening.' },
+        { date: '2026-07-14', stage: 'Phone Interview', note: 'Phone interview scheduled for Jul 25.' },
+      ] },
+      { id: 'c2', name: 'Ronald Mercado', category: 'Admin', positionAppliedFor: 'HVAC Engineer', phone: '0917 555 2002', email: 'ronald.m@gmail.com', appliedDate: '2026-07-05', stage: '3-Day Trade Test', decision: null, tradeTestStart: '2026-07-21', tradeTestEnd: '2026-07-23', history: [
+        { date: '2026-07-05', stage: 'Screening', note: 'Meets minimum experience requirement.' },
+        { date: '2026-07-08', stage: 'Phone Interview', note: 'Good communication, available immediately.' },
+        { date: '2026-07-15', stage: 'Face-to-Face Interview', note: 'Strong technical knowledge, passed to trade test.' },
+        { date: '2026-07-21', stage: '3-Day Trade Test', note: 'Trade test started Jul 21, ends Jul 23.' },
+      ] },
+      { id: 'c3', name: 'Jonathan Perez', category: 'Technician', positionAppliedFor: 'AC Installation Tech', phone: '0917 555 2003', email: 'jonathan.p@gmail.com', appliedDate: '2026-07-01', stage: '7-Day Trade Test', decision: null, tradeTestStart: '2026-07-17', tradeTestEnd: '2026-07-24', history: [
+        { date: '2026-07-01', stage: 'Screening', note: 'Basic qualifications confirmed.' },
+        { date: '2026-07-03', stage: 'Phone Interview', note: 'Agreed to undergo trade test.' },
+        { date: '2026-07-15', stage: 'Candidate Agreement', note: 'Confirmed availability, trade test scheduled.' },
+        { date: '2026-07-17', stage: '7-Day Trade Test', note: '7-day trade test running Jul 17–24.' },
+      ] },
+      { id: 'c4', name: 'Erwin Salonga', category: 'Admin', positionAppliedFor: 'Office Admin', phone: '0917 555 2004', email: 'erwin.s@gmail.com', appliedDate: '2026-06-20', stage: 'Decision', decision: 'Hired', tradeTestStart: '2026-07-01', tradeTestEnd: '2026-07-03', history: [
+        { date: '2026-06-20', stage: 'Screening', note: 'Qualified applicant.' },
+        { date: '2026-06-23', stage: 'Phone Interview', note: 'Confirmed interest and availability.' },
+        { date: '2026-06-27', stage: 'Face-to-Face Interview', note: 'Good cultural fit.' },
+        { date: '2026-07-01', stage: '3-Day Trade Test', note: 'Completed trade test with good marks.' },
+        { date: '2026-07-05', stage: 'Evaluation', note: 'Recommended for hiring by HR and Department Head.' },
+        { date: '2026-07-08', stage: 'Decision', note: 'Approved for hiring by Management.' },
+      ] },
+      { id: 'c5', name: 'Kevin Ramos', category: 'Technician', positionAppliedFor: 'Refrigeration Tech', phone: '0917 555 2005', email: 'kevin.r@gmail.com', appliedDate: '2026-07-12', stage: 'Screening', decision: null, tradeTestStart: null, tradeTestEnd: null, history: [
+        { date: '2026-07-12', stage: 'Screening', note: 'Resume received, pending review.' },
+      ] },
+    ];
+
+    // ---- Probation records (real employees, real start dates) ----
+    const probationRecords = [
+      { id: genId('pr'), employeeId: 'e7', startDate: '2026-06-17', thirdMonthStatus: 'Pending', thirdMonthEvaluatedDate: null, thirdMonthNotes: '', sixthMonthStatus: 'Pending', sixthMonthEvaluatedDate: null, sixthMonthNotes: '' },
+      { id: genId('pr'), employeeId: 'e17', startDate: '2026-02-02', thirdMonthStatus: 'Pending', thirdMonthEvaluatedDate: null, thirdMonthNotes: '', sixthMonthStatus: 'Pending', sixthMonthEvaluatedDate: null, sixthMonthNotes: '' },
+      { id: genId('pr'), employeeId: 'e18', startDate: '2026-05-12', thirdMonthStatus: 'Pending', thirdMonthEvaluatedDate: null, thirdMonthNotes: '', sixthMonthStatus: 'Pending', sixthMonthEvaluatedDate: null, sixthMonthNotes: '' },
+      { id: genId('pr'), employeeId: 'e4', startDate: '2026-05-25', thirdMonthStatus: 'Pending', thirdMonthEvaluatedDate: null, thirdMonthNotes: '', sixthMonthStatus: 'Pending', sixthMonthEvaluatedDate: null, sixthMonthNotes: '' },
+      { id: genId('pr'), employeeId: 'e19', startDate: '2026-06-26', thirdMonthStatus: 'Pending', thirdMonthEvaluatedDate: null, thirdMonthNotes: '', sixthMonthStatus: 'Pending', sixthMonthEvaluatedDate: null, sixthMonthNotes: '' },
+      { id: genId('pr'), employeeId: 'e20', startDate: '2026-06-11', thirdMonthStatus: 'Pending', thirdMonthEvaluatedDate: null, thirdMonthNotes: '', sixthMonthStatus: 'Pending', sixthMonthEvaluatedDate: null, sixthMonthNotes: '' },
+    ];
+
+    // ---- Attendance: neutral "present" records for the current month through today ----
+    const attendance = [];
+    const today = todayISO();
+    const startOfMonth = today.slice(0, 8) + '01';
+    let d = startOfMonth;
+    while (d <= today) {
+      const dow = new Date(d + 'T00:00:00').getDay();
+      if (dow !== 0) {
+        employees.forEach(e => {
+          attendance.push({ id: genId('a'), employeeId: e.id, date: d, timeIn: '08:00', timeOut: '17:00', status: 'Present', hours: 8 });
+        });
+      }
+      d = addDaysISO(d, 1);
+    }
+
+    // No disciplinary cases, complaints, deductions, or payroll overrides are seeded —
+    // these start empty and get entered as real events occur.
+    const disciplinaryCases = [];
+    const complaints = [];
+    const deductions = [];
+    const payrollOverrides = [];
+
+    async function insertAll(table, rows) {
+      if (!rows.length) { log(table + ': nothing to insert (skipped).', 'warn'); return; }
+      const { error } = await sb.from(table).insert(rows);
+      if (error) {
+        log(table + ': FAILED — ' + error.message, 'err');
+        throw error;
+      }
+      log(table + ': inserted ' + rows.length + ' row(s).', 'ok');
+    }
+
+    document.getElementById('run').addEventListener('click', async () => {
+      document.getElementById('run').disabled = true;
+      logEl.innerHTML = '';
+      try {
+        if (typeof sb === 'undefined' || SUPABASE_URL.indexOf('YOUR_') === 0) {
+          throw new Error('js/supabase-config.js still has placeholder values — fill in your real Project URL and anon key first.');
+        }
+        log('Starting migration…');
+        await insertAll('employees', employees);
+        await insertAll('candidates', candidates);
+        await insertAll('probationRecords', probationRecords);
+        await insertAll('attendance', attendance);
+        await insertAll('disciplinaryCases', disciplinaryCases);
+        await insertAll('complaints', complaints);
+        await insertAll('deductions', deductions);
+        await insertAll('payrollOverrides', payrollOverrides);
+        log('Done. Check row counts in the Supabase Table Editor, then delete this file.', 'ok');
+      } catch (err) {
+        log('Migration stopped: ' + err.message, 'err');
+      } finally {
+        document.getElementById('run').disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

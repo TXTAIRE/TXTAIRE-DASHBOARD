@@ -110,44 +110,44 @@ window.Views.disciplinary = (function () {
       </div>
     `, (dr) => {
       const respBtn = qs('#btn-log-response', dr);
-      if (respBtn) respBtn.addEventListener('click', () => {
+      if (respBtn) respBtn.addEventListener('click', async () => {
         const text = qs('#resp-text', dr).value.trim();
         if (!text) { toast('Enter the employee response first.'); return; }
-        Store.updateCase(c.id, { employeeResponse: text, employeeResponseDate: todayISO(), status: 'Under Investigation' }, { action: 'Employee Response', note: text });
-        Store.updateCase(c.id, {}, { action: 'Investigation', note: 'Case moved to investigation.' });
+        await Store.updateCase(c.id, { employeeResponse: text, employeeResponseDate: todayISO(), status: 'Under Investigation' }, { action: 'Employee Response', note: text });
+        await Store.updateCase(c.id, {}, { action: 'Investigation', note: 'Case moved to investigation.' });
         toast('Response recorded.');
         openCaseDetail(main, c.id);
         renderList(main);
       });
       const invBtn = qs('#btn-log-investigation', dr);
-      if (invBtn) invBtn.addEventListener('click', () => {
+      if (invBtn) invBtn.addEventListener('click', async () => {
         const text = qs('#inv-text', dr).value.trim();
         if (!text) { toast('Enter an investigation note first.'); return; }
         const combined = (c.investigationNotes ? c.investigationNotes + ' ' : '') + text;
-        Store.updateCase(c.id, { investigationNotes: combined }, { action: 'Investigation', note: text });
+        await Store.updateCase(c.id, { investigationNotes: combined }, { action: 'Investigation', note: text });
         toast('Investigation note added.');
         openCaseDetail(main, c.id);
         renderList(main);
       });
       const resolveBtn = qs('#btn-resolve', dr);
-      if (resolveBtn) resolveBtn.addEventListener('click', () => {
+      if (resolveBtn) resolveBtn.addEventListener('click', async () => {
         const text = qs('#res-text', dr).value.trim();
         if (!text) { toast('Enter the resolution first.'); return; }
-        Store.updateCase(c.id, { resolution: text, resolvedDate: todayISO(), status: 'Resolved' }, { action: 'Resolved', note: text });
+        await Store.updateCase(c.id, { resolution: text, resolvedDate: todayISO(), status: 'Resolved' }, { action: 'Resolved', note: text });
         toast('Case resolved.');
         closeDrawer();
         renderList(main);
       });
       const escBtn = qs('#btn-escalate', dr);
-      if (escBtn) escBtn.addEventListener('click', () => {
-        Store.updateCase(c.id, { status: 'Escalated' }, { action: 'Escalated', note: 'Case escalated to Management for further action.' });
+      if (escBtn) escBtn.addEventListener('click', async () => {
+        await Store.updateCase(c.id, { status: 'Escalated' }, { action: 'Escalated', note: 'Case escalated to Management for further action.' });
         toast('Case escalated.');
         closeDrawer();
         renderList(main);
       });
-      qs('#btn-del-case', dr).addEventListener('click', () => {
+      qs('#btn-del-case', dr).addEventListener('click', async () => {
         if (confirm('Delete this disciplinary case?')) {
-          Store.deleteCase(c.id);
+          await Store.deleteCase(c.id);
           closeDrawer();
           toast('Case deleted.');
           renderList(main);
@@ -175,10 +175,10 @@ window.Views.disciplinary = (function () {
         </div>
       </form>
     `, (bd) => {
-      qs('#nte-form', bd).addEventListener('submit', (ev) => {
+      qs('#nte-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
-        Store.addCase({
+        await Store.addCase({
           employeeId: fd.get('employeeId'),
           dateIssued: fd.get('dateIssued'),
           responseDueDate: fd.get('responseDueDate'),

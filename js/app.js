@@ -143,12 +143,57 @@ function render() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', function () {
+let appStarted = false;
+
+async function startApp(session) {
+  if (appStarted) return;
+  appStarted = true;
+
+  hideAuthScreen();
+  qs('#user-email').textContent = session.user.email;
+  qs('#btn-logout').addEventListener('click', () => sb.auth.signOut());
+
   qsa('.nav-item').forEach(a => {
     a.addEventListener('click', function () {
       location.hash = '#' + a.dataset.route;
     });
   });
   window.addEventListener('hashchange', render);
+
+  qs('#main-content').innerHTML = '<div class="empty">Loading…</div>';
+  await Store.init();
+
+  // Live updates from other devices: any remote change refetches that table and
+  // re-renders the current view. Debounced, and skipped while a modal/drawer is open
+  // so we don't yank a form out from under someone mid-edit.
+  let renderTimer = null;
+  Store.onRemoteChange(() => {
+    if (qs('.modal-backdrop') || qs('.drawer')) {
+      toast('Updated elsewhere — close this to see the latest.');
+      return;
+    }
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(render, 150);
+  });
+
   render();
-});
+}
+
+async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    await startApp(session);
+  } else {
+    showAuthScreen();
+  }
+
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session) {
+      await startApp(session);
+    } else if (event === 'SIGNED_OUT') {
+      location.reload();
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', boot);
