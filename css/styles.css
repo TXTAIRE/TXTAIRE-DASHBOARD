@@ -433,3 +433,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 @media (max-width: 980px) {
   .two-col { grid-template-columns: 1fr; }
 }
+@media (max-width: 720px) {
+  .sidebar { width: 72px; padding: 14px 8px; }
+  .sidebar .nav-label, .sidebar .nav-item span:not(.ic), .sidebar-foot > div { display: none; }
+  .brand-logo { display: none; }
+  .main { margin-left: 72px; padding: 20px 16px 48px 16px; }
+}

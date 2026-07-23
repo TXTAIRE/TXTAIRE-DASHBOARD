@@ -1,0 +1,2617 @@
+﻿<title>TxTAIRE HQ &middot; HR &amp; Operations</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --bg-elevated: #f6f7f9;
+  --bg-card: #ffffff;
+  --bg-hover: #f0f1f3;
+  --border: #dcdde1;
+  --border-soft: #e6e7eb;
+  --text: #0a0a0a;
+  --text-dim: #55565c;
+  --text-faint: #8a8b90;
+  --accent: #2f6fed;
+  --accent-hover: #1d5be0;
+  --accent-dim: rgba(47, 111, 237, 0.10);
+  --accent-text: #ffffff;
+  --brand-green: #1e8a4c;
+  --green: #15803d;
+  --red: #dc2626;
+  --yellow: #b45309;
+  --blue: #1d5be0;
+  --shadow-card: 0 1px 2px rgba(16,24,40,0.04), 0 1px 6px rgba(16,24,40,0.05);
+  --radius: 10px;
+  --sidebar-w: 248px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "Segoe UI", Inter, Roboto, Arial, sans-serif;
+  font-size: 14px;
+  height: 100%;
+}
+
+#app {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border-soft);
+  padding: 18px 12px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  overflow-y: auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px 22px 8px;
+}
+.brand-logo {
+  width: 100%;
+  max-width: 208px;
+  height: auto;
+}
+
+.nav-group { margin-bottom: 18px; }
+.nav-label {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  padding: 4px 10px 6px 10px;
+  font-weight: 600;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--text-dim);
+  text-decoration: none;
+  cursor: pointer;
+  font-size: 13.5px;
+  margin-bottom: 2px;
+  transition: background .12s, color .12s;
+}
+.nav-item:hover { background: var(--bg-hover); color: var(--text); }
+.nav-item.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.nav-item .ic { width: 16px; text-align: center; opacity: .9; }
+
+.sidebar-foot {
+  margin-top: 24px;
+  padding: 10px 10px 4px 10px;
+  border-top: 1px solid var(--border-soft);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.avatar-chip {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent-dim); color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 11px;
+}
+
+/* ---------- Main ---------- */
+.main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  padding: 28px 32px 60px 32px;
+  max-width: 1280px;
+}
+
+.crumb {
+  font-size: 11.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 6px;
+}
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.page-title { font-size: 26px; font-weight: 700; margin: 0; }
+.page-sub { color: var(--text-dim); font-size: 13px; margin-top: 4px; max-width: 620px; }
+
+.tabs {
+  display: flex;
+  gap: 22px;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 20px;
+}
+.tab {
+  padding: 9px 2px 12px 2px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  user-select: none;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .12s, opacity .12s;
+  white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: var(--accent-text); }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
+.btn-ghost:hover { color: var(--text); border-color: #3a3b3d; }
+.btn-ghost.on { background: var(--bg-hover); color: var(--text); }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.btn-danger { background: rgba(248,113,113,0.12); color: var(--red); }
+.btn-danger:hover { background: rgba(248,113,113,0.2); }
+.link-btn {
+  background: none; border: none; color: var(--accent); cursor: pointer;
+  font-size: 12.5px; font-weight: 600; padding: 0;
+}
+
+/* ---------- Cards / KPI ---------- */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-card);
+}
+.kpi-label {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.kpi-value { font-size: 26px; font-weight: 700; }
+.kpi-value.green { color: var(--green); }
+.kpi-value.red { color: var(--red); }
+.kpi-sub { font-size: 11.5px; color: var(--text-faint); margin-top: 4px; }
+
+.panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  min-width: 0;
+  box-shadow: var(--shadow-card);
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.panel-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
+
+/* ---------- Table ---------- */
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+tbody td {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13.5px;
+  vertical-align: middle;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: rgba(255,255,255,0.02); }
+td.name { font-weight: 600; }
+td.name.row-link { cursor: pointer; }
+td.name.row-link:hover { text-decoration: underline; }
+td.dim { color: var(--text-dim); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.days-input { width: 64px; text-align: right; padding: 6px 8px; }
+
+.status-dot {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim);
+}
+.status-dot::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint);
+}
+.status-dot.on::before { background: var(--green); }
+.status-dot.off::before { background: var(--text-faint); }
+.status-dot.late::before { background: var(--yellow); }
+.status-dot.absent::before { background: var(--red); }
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-orange { background: var(--accent-dim); color: var(--accent); }
+.badge-green { background: rgba(74,222,128,0.14); color: var(--green); }
+.badge-red { background: rgba(248,113,113,0.14); color: var(--red); }
+.badge-blue { background: rgba(96,165,250,0.14); color: var(--blue); }
+.badge-yellow { background: rgba(251,191,36,0.14); color: var(--yellow); }
+.badge-gray { background: rgba(255,255,255,0.06); color: var(--text-dim); }
+
+/* ---------- Toggle ---------- */
+.toggle {
+  width: 36px; height: 20px; border-radius: 999px;
+  background: var(--border); position: relative; cursor: pointer;
+  border: none; flex-shrink: 0;
+}
+.toggle.on { background: var(--accent); }
+.toggle::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  transition: left .15s;
+}
+.toggle.on::after { left: 18px; }
+
+/* ---------- Empty state ---------- */
+.empty {
+  padding: 48px 20px; text-align: center; color: var(--text-faint); font-size: 13px;
+}
+
+/* ---------- Filters bar ---------- */
+.filters {
+  display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;
+  background: var(--bg-card); border: 1px solid var(--border-soft);
+  border-radius: var(--radius); padding: 16px 18px; margin-bottom: 18px;
+}
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label {
+  font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text-faint); font-weight: 600;
+}
+input, select, textarea {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+.seg { display: flex; gap: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 3px; }
+.seg button {
+  background: none; border: none; color: var(--text-dim); padding: 6px 13px;
+  border-radius: 999px; font-size: 12px; cursor: pointer; font-weight: 600;
+}
+.seg button.active { background: var(--accent); color: var(--accent-text); }
+
+/* ---------- Kanban (recruitment) ---------- */
+.kanban {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 250px;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+}
+.kanban-col {
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  min-height: 160px;
+  box-shadow: var(--shadow-card);
+}
+.kanban-col-head {
+  padding: 12px 14px 10px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.kanban-col-head .count {
+  background: var(--bg-hover); color: var(--text-dim); border-radius: 999px;
+  font-size: 11px; padding: 1px 8px;
+}
+.kanban-cards { padding: 10px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.kcard {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color .12s;
+}
+.kcard:hover { border-color: var(--accent); }
+.kcard .kname { font-weight: 600; font-size: 13px; margin-bottom: 3px; }
+.kcard .kmeta { font-size: 11px; color: var(--text-faint); }
+
+/* ---------- Modal ---------- */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 40px 20px; overflow-y: auto; z-index: 100;
+}
+.modal {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 560px;
+  padding: 22px 24px 24px 24px;
+  box-shadow: 0 8px 30px rgba(16,24,40,0.14);
+}
+.modal h2 { margin: 0 0 4px 0; font-size: 18px; }
+.modal .modal-sub { color: var(--text-dim); font-size: 12.5px; margin-bottom: 16px; }
+.modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.modal-grid .full { grid-column: 1 / -1; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
+.modal-close {
+  position: absolute; top: 18px; right: 20px; background: none; border: none;
+  color: var(--text-faint); font-size: 18px; cursor: pointer;
+}
+.modal-wrap { position: relative; }
+
+/* ---------- Detail drawer ---------- */
+.drawer-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 90;
+}
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 92vw;
+  background: var(--bg-elevated); border-left: 1px solid var(--border);
+  z-index: 95; overflow-y: auto; padding: 24px;
+  box-shadow: -8px 0 30px rgba(16,24,40,0.10);
+}
+.drawer h2 { margin: 0 0 2px 0; font-size: 19px; }
+.timeline { margin-top: 14px; display: flex; flex-direction: column; gap: 14px; }
+.tl-item { display: flex; gap: 10px; }
+.tl-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+  margin-top: 5px; flex-shrink: 0;
+}
+.tl-body .tl-title { font-size: 13px; font-weight: 600; }
+.tl-body .tl-meta { font-size: 11.5px; color: var(--text-faint); margin-top: 2px; }
+.tl-body .tl-text { font-size: 12.5px; color: var(--text-dim); margin-top: 4px; }
+
+.toast {
+  position: fixed; bottom: 24px; right: 24px; background: var(--bg-elevated);
+  border: 1px solid var(--border); color: var(--text); padding: 12px 18px;
+  border-radius: 8px; font-size: 13px; z-index: 200; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+.hint { font-size: 12px; color: var(--text-faint); line-height: 1.5; margin-bottom: 16px; max-width: 640px; }
+.section-title { font-size: 15px; font-weight: 700; margin: 26px 0 12px 0; }
+.two-col { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; align-items: start; }
+.two-col > div { min-width: 0; }
+.kpi-row > .kpi-card { min-width: 0; }
+.main { min-width: 0; overflow-x: hidden; }
+@media (max-width: 980px) {
+  .two-col { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .sidebar { width: 72px; padding: 14px 8px; }
+  .sidebar .nav-label, .sidebar .nav-item span:not(.ic), .sidebar-foot > div { display: none; }
+  .brand-logo { display: none; }
+  .main { margin-left: 72px; padding: 20px 16px 48px 16px; }
+}
+
+</style>
+<div id="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <svg class="brand-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 190">
+
+  <g fill="none" stroke-linecap="round" stroke-width="10">
+    <path d="M20 95 C 110 40, 170 40, 230 70 C 290 100, 350 100, 410 55" stroke="#1a4fb4"/>
+    <path d="M20 78 C 110 25, 170 25, 230 55 C 290 85, 350 85, 410 40" stroke="#2f6fed"/>
+    <path d="M20 61 C 110 12, 170 12, 230 40 C 290 68, 350 68, 410 25" stroke="#6ea3ff"/>
+  </g>
+  <text x="10" y="150" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="70" fill="#1a4fb4">TXT<tspan fill="#1b8a4b">AIRE</tspan></text>
+  <path d="M410 100 C 424 78, 448 78, 452 100 C 452 116, 434 126, 424 126 C 424 116, 416 110, 410 100 Z" fill="#3fae5a"/>
+  <path d="M424 126 L 430 108" stroke="#1b8a4b" stroke-width="4"/>
+  <rect x="10" y="160" width="470" height="4" fill="#1b8a4b"/>
+  <text x="10" y="184" font-family="Arial, Helvetica, sans-serif" font-weight="600" font-size="20" fill="#1a4fb4">Refrigeration and Air-conditioning Services</text>
+
+      </svg>
+    </div>
+
+    <nav id="sidebar-nav">
+      <div class="nav-group">
+        <div class="nav-label">General</div>
+        <a class="nav-item" data-route="overview"><span class="ic">&#9635;</span> <span>Overview</span></a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">HR</div>
+        <a class="nav-item" data-route="staff"><span class="ic">&#128100;</span> <span>Employees</span></a>
+        <a class="nav-item" data-route="recruitment"><span class="ic">&#128203;</span> <span>Recruitment</span></a>
+        <a class="nav-item" data-route="probation"><span class="ic">&#128197;</span> <span>Probation / Regularization</span></a>
+        <a class="nav-item" data-route="disciplinary"><span class="ic">&#9888;</span> <span>Disciplinary / NTE</span></a>
+        <a class="nav-item" data-route="attendance"><span class="ic">&#128197;</span> <span>Attendance</span></a>
+        <a class="nav-item" data-route="payroll"><span class="ic">&#128179;</span> <span>Payroll</span></a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Records</div>
+        <a class="nav-item" data-route="complaints"><span class="ic">&#128172;</span> <span>Complaints</span></a>
+      </div>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="avatar-chip">HR</div>
+      <div>
+        <div style="color:var(--text); font-weight:600;">HR Admin</div>
+        <div style="font-size:11px;">TxTAIRE HQ</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main" id="main-content"></main>
+</div>
+
+<script>
+/* ================= js/store.js ================= */
+/* TxTAIRE HR & Operations — local data store (localStorage-backed, no backend) */
+
+window.Views = window.Views || {};
+
+const STORAGE_KEY = 'txtaire_hr_v1';
+
+const CATEGORIES = ['Admin', 'HR', 'Technician'];
+
+const STAGES_STANDARD = ['Screening', 'Phone Interview', 'Face-to-Face Interview', '3-Day Trade Test', 'Evaluation', 'Decision'];
+const STAGES_TECHNICIAN = ['Screening', 'Phone Interview', 'Candidate Agreement', '7-Day Trade Test', 'Evaluation', 'Decision'];
+
+function stagesFor(category) {
+  return category === 'Technician' ? STAGES_TECHNICIAN : STAGES_STANDARD;
+}
+
+function genId(prefix) {
+  return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function localISO(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
+
+function todayISO() {
+  return localISO(new Date());
+}
+
+function addDays(isoDate, n) {
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return localISO(d);
+}
+
+function addMonths(isoDate, n) {
+  const d = new Date(isoDate + 'T00:00:00');
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + n);
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, lastDay));
+  return localISO(d);
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+}
+
+function fmtMoney(n) {
+  const v = Number(n) || 0;
+  return '₱' + v.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+// Semi-monthly (every 15 days) withholding tax brackets. The first three rows are exactly
+// as given; brackets above ₱33,332 extend the standard published BIR semi-monthly table
+// as a safety net — no current employee's per-cutoff gross reaches that row.
+function withholdingTax(gross) {
+  const g = Number(gross) || 0;
+  if (g <= 10417) return 0;
+  if (g <= 16666) return 0.15 * (g - 10417);
+  if (g <= 33332) return 937.5 + 0.20 * (g - 16667);
+  if (g <= 83332) return 3541.8 + 0.25 * (g - 33333);
+  if (g <= 333332) return 16291.8 + 0.30 * (g - 83333);
+  if (g <= 666666) return 91291.8 + 0.32 * (g - 333333);
+  return 200833.33 + 0.35 * (g - 666667);
+}
+
+const PAY_CYCLES = {
+  '10-20': { label: 'Engineers, Managers & Admins — 10th & 20th', cutoffLabels: ['10th', '20th'] },
+  '15-30': { label: 'Technicians — 15th & 30th/31st', cutoffLabels: ['15th', 'end of month'] },
+};
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+function daysInMonth(year, month) { return new Date(year, month, 0).getDate(); }
+
+function payCutoffs(payCycle, year, month) {
+  const y = year, m = month;
+  const last = daysInMonth(y, m);
+  if (payCycle === '15-30') {
+    return [
+      { key: 'A', label: `1 – 15 (paid the 15th)`, from: `${y}-${pad2(m)}-01`, to: `${y}-${pad2(m)}-15`, payDate: `${y}-${pad2(m)}-15` },
+      { key: 'B', label: `16 – ${last} (paid the ${last}th)`, from: `${y}-${pad2(m)}-16`, to: `${y}-${pad2(m)}-${pad2(last)}`, payDate: `${y}-${pad2(m)}-${pad2(last)}` },
+    ];
+  }
+  return [
+    { key: 'A', label: `1 – 10 (paid the 10th)`, from: `${y}-${pad2(m)}-01`, to: `${y}-${pad2(m)}-10`, payDate: `${y}-${pad2(m)}-10` },
+    { key: 'B', label: `11 – 20 (paid the 20th)`, from: `${y}-${pad2(m)}-11`, to: `${y}-${pad2(m)}-20`, payDate: `${y}-${pad2(m)}-20` },
+  ];
+}
+
+function defaultCutoffHalf(payCycle, day) {
+  if (payCycle === '15-30') return day <= 15 ? 'A' : 'B';
+  return day <= 10 ? 'A' : 'B';
+}
+
+function seedProbationRecords() {
+  return [
+    { id: genId('pr'), employeeId: 'e7', startDate: '2026-06-17', thirdMonthStatus: 'Pending', thirdMonthEvaluatedDate: null, thirdMonthNotes: '', sixthMonthStatus: 'Pending', sixthMonthEvaluatedDate: null, sixthMonthNotes: '' },
+    { id: genId('pr'), employeeId: 'e17', startDate: '2026-02-02', thirdMonthStatus: 'Pending', thirdMonthEvaluatedDate: null, thirdMonthNotes: '', sixthMonthStatus: 'Pending', sixthMonthEvaluatedDate: null, sixthMonthNotes: '' },
+    { id: genId('pr'), employeeId: 'e18', startDate: '2026-05-12', thirdMonthStatus: 'Pending', thirdMonthEvaluatedDate: null, thirdMonthNotes: '', sixthMonthStatus: 'Pending', sixthMonthEvaluatedDate: null, sixthMonthNotes: '' },
+    { id: genId('pr'), employeeId: 'e4', startDate: '2026-05-25', thirdMonthStatus: 'Pending', thirdMonthEvaluatedDate: null, thirdMonthNotes: '', sixthMonthStatus: 'Pending', sixthMonthEvaluatedDate: null, sixthMonthNotes: '' },
+    { id: genId('pr'), employeeId: 'e19', startDate: '2026-06-26', thirdMonthStatus: 'Pending', thirdMonthEvaluatedDate: null, thirdMonthNotes: '', sixthMonthStatus: 'Pending', sixthMonthEvaluatedDate: null, sixthMonthNotes: '' },
+    { id: genId('pr'), employeeId: 'e20', startDate: '2026-06-11', thirdMonthStatus: 'Pending', thirdMonthEvaluatedDate: null, thirdMonthNotes: '', sixthMonthStatus: 'Pending', sixthMonthEvaluatedDate: null, sixthMonthNotes: '' },
+  ];
+}
+
+function seedData() {
+  const employees = [
+    // Admins — paid the 10th & 20th
+    { id: 'e6', name: 'Rica Mae Nabora', category: 'Admin', position: 'Service Specialist / HR', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Daily', rate: 1000, allowancePerDay: 0, fixedAllowance: 0, payCycle: '10-20', notes: '' },
+    { id: 'e7', name: 'Jennifer D. Cosme', category: 'Admin', position: 'Admin Assistant', status: 'Active', employmentStatus: 'Probationary', dateHired: '', phone: '', email: '', payType: 'Daily', rate: 600, allowancePerDay: 0, fixedAllowance: 0, payCycle: '10-20', notes: '' },
+    { id: 'e5', name: 'Odilon T. Soriano', category: 'Admin', position: 'Logistic Manager', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: 12500, allowancePerDay: 0, fixedAllowance: 0, payCycle: '10-20', notes: '' },
+    { id: 'e1', name: 'John Rodolfo R. Bultron', category: 'Admin', position: 'Vice President - Operations and Shared Services', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: 22170.83, allowancePerDay: 0, fixedAllowance: 0, payCycle: '10-20', notes: '' },
+    { id: 'e2', name: 'Joshua L. Casano', category: 'Admin', position: 'Engineering Manager', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: 16954.17, allowancePerDay: 100, fixedAllowance: 0, payCycle: '10-20', notes: '' },
+    { id: 'e3', name: 'Julaisa S. Sangcupan', category: 'Admin', position: 'Engineering Officer', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: 12550, allowancePerDay: 100, fixedAllowance: 0, payCycle: '10-20', notes: '' },
+    { id: 'e4', name: 'Idine S. Famini', category: 'Admin', position: 'Service Engineer', status: 'Active', employmentStatus: 'Probationary', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: 11923.92, allowancePerDay: 0, fixedAllowance: 0, payCycle: '10-20', notes: '' },
+
+    // Technicians — paid the 15th & 30th/31st
+    { id: 'e8', name: 'Arnel V. Parala', category: 'Technician', position: 'Service Technician Supervisor', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Daily', rate: 1000, allowancePerDay: 200, fixedAllowance: 0, payCycle: '15-30', notes: '' },
+    { id: 'e9', name: 'Argee V. Parala', category: 'Technician', position: 'Lead Service Technician', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Daily', rate: 1000, allowancePerDay: 200, fixedAllowance: 0, payCycle: '15-30', notes: '' },
+    { id: 'e10', name: 'Michael V. Parala', category: 'Technician', position: 'Service Technician', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Daily', rate: 800, allowancePerDay: 200, fixedAllowance: 0, payCycle: '15-30', notes: '' },
+    { id: 'e11', name: 'Aldrin V. Parala', category: 'Technician', position: 'Service Personnel - Welder', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Daily', rate: 700, allowancePerDay: 70, fixedAllowance: 0, payCycle: '15-30', notes: '' },
+    { id: 'e12', name: 'Erasmo L. Cabañez Jr.', category: 'Technician', position: 'Service Personnel - Mason', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Daily', rate: 700, allowancePerDay: 70, fixedAllowance: 0, payCycle: '15-30', notes: '' },
+    { id: 'e13', name: 'Franny R. Rotazo', category: 'Technician', position: 'Service Personnel', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Daily', rate: 700, allowancePerDay: 100, fixedAllowance: 0, payCycle: '15-30', notes: '' },
+    { id: 'e14', name: 'George J. Dela Cruz', category: 'Technician', position: 'Company Driver', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Daily', rate: 645, allowancePerDay: 100, fixedAllowance: 0, payCycle: '15-30', notes: '' },
+    { id: 'e15', name: 'Cruzel Albano', category: 'Technician', position: 'Electrician', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Daily', rate: 1350, allowancePerDay: 0, fixedAllowance: 0, payCycle: '15-30', notes: '' },
+    { id: 'e16', name: 'Dante B. Dulfo', category: 'Technician', position: 'Lead Service Technician', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Daily', rate: 1200, allowancePerDay: 100, fixedAllowance: 500, payCycle: '15-30', notes: 'Fixed house allowance of ₱500 added every cutoff, on top of the ₱100/day field allowance.' },
+    { id: 'e17', name: 'Benedict B. Alomia', category: 'Technician', position: 'Utility and Warehouse Officer', status: 'Active', employmentStatus: 'Probationary', dateHired: '', phone: '', email: '', payType: 'Daily', rate: 600, allowancePerDay: 0, fixedAllowance: 0, payCycle: '15-30', notes: '' },
+    { id: 'e18', name: 'Jayson S. Francisco', category: 'Technician', position: 'Service Personnel', status: 'Active', employmentStatus: 'Probationary', dateHired: '', phone: '', email: '', payType: 'Daily', rate: 700, allowancePerDay: 0, fixedAllowance: 0, payCycle: '15-30', notes: '' },
+    { id: 'e19', name: 'Michael C. Dean', category: 'Technician', position: 'Service Technician', status: 'Active', employmentStatus: 'Probationary', dateHired: '', phone: '', email: '', payType: 'Daily', rate: 750, allowancePerDay: 0, fixedAllowance: 0, payCycle: '15-30', notes: '' },
+    { id: 'e20', name: 'Alvin R. Vargas', category: 'Technician', position: 'Service Personnel', status: 'Active', employmentStatus: 'Probationary', dateHired: '', phone: '', email: '', payType: 'Daily', rate: 700, allowancePerDay: 0, fixedAllowance: 0, payCycle: '15-30', notes: '' },
+  ];
+
+  const candidates = [
+    { id: 'c1', name: 'Patricia Gomez', category: 'HR', positionAppliedFor: 'HR Assistant', phone: '0917 555 2001', email: 'patricia.g@gmail.com', appliedDate: '2026-07-10', stage: 'Phone Interview', decision: null, tradeTestStart: null, tradeTestEnd: null, history: [
+      { date: '2026-07-10', stage: 'Screening', note: 'Resume passed initial screening.' },
+      { date: '2026-07-14', stage: 'Phone Interview', note: 'Phone interview scheduled for Jul 25.' },
+    ] },
+    { id: 'c2', name: 'Ronald Mercado', category: 'Admin', positionAppliedFor: 'HVAC Engineer', phone: '0917 555 2002', email: 'ronald.m@gmail.com', appliedDate: '2026-07-05', stage: '3-Day Trade Test', decision: null, tradeTestStart: '2026-07-21', tradeTestEnd: '2026-07-23', history: [
+      { date: '2026-07-05', stage: 'Screening', note: 'Meets minimum experience requirement.' },
+      { date: '2026-07-08', stage: 'Phone Interview', note: 'Good communication, available immediately.' },
+      { date: '2026-07-15', stage: 'Face-to-Face Interview', note: 'Strong technical knowledge, passed to trade test.' },
+      { date: '2026-07-21', stage: '3-Day Trade Test', note: 'Trade test started Jul 21, ends Jul 23.' },
+    ] },
+    { id: 'c3', name: 'Jonathan Perez', category: 'Technician', positionAppliedFor: 'AC Installation Tech', phone: '0917 555 2003', email: 'jonathan.p@gmail.com', appliedDate: '2026-07-01', stage: '7-Day Trade Test', decision: null, tradeTestStart: '2026-07-17', tradeTestEnd: '2026-07-24', history: [
+      { date: '2026-07-01', stage: 'Screening', note: 'Basic qualifications confirmed.' },
+      { date: '2026-07-03', stage: 'Phone Interview', note: 'Agreed to undergo trade test.' },
+      { date: '2026-07-15', stage: 'Candidate Agreement', note: 'Confirmed availability, trade test scheduled.' },
+      { date: '2026-07-17', stage: '7-Day Trade Test', note: '7-day trade test running Jul 17–24.' },
+    ] },
+    { id: 'c4', name: 'Erwin Salonga', category: 'Admin', positionAppliedFor: 'Office Admin', phone: '0917 555 2004', email: 'erwin.s@gmail.com', appliedDate: '2026-06-20', stage: 'Decision', decision: 'Hired', tradeTestStart: '2026-07-01', tradeTestEnd: '2026-07-03', history: [
+      { date: '2026-06-20', stage: 'Screening', note: 'Qualified applicant.' },
+      { date: '2026-06-23', stage: 'Phone Interview', note: 'Confirmed interest and availability.' },
+      { date: '2026-06-27', stage: 'Face-to-Face Interview', note: 'Good cultural fit.' },
+      { date: '2026-07-01', stage: '3-Day Trade Test', note: 'Completed trade test with good marks.' },
+      { date: '2026-07-05', stage: 'Evaluation', note: 'Recommended for hiring by HR and Department Head.' },
+      { date: '2026-07-08', stage: 'Decision', note: 'Approved for hiring by Management.' },
+    ] },
+    { id: 'c5', name: 'Kevin Ramos', category: 'Technician', positionAppliedFor: 'Refrigeration Tech', phone: '0917 555 2005', email: 'kevin.r@gmail.com', appliedDate: '2026-07-12', stage: 'Screening', decision: null, tradeTestStart: null, tradeTestEnd: null, history: [
+      { date: '2026-07-12', stage: 'Screening', note: 'Resume received, pending review.' },
+    ] },
+  ];
+
+  // No fabricated disciplinary cases or customer complaints are seeded against real staff —
+  // these start empty and are meant to be entered as real events occur.
+  const disciplinaryCases = [];
+  const complaints = [];
+
+  // Neutral "present" attendance seeded for the current pay period so payroll has
+  // something to compute against; real day-to-day logging should replace this.
+  const attendance = [];
+  const today = todayISO();
+  const todayD = new Date(today + 'T00:00:00');
+  const startOfMonth = `${todayD.getFullYear()}-${pad2(todayD.getMonth() + 1)}-01`;
+  let d = startOfMonth;
+  while (d <= today) {
+    const dow = new Date(d + 'T00:00:00').getDay();
+    if (dow !== 0) {
+      employees.forEach(e => {
+        attendance.push({ id: genId('a'), employeeId: e.id, date: d, timeIn: '08:00', timeOut: '17:00', status: 'Present', hours: 8 });
+      });
+    }
+    d = addDays(d, 1);
+  }
+
+  const deductions = [];
+
+  const probationRecords = seedProbationRecords();
+
+  // Per-employee, per-cutoff overrides for "days present" so HR can correct payroll
+  // without having to edit every individual attendance record.
+  const payrollOverrides = [];
+
+  return { employees, candidates, disciplinaryCases, complaints, attendance, deductions, probationRecords, payrollOverrides };
+}
+
+const Store = (function () {
+  let state = load();
+
+  function migrate(s) {
+    (s.employees || []).forEach(e => {
+      if (e.category === 'Manager' || e.category === 'Engineer') e.category = 'Admin';
+      if (!e.employmentStatus) e.employmentStatus = 'Regular';
+    });
+    (s.candidates || []).forEach(c => {
+      if (c.category === 'Manager' || c.category === 'Engineer') c.category = 'Admin';
+    });
+    if (!s.probationRecords) s.probationRecords = seedProbationRecords();
+    if (!s.payrollOverrides) s.payrollOverrides = [];
+    (s.probationRecords || []).forEach(p => {
+      if (p.thirdMonthStatus === 'Meets Expectations') p.thirdMonthStatus = 'On Track for Regularization';
+      if (p.sixthMonthStatus === 'Not Regularized') p.sixthMonthStatus = 'End of Contract';
+    });
+    return s;
+  }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return migrate(JSON.parse(raw));
+    } catch (e) { /* fall through to seed */ }
+    const seeded = seedData();
+    persist(seeded);
+    return seeded;
+  }
+
+  function persist(s) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+  }
+
+  function save() { persist(state); }
+
+  function resetToSeed() {
+    state = seedData();
+    save();
+  }
+
+  // ---- Employees ----
+  function listEmployees() { return state.employees.slice(); }
+  function getEmployee(id) { return state.employees.find(e => e.id === id); }
+  function addEmployee(emp) {
+    emp.id = genId('e');
+    state.employees.push(emp);
+    save();
+    return emp;
+  }
+  function updateEmployee(id, patch) {
+    const e = getEmployee(id);
+    if (e) { Object.assign(e, patch); save(); }
+    return e;
+  }
+  function deleteEmployee(id) {
+    state.employees = state.employees.filter(e => e.id !== id);
+    save();
+  }
+
+  // ---- Recruitment ----
+  function listCandidates() { return state.candidates.slice(); }
+  function getCandidate(id) { return state.candidates.find(c => c.id === id); }
+  function addCandidate(cand) {
+    cand.id = genId('c');
+    cand.history = [{ date: todayISO(), stage: cand.stage, note: 'Candidate added to pipeline.' }];
+    state.candidates.push(cand);
+    save();
+    return cand;
+  }
+  function moveCandidateStage(id, newStage, note) {
+    const c = getCandidate(id);
+    if (!c) return;
+    c.stage = newStage;
+    if (newStage.includes('Trade Test')) {
+      c.tradeTestStart = todayISO();
+      c.tradeTestEnd = addDays(todayISO(), newStage.startsWith('7') ? 7 : 3);
+    }
+    c.history.push({ date: todayISO(), stage: newStage, note: note || ('Moved to ' + newStage + '.') });
+    save();
+    return c;
+  }
+  function decideCandidate(id, decision, note) {
+    const c = getCandidate(id);
+    if (!c) return;
+    c.decision = decision;
+    c.stage = 'Decision';
+    c.history.push({ date: todayISO(), stage: 'Decision', note: note || (decision + ' by Management/HR.') });
+    save();
+    return c;
+  }
+  function deleteCandidate(id) {
+    state.candidates = state.candidates.filter(c => c.id !== id);
+    save();
+  }
+
+  // ---- Disciplinary ----
+  function listCases() { return state.disciplinaryCases.slice(); }
+  function getCase(id) { return state.disciplinaryCases.find(c => c.id === id); }
+  function addCase(nte) {
+    nte.id = genId('d');
+    nte.status = 'Notice Issued';
+    nte.history = [{ date: nte.dateIssued, action: 'Notice Issued', note: nte.violation }];
+    state.disciplinaryCases.push(nte);
+    save();
+    return nte;
+  }
+  function updateCase(id, patch, historyEntry) {
+    const c = getCase(id);
+    if (!c) return;
+    Object.assign(c, patch);
+    if (historyEntry) c.history.push(Object.assign({ date: todayISO() }, historyEntry));
+    save();
+    return c;
+  }
+  function deleteCase(id) {
+    state.disciplinaryCases = state.disciplinaryCases.filter(c => c.id !== id);
+    save();
+  }
+
+  // ---- Complaints ----
+  function listComplaints() { return state.complaints.slice(); }
+  function getComplaint(id) { return state.complaints.find(c => c.id === id); }
+  function addComplaint(cp) {
+    cp.id = genId('cp');
+    state.complaints.push(cp);
+    save();
+    return cp;
+  }
+  function updateComplaint(id, patch) {
+    const c = getComplaint(id);
+    if (c) { Object.assign(c, patch); save(); }
+    return c;
+  }
+  function deleteComplaint(id) {
+    state.complaints = state.complaints.filter(c => c.id !== id);
+    save();
+  }
+
+  // ---- Attendance ----
+  function listAttendance() { return state.attendance.slice(); }
+  function attendanceForDate(date) { return state.attendance.filter(a => a.date === date); }
+  function attendanceInRange(from, to) { return state.attendance.filter(a => a.date >= from && a.date <= to); }
+  function addAttendance(rec) {
+    rec.id = genId('a');
+    state.attendance.push(rec);
+    save();
+    return rec;
+  }
+  function updateAttendance(id, patch) {
+    const a = state.attendance.find(x => x.id === id);
+    if (a) { Object.assign(a, patch); save(); }
+    return a;
+  }
+  function deleteAttendance(id) {
+    state.attendance = state.attendance.filter(a => a.id !== id);
+    save();
+  }
+
+  // ---- Probation / Regularization ----
+  function listProbations() { return state.probationRecords.slice(); }
+  function getProbation(id) { return state.probationRecords.find(p => p.id === id); }
+  function getProbationByEmployee(employeeId) { return state.probationRecords.find(p => p.employeeId === employeeId); }
+  function addProbation(rec) {
+    rec.id = genId('pr');
+    state.probationRecords.push(rec);
+    save();
+    return rec;
+  }
+  function updateProbation(id, patch) {
+    const p = getProbation(id);
+    if (p) { Object.assign(p, patch); save(); }
+    return p;
+  }
+  function deleteProbation(id) {
+    state.probationRecords = state.probationRecords.filter(p => p.id !== id);
+    save();
+  }
+
+  // ---- Payroll overrides (editable "days present" per employee per cutoff) ----
+  function getPayrollOverride(employeeId, cutoffFrom) {
+    return state.payrollOverrides.find(o => o.employeeId === employeeId && o.cutoffFrom === cutoffFrom);
+  }
+  function setPayrollOverride(employeeId, cutoffFrom, daysPresent) {
+    const existing = getPayrollOverride(employeeId, cutoffFrom);
+    if (existing) { existing.daysPresent = daysPresent; }
+    else { state.payrollOverrides.push({ id: genId('po'), employeeId, cutoffFrom, daysPresent }); }
+    save();
+  }
+
+  // ---- Deductions ----
+  function listDeductions() { return state.deductions.slice(); }
+  function deductionsInRange(from, to) { return state.deductions.filter(d => d.date >= from && d.date <= to); }
+  function addDeduction(d) {
+    d.id = genId('ded');
+    state.deductions.push(d);
+    save();
+    return d;
+  }
+  function deleteDeduction(id) {
+    state.deductions = state.deductions.filter(d => d.id !== id);
+    save();
+  }
+
+  return {
+    resetToSeed,
+    listEmployees, getEmployee, addEmployee, updateEmployee, deleteEmployee,
+    listCandidates, getCandidate, addCandidate, moveCandidateStage, decideCandidate, deleteCandidate,
+    listCases, getCase, addCase, updateCase, deleteCase,
+    listComplaints, getComplaint, addComplaint, updateComplaint, deleteComplaint,
+    listAttendance, attendanceForDate, attendanceInRange, addAttendance, updateAttendance, deleteAttendance,
+    listDeductions, deductionsInRange, addDeduction, deleteDeduction,
+    listProbations, getProbation, getProbationByEmployee, addProbation, updateProbation, deleteProbation,
+    getPayrollOverride, setPayrollOverride,
+  };
+})();
+
+</script>
+
+<script>
+/* ================= js/app.js ================= */
+/* App shell: router + shared UI helpers. Views register themselves on window.Views. */
+
+window.Views = window.Views || {};
+
+function qs(sel, root) { return (root || document).querySelector(sel); }
+function qsa(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
+
+function escapeHtml(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function toast(msg) {
+  const old = qs('.toast');
+  if (old) old.remove();
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2600);
+}
+
+function closeModal() {
+  const bd = qs('.modal-backdrop');
+  if (bd) bd.remove();
+}
+
+function openModal(innerHtml, onMount) {
+  closeModal();
+  closeDrawer();
+  const bd = document.createElement('div');
+  bd.className = 'modal-backdrop';
+  bd.addEventListener('mousedown', function (e) { if (e.target === bd) closeModal(); });
+  bd.innerHTML = '<div class="modal-wrap"><div class="modal">' +
+    '<button class="modal-close" data-close-modal>&times;</button>' + innerHtml + '</div></div>';
+  document.body.appendChild(bd);
+  qs('[data-close-modal]', bd).addEventListener('click', closeModal);
+  if (onMount) onMount(bd);
+  return bd;
+}
+
+function closeDrawer() {
+  const dr = qs('.drawer');
+  const bg = qs('.drawer-backdrop');
+  if (dr) dr.remove();
+  if (bg) bg.remove();
+}
+
+function openDrawer(innerHtml, onMount) {
+  closeDrawer();
+  closeModal();
+  const bg = document.createElement('div');
+  bg.className = 'drawer-backdrop';
+  bg.addEventListener('click', closeDrawer);
+  document.body.appendChild(bg);
+  const dr = document.createElement('div');
+  dr.className = 'drawer';
+  dr.innerHTML = innerHtml;
+  document.body.appendChild(dr);
+  if (onMount) onMount(dr);
+  return dr;
+}
+
+function employeeOptions(selectedId, categoryFilter) {
+  let emps = Store.listEmployees();
+  if (categoryFilter) emps = emps.filter(e => e.category === categoryFilter);
+  return emps.map(e => '<option value="' + e.id + '"' + (e.id === selectedId ? ' selected' : '') + '>' +
+    escapeHtml(e.name) + ' (' + e.category + ')</option>').join('');
+}
+
+function employeeName(id) {
+  const e = Store.getEmployee(id);
+  return e ? e.name : '—';
+}
+
+function caseStatusBadge(status) {
+  const map = {
+    'Notice Issued': 'badge-orange',
+    'Awaiting Response': 'badge-yellow',
+    'Under Investigation': 'badge-blue',
+    'Resolved': 'badge-green',
+    'Escalated': 'badge-red',
+  };
+  return '<span class="badge ' + (map[status] || 'badge-gray') + '">' + escapeHtml(status) + '</span>';
+}
+
+function complaintStatusBadge(status) {
+  const map = {
+    'Open': 'badge-red',
+    'In Progress': 'badge-yellow',
+    'Resolved': 'badge-green',
+    'Closed': 'badge-gray',
+  };
+  return '<span class="badge ' + (map[status] || 'badge-gray') + '">' + escapeHtml(status) + '</span>';
+}
+
+function priorityBadge(priority) {
+  const map = { High: 'badge-red', Medium: 'badge-yellow', Low: 'badge-gray' };
+  return '<span class="badge ' + (map[priority] || 'badge-gray') + '">' + escapeHtml(priority) + '</span>';
+}
+
+function employmentStatusBadge(status) {
+  const map = { Regular: 'badge-blue', Probationary: 'badge-yellow' };
+  return '<span class="badge ' + (map[status] || 'badge-gray') + '">' + escapeHtml(status || '—') + '</span>';
+}
+
+function daysBetween(fromISO, toISO) {
+  return Math.round((new Date(toISO + 'T00:00:00') - new Date(fromISO + 'T00:00:00')) / 86400000);
+}
+
+function employeeStatusDot(status) {
+  const map = { Active: 'on', 'On Leave': 'late', Off: 'off', Terminated: 'absent' };
+  return '<span class="status-dot ' + (map[status] || '') + '">' + escapeHtml(status) + '</span>';
+}
+
+const ROUTES = ['overview', 'staff', 'recruitment', 'probation', 'disciplinary', 'attendance', 'payroll', 'complaints'];
+
+function currentRoute() {
+  const h = (location.hash || '').replace('#', '').split('/')[0];
+  return ROUTES.includes(h) ? h : 'overview';
+}
+
+function setActiveNav(route) {
+  qsa('.nav-item').forEach(a => {
+    a.classList.toggle('active', a.dataset.route === route);
+  });
+}
+
+function render() {
+  closeModal();
+  closeDrawer();
+  const route = currentRoute();
+  setActiveNav(route);
+  const main = qs('#main-content');
+  main.innerHTML = '';
+  const view = window.Views[route];
+  if (view && view.render) {
+    view.render(main);
+  } else {
+    main.innerHTML = '<div class="empty">Not found.</div>';
+  }
+}
+
+(function () {
+  qsa('.nav-item').forEach(a => {
+    a.addEventListener('click', function () {
+      location.hash = '#' + a.dataset.route;
+    });
+  });
+  window.addEventListener('hashchange', render);
+  render();
+})();
+
+</script>
+
+<script>
+/* ================= js/views/overview.js ================= */
+window.Views.overview = {
+  render(main) {
+    const employees = Store.listEmployees();
+    const candidates = Store.listCandidates();
+    const cases = Store.listCases();
+    const complaints = Store.listComplaints();
+    const today = todayISO();
+    const todayAttendance = Store.attendanceForDate(today);
+
+    const activeEmployees = employees.filter(e => e.status === 'Active').length;
+    const byCategory = CATEGORIES.map(cat => ({
+      cat, count: employees.filter(e => e.category === cat).length
+    }));
+
+    const openCandidates = candidates.filter(c => c.stage !== 'Decision').length;
+    const openCases = cases.filter(c => c.status !== 'Resolved').length;
+    const openComplaints = complaints.filter(c => c.status === 'Open' || c.status === 'In Progress').length;
+
+    const present = todayAttendance.filter(a => a.status === 'Present' || a.status === 'Late').length;
+
+    const upcomingTradeTests = candidates
+      .filter(c => c.tradeTestEnd && c.tradeTestEnd >= today)
+      .sort((a, b) => a.tradeTestEnd.localeCompare(b.tradeTestEnd))
+      .slice(0, 5);
+
+    const recentCases = cases.slice().sort((a, b) => b.dateIssued.localeCompare(a.dateIssued)).slice(0, 4);
+    const recentComplaints = complaints.slice().sort((a, b) => b.dateReceived.localeCompare(a.dateReceived)).slice(0, 4);
+
+    main.innerHTML = `
+      <div class="crumb">TxTAIRE HQ</div>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Overview</h1>
+          <div class="page-sub">Company-wide snapshot across HR, recruitment, disciplinary cases, and customer complaints.</div>
+        </div>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-label">Total Employees</div>
+          <div class="kpi-value">${employees.length}</div>
+          <div class="kpi-sub">${activeEmployees} active</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">On Shift Today</div>
+          <div class="kpi-value green">${present}</div>
+          <div class="kpi-sub">of ${todayAttendance.length} logged today</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Recruitment Pipeline</div>
+          <div class="kpi-value">${openCandidates}</div>
+          <div class="kpi-sub">candidates in progress</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Active NTE Cases</div>
+          <div class="kpi-value ${openCases ? 'red' : ''}">${openCases}</div>
+          <div class="kpi-sub">of ${cases.length} total</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Open Complaints</div>
+          <div class="kpi-value ${openComplaints ? 'red' : ''}">${openComplaints}</div>
+          <div class="kpi-sub">of ${complaints.length} total</div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div>
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Headcount by Category</h3>
+            </div>
+            <table>
+              <thead><tr><th>Category</th><th class="num">Employees</th><th>Roles</th></tr></thead>
+              <tbody>
+                ${byCategory.map(b => `
+                  <tr>
+                    <td class="name">${b.cat}</td>
+                    <td class="num">${b.count}</td>
+                    <td class="dim">${escapeHtml(employees.filter(e => e.category === b.cat).map(e => e.position).join(', ') || '—')}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="section-title">Recent Disciplinary Cases</div>
+          <div class="panel">
+            ${recentCases.length ? `
+            <table>
+              <thead><tr><th>Employee</th><th>Violation</th><th>Status</th><th>Date Issued</th></tr></thead>
+              <tbody>
+                ${recentCases.map(c => `
+                  <tr>
+                    <td class="name">${escapeHtml(employeeName(c.employeeId))}</td>
+                    <td class="dim">${escapeHtml(c.violation)}</td>
+                    <td>${caseStatusBadge(c.status)}</td>
+                    <td class="dim">${fmtDate(c.dateIssued)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>` : '<div class="empty">No disciplinary cases on file.</div>'}
+          </div>
+        </div>
+
+        <div>
+          <div class="panel">
+            <div class="panel-head"><h3>Upcoming / Active Trade Tests</h3></div>
+            ${upcomingTradeTests.length ? `
+            <table>
+              <thead><tr><th>Candidate</th><th>Ends</th></tr></thead>
+              <tbody>
+                ${upcomingTradeTests.map(c => `
+                  <tr>
+                    <td class="name">${escapeHtml(c.name)}<div class="dim" style="font-size:11px;">${escapeHtml(c.positionAppliedFor)}</div></td>
+                    <td class="dim">${fmtDate(c.tradeTestEnd)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>` : '<div class="empty">No active trade tests.</div>'}
+          </div>
+
+          <div class="section-title">Recent Complaints</div>
+          <div class="panel">
+            ${recentComplaints.length ? `
+            <table>
+              <thead><tr><th>Customer</th><th>Status</th></tr></thead>
+              <tbody>
+                ${recentComplaints.map(c => `
+                  <tr>
+                    <td class="name">${escapeHtml(c.customerName)}<div class="dim" style="font-size:11px;">${fmtDate(c.dateReceived)}</div></td>
+                    <td>${complaintStatusBadge(c.status)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>` : '<div class="empty">No complaints on file.</div>'}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+};
+
+</script>
+
+<script>
+/* ================= js/views/staff.js ================= */
+window.Views.staff = (function () {
+  let filterCategory = 'All';
+  let filterStatus = 'All';
+  let filterEmployment = 'All';
+
+  function renderList(main) {
+    const all = Store.listEmployees();
+    let rows = all.slice();
+    if (filterCategory !== 'All') rows = rows.filter(e => e.category === filterCategory);
+    if (filterStatus !== 'All') rows = rows.filter(e => e.status === filterStatus);
+    if (filterEmployment !== 'All') rows = rows.filter(e => e.employmentStatus === filterEmployment);
+    rows.sort((a, b) => a.name.localeCompare(b.name));
+
+    const activeCount = all.filter(e => e.status === 'Active').length;
+
+    main.innerHTML = `
+      <div class="crumb">HR</div>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Employees</h1>
+          <div class="page-sub">Centralized employee records for Admin, HR, and Technician staff.</div>
+        </div>
+        <button class="btn btn-primary" id="btn-add-employee">+ Add employee</button>
+      </div>
+
+      <div class="filters">
+        <div class="field">
+          <label>Category</label>
+          <div class="seg" id="seg-category">
+            ${['All'].concat(CATEGORIES).map(c => `<button data-val="${c}" class="${filterCategory === c ? 'active' : ''}">${c}</button>`).join('')}
+          </div>
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <div class="seg" id="seg-status">
+            ${['All', 'Active', 'On Leave', 'Off', 'Terminated'].map(s => `<button data-val="${s}" class="${filterStatus === s ? 'active' : ''}">${s}</button>`).join('')}
+          </div>
+        </div>
+        <div class="field">
+          <label>Employment</label>
+          <div class="seg" id="seg-employment">
+            ${['All', 'Regular', 'Probationary'].map(s => `<button data-val="${s}" class="${filterEmployment === s ? 'active' : ''}">${s}</button>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="page-sub" style="margin-bottom:10px;">${all.length} employees · ${activeCount} active</div>
+
+      <div class="panel">
+        ${rows.length ? `
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th><th>Category</th><th>Position</th><th>Status</th><th>Employment</th>
+              <th>Rate</th><th>Allowance</th><th>Payday</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(e => `
+              <tr data-id="${e.id}">
+                <td class="name row-link" data-open="${e.id}">${escapeHtml(e.name)}</td>
+                <td><span class="badge badge-gray">${e.category}</span></td>
+                <td class="dim">${escapeHtml(e.position)}</td>
+                <td>${employeeStatusDot(e.status)}</td>
+                <td>${employmentStatusBadge(e.employmentStatus)}</td>
+                <td class="dim">${e.payType === 'Daily' ? fmtMoney(e.rate) + '/day' : fmtMoney(e.rate) + '/cutoff'}</td>
+                <td class="dim">${(e.allowancePerDay || e.fixedAllowance) ? [e.allowancePerDay ? fmtMoney(e.allowancePerDay) + '/day' : null, e.fixedAllowance ? fmtMoney(e.fixedAllowance) + '/cutoff' : null].filter(Boolean).join(' + ') : '—'}</td>
+                <td class="dim">${PAY_CYCLES[e.payCycle] ? PAY_CYCLES[e.payCycle].cutoffLabels.join(' & ') : '—'}</td>
+                <td><button class="link-btn" data-edit="${e.id}">Edit →</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>` : '<div class="empty">No employees match these filters.</div>'}
+      </div>
+    `;
+
+    qs('#btn-add-employee', main).addEventListener('click', () => openEmployeeModal(main, null));
+    qsa('#seg-category button', main).forEach(b => b.addEventListener('click', () => { filterCategory = b.dataset.val; renderList(main); }));
+    qsa('#seg-status button', main).forEach(b => b.addEventListener('click', () => { filterStatus = b.dataset.val; renderList(main); }));
+    qsa('#seg-employment button', main).forEach(b => b.addEventListener('click', () => { filterEmployment = b.dataset.val; renderList(main); }));
+    qsa('[data-edit]', main).forEach(b => b.addEventListener('click', () => openEmployeeModal(main, b.dataset.edit)));
+    qsa('[data-open]', main).forEach(b => b.addEventListener('click', () => openEmployeeDetail(main, b.dataset.open)));
+  }
+
+  function openEmployeeDetail(main, id) {
+    const e = Store.getEmployee(id);
+    if (!e) return;
+    const cases = Store.listCases().filter(c => c.employeeId === id);
+    openDrawer(`
+      <h2>${escapeHtml(e.name)}</h2>
+      <div class="page-sub" style="margin-bottom:14px;">${e.category} · ${escapeHtml(e.position)}</div>
+      <div class="kpi-row" style="grid-template-columns:1fr 1fr;">
+        <div class="kpi-card"><div class="kpi-label">Status</div><div class="kpi-value" style="font-size:16px;">${employeeStatusDot(e.status)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Employment</div><div class="kpi-value" style="font-size:16px;">${employmentStatusBadge(e.employmentStatus)}</div></div>
+      </div>
+      <div class="page-sub" style="margin-top:10px;">Date hired: ${fmtDate(e.dateHired)}</div>
+      <div class="section-title" style="margin-top:18px;">Contact</div>
+      <div class="page-sub">Phone: ${escapeHtml(e.phone || '—')}<br/>Email: ${escapeHtml(e.email || '—')}</div>
+      <div class="section-title">Pay</div>
+      <div class="page-sub">
+        Rate: ${e.payType === 'Daily' ? fmtMoney(e.rate) + ' / day' : fmtMoney(e.rate) + ' / cutoff'}<br/>
+        ${e.allowancePerDay ? 'Allowance: ' + fmtMoney(e.allowancePerDay) + ' / day<br/>' : ''}
+        ${e.fixedAllowance ? 'Fixed allowance: ' + fmtMoney(e.fixedAllowance) + ' / cutoff<br/>' : ''}
+        Payday: ${PAY_CYCLES[e.payCycle] ? PAY_CYCLES[e.payCycle].cutoffLabels.join(' & ') : '—'}
+      </div>
+      ${e.notes ? `<div class="section-title">Notes</div><div class="page-sub">${escapeHtml(e.notes)}</div>` : ''}
+      <div class="section-title">Disciplinary History</div>
+      ${cases.length ? `<div class="timeline">${cases.map(c => `
+        <div class="tl-item"><div class="tl-dot"></div><div class="tl-body">
+          <div class="tl-title">${escapeHtml(c.violation)}</div>
+          <div class="tl-meta">${fmtDate(c.dateIssued)} · ${c.status}</div>
+        </div></div>
+      `).join('')}</div>` : '<div class="page-sub">No disciplinary cases on file.</div>'}
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="btn btn-ghost" id="drawer-edit">Edit</button>
+      </div>
+    `, (dr) => {
+      qs('#drawer-edit', dr).addEventListener('click', () => { closeDrawer(); openEmployeeModal(main, id); });
+    });
+  }
+
+  function openEmployeeModal(main, id) {
+    const editing = id ? Store.getEmployee(id) : null;
+    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, payCycle: '10-20', notes: '' };
+
+    openModal(`
+      <h2>${editing ? 'Edit employee' : 'Add employee'}</h2>
+      <div class="modal-sub">${editing ? 'Update employee record.' : 'Add a new employee to the centralized HR database.'}</div>
+      <form id="employee-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Full name</label><input name="name" required value="${escapeHtml(e.name)}" /></div>
+          <div class="field"><label>Category</label>
+            <select name="category">${CATEGORIES.map(c => `<option ${c === e.category ? 'selected' : ''}>${c}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Position</label><input name="position" required value="${escapeHtml(e.position)}" /></div>
+          <div class="field"><label>Status</label>
+            <select name="status">${['Active', 'On Leave', 'Off', 'Terminated'].map(s => `<option ${s === e.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Employment status</label>
+            <select name="employmentStatus">${['Regular', 'Probationary'].map(s => `<option ${s === e.employmentStatus ? 'selected' : ''}>${s}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Date hired</label><input type="date" name="dateHired" value="${e.dateHired}" /></div>
+          <div class="field"><label>Phone</label><input name="phone" value="${escapeHtml(e.phone)}" /></div>
+          <div class="field"><label>Email</label><input type="email" name="email" value="${escapeHtml(e.email)}" /></div>
+          <div class="field"><label>Pay cycle</label>
+            <select name="payCycle">
+              <option value="10-20" ${e.payCycle === '10-20' ? 'selected' : ''}>10th &amp; 20th (Engineers/Managers/Admins)</option>
+              <option value="15-30" ${e.payCycle === '15-30' ? 'selected' : ''}>15th &amp; 30th/31st (Technicians)</option>
+            </select>
+          </div>
+          <div class="field"><label>Pay type</label>
+            <select name="payType">${['Monthly', 'Daily'].map(p => `<option ${p === e.payType ? 'selected' : ''}>${p}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Rate (PHP)</label><input type="number" name="rate" min="0" step="0.01" value="${e.rate}" /></div>
+          <div class="field"><label>Allowance / day (PHP)</label><input type="number" name="allowancePerDay" min="0" step="0.01" value="${e.allowancePerDay || 0}" /></div>
+          <div class="field"><label>Fixed allowance / cutoff (PHP)</label><input type="number" name="fixedAllowance" min="0" step="0.01" value="${e.fixedAllowance || 0}" /></div>
+          <div class="field full"><label>Notes</label><textarea name="notes" rows="2">${escapeHtml(e.notes || '')}</textarea></div>
+        </div>
+        <div class="modal-actions">
+          ${editing ? '<button type="button" class="btn btn-danger" id="btn-del-emp">Delete</button>' : ''}
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">${editing ? 'Save changes' : 'Add employee'}</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#employee-form', bd).addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const patch = {
+          name: fd.get('name').trim(),
+          category: fd.get('category'),
+          position: fd.get('position').trim(),
+          status: fd.get('status'),
+          employmentStatus: fd.get('employmentStatus'),
+          dateHired: fd.get('dateHired'),
+          phone: fd.get('phone').trim(),
+          email: fd.get('email').trim(),
+          payCycle: fd.get('payCycle'),
+          payType: fd.get('payType'),
+          rate: Number(fd.get('rate')) || 0,
+          allowancePerDay: Number(fd.get('allowancePerDay')) || 0,
+          fixedAllowance: Number(fd.get('fixedAllowance')) || 0,
+          notes: fd.get('notes').trim(),
+        };
+        if (editing) {
+          Store.updateEmployee(editing.id, patch);
+          toast('Employee updated.');
+        } else {
+          Store.addEmployee(patch);
+          toast('Employee added.');
+        }
+        closeModal();
+        renderList(main);
+      });
+      const delBtn = qs('#btn-del-emp', bd);
+      if (delBtn) delBtn.addEventListener('click', () => {
+        if (confirm('Delete ' + editing.name + '? This cannot be undone.')) {
+          Store.deleteEmployee(editing.id);
+          closeModal();
+          toast('Employee deleted.');
+          renderList(main);
+        }
+      });
+    });
+  }
+
+  return { render: renderList };
+})();
+
+</script>
+
+<script>
+/* ================= js/views/recruitment.js ================= */
+window.Views.recruitment = (function () {
+  let filterCategory = 'All';
+
+  const MACRO_COLUMNS = ['Screening', 'Phone Interview', 'Interview / Agreement', 'Trade Test', 'Evaluation', 'Decision'];
+
+  function macroStage(stage) {
+    if (stage === 'Screening') return 'Screening';
+    if (stage === 'Phone Interview') return 'Phone Interview';
+    if (stage === 'Face-to-Face Interview' || stage === 'Candidate Agreement') return 'Interview / Agreement';
+    if (stage === '3-Day Trade Test' || stage === '7-Day Trade Test') return 'Trade Test';
+    if (stage === 'Evaluation') return 'Evaluation';
+    return 'Decision';
+  }
+
+  function columnsFor() {
+    if (filterCategory === 'All') return MACRO_COLUMNS;
+    return stagesFor(filterCategory);
+  }
+
+  function candidateColumn(c) {
+    return filterCategory === 'All' ? macroStage(c.stage) : c.stage;
+  }
+
+  function renderBoard(main) {
+    const all = Store.listCandidates();
+    const rows = filterCategory === 'All' ? all : all.filter(c => c.category === filterCategory);
+    const cols = columnsFor();
+    const today = todayISO();
+
+    main.innerHTML = `
+      <div class="crumb">HR</div>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Recruitment</h1>
+          <div class="page-sub">Application Screening → Interview / Assessment → Trade Test → Evaluation → Final Decision. Technicians follow a 7-day trade test; Admin, HR, and Engineers follow a 3-day trade test.</div>
+        </div>
+        <button class="btn btn-primary" id="btn-add-candidate">+ Add candidate</button>
+      </div>
+
+      <div class="filters">
+        <div class="field">
+          <label>Category</label>
+          <div class="seg" id="seg-category">
+            ${['All'].concat(CATEGORIES).map(c => `<button data-val="${c}" class="${filterCategory === c ? 'active' : ''}">${c}</button>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="kanban">
+        ${cols.map(col => {
+          const inCol = rows.filter(c => candidateColumn(c) === col && !(col === 'Decision' && c.decision));
+          const decided = col === 'Decision' ? rows.filter(c => c.decision) : [];
+          const cardsAll = col === 'Decision' ? inCol.concat(decided) : inCol;
+          return `
+          <div class="kanban-col">
+            <div class="kanban-col-head"><span>${col}</span><span class="count">${cardsAll.length}</span></div>
+            <div class="kanban-cards">
+              ${cardsAll.map(c => `
+                <div class="kcard" data-open="${c.id}">
+                  <div class="kname">${escapeHtml(c.name)}</div>
+                  <div class="kmeta">${c.category} · ${escapeHtml(c.positionAppliedFor)}</div>
+                  ${c.tradeTestEnd && !c.decision ? `<div class="kmeta" style="margin-top:4px;color:${c.tradeTestEnd < today ? 'var(--yellow)' : 'var(--text-faint)'};">Trade test ends ${fmtDate(c.tradeTestEnd)}</div>` : ''}
+                  ${c.decision ? `<div style="margin-top:6px;">${decisionBadge(c.decision)}</div>` : ''}
+                </div>
+              `).join('') || '<div class="page-sub" style="font-size:11.5px;padding:4px 2px;">No candidates.</div>'}
+            </div>
+          </div>
+        `; }).join('')}
+      </div>
+    `;
+
+    qs('#btn-add-candidate', main).addEventListener('click', () => openCandidateForm(main));
+    qsa('#seg-category button', main).forEach(b => b.addEventListener('click', () => { filterCategory = b.dataset.val; renderBoard(main); }));
+    qsa('[data-open]', main).forEach(el => el.addEventListener('click', () => openCandidateDetail(main, el.dataset.open)));
+  }
+
+  function decisionBadge(d) {
+    const map = { Hired: 'badge-green', Rejected: 'badge-red', 'On Hold': 'badge-yellow' };
+    return `<span class="badge ${map[d] || 'badge-gray'}">${d}</span>`;
+  }
+
+  function openCandidateDetail(main, id) {
+    const c = Store.getCandidate(id);
+    if (!c) return;
+    const stages = stagesFor(c.category);
+    const idx = stages.indexOf(c.stage);
+    const next = idx >= 0 && idx < stages.length - 1 ? stages[idx + 1] : null;
+
+    openDrawer(`
+      <h2>${escapeHtml(c.name)}</h2>
+      <div class="page-sub" style="margin-bottom:10px;">${c.category} · ${escapeHtml(c.positionAppliedFor)}</div>
+      <div style="margin-bottom:14px;">
+        <span class="badge badge-orange">${escapeHtml(c.stage)}</span>
+        ${c.decision ? decisionBadge(c.decision) : ''}
+      </div>
+      <div class="page-sub">Applied: ${fmtDate(c.appliedDate)}<br/>Phone: ${escapeHtml(c.phone || '—')}<br/>Email: ${escapeHtml(c.email || '—')}</div>
+      ${c.tradeTestStart ? `<div class="page-sub" style="margin-top:8px;">Trade test: ${fmtDate(c.tradeTestStart)} → ${fmtDate(c.tradeTestEnd)}</div>` : ''}
+
+      <div class="section-title">Timeline</div>
+      <div class="timeline">
+        ${c.history.slice().reverse().map(h => `
+          <div class="tl-item"><div class="tl-dot"></div><div class="tl-body">
+            <div class="tl-title">${escapeHtml(h.stage)}</div>
+            <div class="tl-meta">${fmtDate(h.date)}</div>
+            <div class="tl-text">${escapeHtml(h.note)}</div>
+          </div></div>
+        `).join('')}
+      </div>
+
+      ${!c.decision ? `
+      <div class="modal-actions" style="margin-top:20px; justify-content:flex-start; flex-wrap:wrap;">
+        ${next ? `<button class="btn btn-primary btn-sm" id="btn-advance">Move to: ${next} →</button>` : ''}
+        ${c.stage === 'Evaluation' ? `
+          <button class="btn btn-ghost btn-sm" id="btn-hire" style="color:var(--green);border-color:var(--green);">Hire</button>
+          <button class="btn btn-ghost btn-sm" id="btn-hold">Hold</button>
+          <button class="btn btn-danger btn-sm" id="btn-reject">Reject</button>
+        ` : ''}
+      </div>` : ''}
+      <div class="modal-actions" style="margin-top:10px;">
+        <button class="btn btn-ghost btn-sm" id="btn-del-candidate">Remove candidate</button>
+      </div>
+    `, (dr) => {
+      const adv = qs('#btn-advance', dr);
+      if (adv) adv.addEventListener('click', () => {
+        Store.moveCandidateStage(c.id, next);
+        toast('Moved to ' + next + '.');
+        closeDrawer();
+        renderBoard(main);
+      });
+      const hire = qs('#btn-hire', dr);
+      if (hire) hire.addEventListener('click', () => {
+        Store.decideCandidate(c.id, 'Hired', 'Endorsed by HR and Department Head; approved by Management.');
+        toast(c.name + ' marked as Hired.');
+        closeDrawer();
+        renderBoard(main);
+      });
+      const hold = qs('#btn-hold', dr);
+      if (hold) hold.addEventListener('click', () => {
+        Store.decideCandidate(c.id, 'On Hold', 'Placed on hold pending further review.');
+        toast(c.name + ' placed on hold.');
+        closeDrawer();
+        renderBoard(main);
+      });
+      const rej = qs('#btn-reject', dr);
+      if (rej) rej.addEventListener('click', () => {
+        Store.decideCandidate(c.id, 'Rejected', 'Not recommended for hiring.');
+        toast(c.name + ' marked as Rejected.');
+        closeDrawer();
+        renderBoard(main);
+      });
+      qs('#btn-del-candidate', dr).addEventListener('click', () => {
+        if (confirm('Remove ' + c.name + ' from the pipeline?')) {
+          Store.deleteCandidate(c.id);
+          closeDrawer();
+          toast('Candidate removed.');
+          renderBoard(main);
+        }
+      });
+    });
+  }
+
+  function openCandidateForm(main) {
+    openModal(`
+      <h2>Add candidate</h2>
+      <div class="modal-sub">New candidates start at the Screening stage.</div>
+      <form id="candidate-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Full name</label><input name="name" required /></div>
+          <div class="field"><label>Category</label>
+            <select name="category">${CATEGORIES.map(c => `<option>${c}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Position applied for</label><input name="positionAppliedFor" required /></div>
+          <div class="field"><label>Phone</label><input name="phone" /></div>
+          <div class="field"><label>Email</label><input type="email" name="email" /></div>
+          <div class="field full"><label>Applied date</label><input type="date" name="appliedDate" value="${todayISO()}" /></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Add candidate</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#candidate-form', bd).addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        Store.addCandidate({
+          name: fd.get('name').trim(),
+          category: fd.get('category'),
+          positionAppliedFor: fd.get('positionAppliedFor').trim(),
+          phone: fd.get('phone').trim(),
+          email: fd.get('email').trim(),
+          appliedDate: fd.get('appliedDate'),
+          stage: 'Screening',
+          decision: null,
+          tradeTestStart: null,
+          tradeTestEnd: null,
+        });
+        toast('Candidate added.');
+        closeModal();
+        renderBoard(main);
+      });
+    });
+  }
+
+  return { render: renderBoard };
+})();
+
+</script>
+
+<script>
+/* ================= js/views/probation.js ================= */
+window.Views.probation = (function () {
+
+  const THIRD_MONTH_OPTIONS = ['Pending', 'On Track for Regularization', 'Needs Improvement', 'Recommend End of Contract'];
+  const SIXTH_MONTH_OPTIONS = ['Pending', 'Regularized', 'Extended', 'End of Contract'];
+
+  function milestoneBadge(status) {
+    const map = {
+      'Pending': 'badge-gray',
+      'On Track for Regularization': 'badge-green',
+      'Needs Improvement': 'badge-yellow',
+      'Recommend End of Contract': 'badge-red',
+      'Regularized': 'badge-green',
+      'Extended': 'badge-yellow',
+      'End of Contract': 'badge-red',
+    };
+    return '<span class="badge ' + (map[status] || 'badge-gray') + '">' + escapeHtml(status) + '</span>';
+  }
+
+  function truncate(text, n) {
+    if (!text) return '—';
+    return text.length > n ? text.slice(0, n) + '…' : text;
+  }
+
+  function dueBadge(dueDate, status) {
+    if (status !== 'Pending') return '';
+    const diff = daysBetween(todayISO(), dueDate);
+    if (diff < 0) return '<span class="badge badge-red">Overdue ' + Math.abs(diff) + 'd</span>';
+    if (diff <= 14) return '<span class="badge badge-yellow">Due in ' + diff + 'd</span>';
+    return '<span class="badge badge-gray">In ' + diff + 'd</span>';
+  }
+
+  function renderList(main) {
+    const records = Store.listProbations();
+    const rows = records.map(r => {
+      const emp = Store.getEmployee(r.employeeId);
+      const thirdDue = addMonths(r.startDate, 3);
+      const sixthDue = addMonths(r.startDate, 6);
+      return { r, emp, thirdDue, sixthDue };
+    }).filter(row => row.emp);
+    rows.sort((a, b) => a.thirdDue.localeCompare(b.thirdDue));
+
+    const dueSoon3 = rows.filter(row => row.r.thirdMonthStatus === 'Pending' && daysBetween(todayISO(), row.thirdDue) <= 14);
+    const dueSoon6 = rows.filter(row => row.r.sixthMonthStatus === 'Pending' && daysBetween(todayISO(), row.sixthDue) <= 14);
+    const regularizedCount = rows.filter(row => row.r.sixthMonthStatus === 'Regularized').length;
+
+    main.innerHTML = `
+      <div class="crumb">HR</div>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Probation &amp; Regularization</h1>
+          <div class="page-sub">Probationary employees are evaluated at the 3rd month and again at the 6th month, when a regularization decision is due. Track start dates and both milestones here.</div>
+        </div>
+        <button class="btn btn-primary" id="btn-add-probation">+ Track employee</button>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-label">On Probation</div><div class="kpi-value">${rows.length}</div></div>
+        <div class="kpi-card"><div class="kpi-label">3rd Month Due Soon</div><div class="kpi-value ${dueSoon3.length ? 'red' : ''}">${dueSoon3.length}</div><div class="kpi-sub">within 14 days or overdue</div></div>
+        <div class="kpi-card"><div class="kpi-label">6th Month Due Soon</div><div class="kpi-value ${dueSoon6.length ? 'red' : ''}">${dueSoon6.length}</div><div class="kpi-sub">within 14 days or overdue</div></div>
+        <div class="kpi-card"><div class="kpi-label">Regularized</div><div class="kpi-value green">${regularizedCount}</div></div>
+      </div>
+
+      <div class="panel">
+        ${rows.length ? `
+        <table>
+          <thead>
+            <tr>
+              <th>Employee</th><th>Position</th><th>Start Date</th>
+              <th>3rd Month Due</th><th>3rd Month Status</th><th>3rd Month Remarks</th>
+              <th>6th Month Due (End of Probation)</th><th>6th Month Status</th><th>6th Month Remarks</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr>
+                <td class="name row-link" data-open="${row.r.id}">${escapeHtml(row.emp.name)}</td>
+                <td class="dim">${escapeHtml(row.emp.position)}</td>
+                <td class="dim">${fmtDate(row.r.startDate)}</td>
+                <td class="dim">${fmtDate(row.thirdDue)} ${dueBadge(row.thirdDue, row.r.thirdMonthStatus)}</td>
+                <td>${milestoneBadge(row.r.thirdMonthStatus)}</td>
+                <td class="dim" style="max-width:200px;">${escapeHtml(truncate(row.r.thirdMonthNotes, 60))}</td>
+                <td class="dim">${fmtDate(row.sixthDue)} ${dueBadge(row.sixthDue, row.r.sixthMonthStatus)}</td>
+                <td>${milestoneBadge(row.r.sixthMonthStatus)}</td>
+                <td class="dim" style="max-width:200px;">${escapeHtml(truncate(row.r.sixthMonthNotes, 60))}</td>
+                <td><button class="link-btn" data-open="${row.r.id}">Edit remarks →</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>` : '<div class="empty">No probationary employees are being tracked yet.</div>'}
+      </div>
+    `;
+
+    qs('#btn-add-probation', main).addEventListener('click', () => openAddForm(main));
+    qsa('[data-open]', main).forEach(el => el.addEventListener('click', () => openDetail(main, el.dataset.open)));
+  }
+
+  function openDetail(main, id) {
+    const r = Store.getProbation(id);
+    if (!r) return;
+    const emp = Store.getEmployee(r.employeeId);
+    const thirdDue = addMonths(r.startDate, 3);
+    const sixthDue = addMonths(r.startDate, 6);
+
+    openDrawer(`
+      <h2>${escapeHtml(emp ? emp.name : 'Unknown employee')}</h2>
+      <div class="page-sub" style="margin-bottom:14px;">${emp ? escapeHtml(emp.position) : ''}</div>
+      <div class="page-sub">Probation start: ${fmtDate(r.startDate)}</div>
+
+      <div class="section-title">3rd Month Evaluation — due ${fmtDate(thirdDue)}</div>
+      <div class="page-sub" style="margin-bottom:10px;">Interim check-in: is this employee trending toward regularization or end of contract?</div>
+      <div style="margin-bottom:10px;">${milestoneBadge(r.thirdMonthStatus)} ${dueBadge(thirdDue, r.thirdMonthStatus)}</div>
+      ${r.thirdMonthNotes ? `<div class="page-sub" style="margin-bottom:10px;">${escapeHtml(r.thirdMonthNotes)}${r.thirdMonthEvaluatedDate ? ' (' + fmtDate(r.thirdMonthEvaluatedDate) + ')' : ''}</div>` : ''}
+      <div class="modal-grid">
+        <div class="field"><label>Result</label>
+          <select id="third-status">
+            ${THIRD_MONTH_OPTIONS.map(s => `<option ${s === r.thirdMonthStatus ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Evaluated on</label><input type="date" id="third-date" value="${r.thirdMonthEvaluatedDate || todayISO()}" /></div>
+        <div class="field full"><label>Remarks</label><textarea id="third-notes" rows="2" placeholder="Editable remarks — performance notes, reasons for the recommendation, etc.">${escapeHtml(r.thirdMonthNotes || '')}</textarea></div>
+      </div>
+      <div class="modal-actions" style="justify-content:flex-start;">
+        <button class="btn btn-ghost btn-sm" id="btn-save-third">Save 3rd month result</button>
+      </div>
+
+      <div class="section-title">6th Month Decision — due ${fmtDate(sixthDue)}</div>
+      <div class="page-sub" style="margin-bottom:10px;">Final decision at end of the probationary period: regularization or end of contract.</div>
+      <div style="margin-bottom:10px;">${milestoneBadge(r.sixthMonthStatus)} ${dueBadge(sixthDue, r.sixthMonthStatus)}</div>
+      ${r.sixthMonthNotes ? `<div class="page-sub" style="margin-bottom:10px;">${escapeHtml(r.sixthMonthNotes)}${r.sixthMonthEvaluatedDate ? ' (' + fmtDate(r.sixthMonthEvaluatedDate) + ')' : ''}</div>` : ''}
+      <div class="modal-grid">
+        <div class="field"><label>Decision</label>
+          <select id="sixth-status">
+            ${SIXTH_MONTH_OPTIONS.map(s => `<option ${s === r.sixthMonthStatus ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Decided on</label><input type="date" id="sixth-date" value="${r.sixthMonthEvaluatedDate || todayISO()}" /></div>
+        <div class="field full"><label>Remarks</label><textarea id="sixth-notes" rows="2" placeholder="Editable remarks — basis for regularization or end of contract.">${escapeHtml(r.sixthMonthNotes || '')}</textarea></div>
+      </div>
+      <div class="modal-actions" style="justify-content:flex-start;">
+        <button class="btn btn-primary btn-sm" id="btn-save-sixth">Save decision &amp; remarks</button>
+      </div>
+
+      <div class="section-title">Finalize Employment Status</div>
+      <div class="page-sub" style="margin-bottom:10px;">
+        A deliberate, separate action — saving the decision above does <strong>not</strong> change the employee's status by itself.
+        Current status: ${employmentStatusBadge(emp ? emp.employmentStatus : 'Probationary')}${emp && emp.status === 'Terminated' ? ' ' + employeeStatusDot(emp.status) : ''}
+      </div>
+      <div class="seg" id="seg-finalize">
+        <button data-val="regular" class="${emp && emp.employmentStatus === 'Regular' ? 'active' : ''}">Regular</button>
+        <button data-val="end" class="${emp && emp.status === 'Terminated' ? 'active' : ''}">End of Contract</button>
+      </div>
+
+      <div class="modal-actions" style="margin-top:16px;">
+        <button class="btn btn-ghost btn-sm" id="btn-del-probation">Remove from tracking</button>
+      </div>
+    `, (dr) => {
+      qs('#btn-save-third', dr).addEventListener('click', () => {
+        Store.updateProbation(r.id, {
+          thirdMonthStatus: qs('#third-status', dr).value,
+          thirdMonthEvaluatedDate: qs('#third-date', dr).value,
+          thirdMonthNotes: qs('#third-notes', dr).value.trim(),
+        });
+        toast('3rd month result saved.');
+        closeDrawer();
+        renderList(main);
+      });
+      qs('#btn-save-sixth', dr).addEventListener('click', () => {
+        Store.updateProbation(r.id, {
+          sixthMonthStatus: qs('#sixth-status', dr).value,
+          sixthMonthEvaluatedDate: qs('#sixth-date', dr).value,
+          sixthMonthNotes: qs('#sixth-notes', dr).value.trim(),
+        });
+        toast('6th month decision and remarks saved.');
+        closeDrawer();
+        renderList(main);
+      });
+      qsa('#seg-finalize button', dr).forEach(b => b.addEventListener('click', () => {
+        if (!emp) return;
+        if (b.dataset.val === 'regular') {
+          if (confirm('Confirm regularizing ' + emp.name + '? This sets their employment status to Regular.')) {
+            Store.updateEmployee(emp.id, { employmentStatus: 'Regular' });
+            toast(emp.name + ' is now Regular.');
+            closeDrawer();
+            renderList(main);
+          }
+        } else {
+          if (confirm('Confirm end of contract for ' + emp.name + '? This sets their status to Terminated on the Employees page.')) {
+            Store.updateEmployee(emp.id, { status: 'Terminated' });
+            toast(emp.name + '\'s contract has been ended.');
+            closeDrawer();
+            renderList(main);
+          }
+        }
+      }));
+      qs('#btn-del-probation', dr).addEventListener('click', () => {
+        if (confirm('Remove this employee from probation tracking?')) {
+          Store.deleteProbation(r.id);
+          closeDrawer();
+          toast('Removed from tracking.');
+          renderList(main);
+        }
+      });
+    });
+  }
+
+  function openAddForm(main) {
+    const tracked = new Set(Store.listProbations().map(p => p.employeeId));
+    const candidates = Store.listEmployees().filter(e => e.employmentStatus === 'Probationary' && !tracked.has(e.id));
+
+    if (!candidates.length) {
+      openModal(`
+        <h2>Track employee</h2>
+        <div class="modal-sub">Every current probationary employee is already being tracked. Set an employee's status to "Probationary" on the Employees page first.</div>
+        <div class="modal-actions"><button type="button" class="btn btn-ghost" data-close-modal>Close</button></div>
+      `);
+      return;
+    }
+
+    openModal(`
+      <h2>Track employee</h2>
+      <div class="modal-sub">Start tracking a probationary employee's 3rd and 6th month evaluation.</div>
+      <form id="probation-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Employee</label>
+            <select name="employeeId">${candidates.map(e => `<option value="${e.id}">${escapeHtml(e.name)} — ${escapeHtml(e.position)}</option>`).join('')}</select>
+          </div>
+          <div class="field full"><label>Probation start date</label><input type="date" name="startDate" value="${todayISO()}" required /></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Start tracking</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#probation-form', bd).addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        Store.addProbation({
+          employeeId: fd.get('employeeId'),
+          startDate: fd.get('startDate'),
+          thirdMonthStatus: 'Pending', thirdMonthEvaluatedDate: null, thirdMonthNotes: '',
+          sixthMonthStatus: 'Pending', sixthMonthEvaluatedDate: null, sixthMonthNotes: '',
+        });
+        toast('Now tracking probation period.');
+        closeModal();
+        renderList(main);
+      });
+    });
+  }
+
+  return { render: renderList };
+})();
+
+</script>
+
+<script>
+/* ================= js/views/disciplinary.js ================= */
+window.Views.disciplinary = (function () {
+  let filterStatus = 'Open';
+
+  function renderList(main) {
+    const all = Store.listCases();
+    let rows = all.slice();
+    if (filterStatus === 'Open') rows = rows.filter(c => c.status !== 'Resolved');
+    else if (filterStatus !== 'All') rows = rows.filter(c => c.status === filterStatus);
+    rows.sort((a, b) => b.dateIssued.localeCompare(a.dateIssued));
+
+    main.innerHTML = `
+      <div class="crumb">HR</div>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Disciplinary / NTE</h1>
+          <div class="page-sub">Notice to Explain issuance, employee response, investigation, and resolution — with a full audit trail per case.</div>
+        </div>
+        <button class="btn btn-primary" id="btn-issue-nte">+ Issue NTE</button>
+      </div>
+
+      <div class="filters">
+        <div class="field">
+          <label>Status</label>
+          <div class="seg" id="seg-status">
+            ${['Open', 'All', 'Notice Issued', 'Under Investigation', 'Resolved', 'Escalated'].map(s => `<button data-val="${s}" class="${filterStatus === s ? 'active' : ''}">${s}</button>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        ${rows.length ? `
+        <table>
+          <thead><tr><th>Employee</th><th>Violation</th><th>Status</th><th>Issued</th><th>Response Due</th><th></th></tr></thead>
+          <tbody>
+            ${rows.map(c => `
+              <tr>
+                <td class="name row-link" data-open="${c.id}">${escapeHtml(employeeName(c.employeeId))}</td>
+                <td class="dim">${escapeHtml(c.violation)}</td>
+                <td>${caseStatusBadge(c.status)}</td>
+                <td class="dim">${fmtDate(c.dateIssued)}</td>
+                <td class="dim">${fmtDate(c.responseDueDate)}</td>
+                <td><button class="link-btn" data-open="${c.id}">View →</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>` : '<div class="empty">No cases match this filter.</div>'}
+      </div>
+    `;
+
+    qs('#btn-issue-nte', main).addEventListener('click', () => openNteForm(main));
+    qsa('#seg-status button', main).forEach(b => b.addEventListener('click', () => { filterStatus = b.dataset.val; renderList(main); }));
+    qsa('[data-open]', main).forEach(el => el.addEventListener('click', () => openCaseDetail(main, el.dataset.open)));
+  }
+
+  function openCaseDetail(main, id) {
+    const c = Store.getCase(id);
+    if (!c) return;
+
+    let actionHtml = '';
+    if (c.status === 'Notice Issued') {
+      actionHtml = `
+        <div class="section-title">Record Employee Response</div>
+        <div class="field full"><textarea id="resp-text" rows="3" placeholder="Employee's written explanation..."></textarea></div>
+        <div class="modal-actions" style="justify-content:flex-start;">
+          <button class="btn btn-primary btn-sm" id="btn-log-response">Save response</button>
+          <button class="btn btn-danger btn-sm" id="btn-escalate">Escalate</button>
+        </div>
+      `;
+    } else if (c.status === 'Under Investigation') {
+      actionHtml = `
+        <div class="section-title">Investigation Note</div>
+        <div class="field full"><textarea id="inv-text" rows="2" placeholder="Add investigation finding..."></textarea></div>
+        <div class="modal-actions" style="justify-content:flex-start;">
+          <button class="btn btn-ghost btn-sm" id="btn-log-investigation">Add note</button>
+        </div>
+        <div class="section-title">Resolve Case</div>
+        <div class="field full"><textarea id="res-text" rows="2" placeholder="Resolution / sanction..."></textarea></div>
+        <div class="modal-actions" style="justify-content:flex-start;">
+          <button class="btn btn-primary btn-sm" id="btn-resolve">Resolve case</button>
+          <button class="btn btn-danger btn-sm" id="btn-escalate">Escalate</button>
+        </div>
+      `;
+    }
+
+    openDrawer(`
+      <h2>${escapeHtml(employeeName(c.employeeId))}</h2>
+      <div class="page-sub" style="margin-bottom:10px;">${escapeHtml(c.violation)}</div>
+      <div style="margin-bottom:14px;">${caseStatusBadge(c.status)}</div>
+      <div class="page-sub">Issued: ${fmtDate(c.dateIssued)} by ${escapeHtml(c.issuedBy)}<br/>Response due: ${fmtDate(c.responseDueDate)}</div>
+      <div class="section-title">Notice</div>
+      <div class="page-sub">${escapeHtml(c.noticeText)}</div>
+      ${c.employeeResponse ? `<div class="section-title">Employee Response</div><div class="page-sub">${escapeHtml(c.employeeResponse)} <span style="color:var(--text-faint);">(${fmtDate(c.employeeResponseDate)})</span></div>` : ''}
+      ${c.investigationNotes ? `<div class="section-title">Investigation Notes</div><div class="page-sub">${escapeHtml(c.investigationNotes)}</div>` : ''}
+      ${c.resolution ? `<div class="section-title">Resolution</div><div class="page-sub">${escapeHtml(c.resolution)} <span style="color:var(--text-faint);">(${fmtDate(c.resolvedDate)})</span></div>` : ''}
+
+      ${actionHtml}
+
+      <div class="section-title">Audit Trail</div>
+      <div class="timeline">
+        ${c.history.slice().reverse().map(h => `
+          <div class="tl-item"><div class="tl-dot"></div><div class="tl-body">
+            <div class="tl-title">${escapeHtml(h.action)}</div>
+            <div class="tl-meta">${fmtDate(h.date)}</div>
+            <div class="tl-text">${escapeHtml(h.note)}</div>
+          </div></div>
+        `).join('')}
+      </div>
+      <div class="modal-actions" style="margin-top:16px;">
+        <button class="btn btn-ghost btn-sm" id="btn-del-case">Delete case</button>
+      </div>
+    `, (dr) => {
+      const respBtn = qs('#btn-log-response', dr);
+      if (respBtn) respBtn.addEventListener('click', () => {
+        const text = qs('#resp-text', dr).value.trim();
+        if (!text) { toast('Enter the employee response first.'); return; }
+        Store.updateCase(c.id, { employeeResponse: text, employeeResponseDate: todayISO(), status: 'Under Investigation' }, { action: 'Employee Response', note: text });
+        Store.updateCase(c.id, {}, { action: 'Investigation', note: 'Case moved to investigation.' });
+        toast('Response recorded.');
+        openCaseDetail(main, c.id);
+        renderList(main);
+      });
+      const invBtn = qs('#btn-log-investigation', dr);
+      if (invBtn) invBtn.addEventListener('click', () => {
+        const text = qs('#inv-text', dr).value.trim();
+        if (!text) { toast('Enter an investigation note first.'); return; }
+        const combined = (c.investigationNotes ? c.investigationNotes + ' ' : '') + text;
+        Store.updateCase(c.id, { investigationNotes: combined }, { action: 'Investigation', note: text });
+        toast('Investigation note added.');
+        openCaseDetail(main, c.id);
+        renderList(main);
+      });
+      const resolveBtn = qs('#btn-resolve', dr);
+      if (resolveBtn) resolveBtn.addEventListener('click', () => {
+        const text = qs('#res-text', dr).value.trim();
+        if (!text) { toast('Enter the resolution first.'); return; }
+        Store.updateCase(c.id, { resolution: text, resolvedDate: todayISO(), status: 'Resolved' }, { action: 'Resolved', note: text });
+        toast('Case resolved.');
+        closeDrawer();
+        renderList(main);
+      });
+      const escBtn = qs('#btn-escalate', dr);
+      if (escBtn) escBtn.addEventListener('click', () => {
+        Store.updateCase(c.id, { status: 'Escalated' }, { action: 'Escalated', note: 'Case escalated to Management for further action.' });
+        toast('Case escalated.');
+        closeDrawer();
+        renderList(main);
+      });
+      qs('#btn-del-case', dr).addEventListener('click', () => {
+        if (confirm('Delete this disciplinary case?')) {
+          Store.deleteCase(c.id);
+          closeDrawer();
+          toast('Case deleted.');
+          renderList(main);
+        }
+      });
+    });
+  }
+
+  function openNteForm(main) {
+    openModal(`
+      <h2>Issue Notice to Explain</h2>
+      <div class="modal-sub">Creates a new disciplinary case with status "Notice Issued".</div>
+      <form id="nte-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Employee</label><select name="employeeId">${employeeOptions()}</select></div>
+          <div class="field"><label>Date issued</label><input type="date" name="dateIssued" value="${todayISO()}" /></div>
+          <div class="field"><label>Response due date</label><input type="date" name="responseDueDate" value="${addDays(todayISO(), 3)}" /></div>
+          <div class="field full"><label>Issued by</label><input name="issuedBy" placeholder="e.g. HR Officer name" /></div>
+          <div class="field full"><label>Violation</label><input name="violation" required placeholder="e.g. Habitual Tardiness" /></div>
+          <div class="field full"><label>Notice details</label><textarea name="noticeText" rows="3" required placeholder="Describe the incident/violation..."></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Issue NTE</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#nte-form', bd).addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        Store.addCase({
+          employeeId: fd.get('employeeId'),
+          dateIssued: fd.get('dateIssued'),
+          responseDueDate: fd.get('responseDueDate'),
+          issuedBy: fd.get('issuedBy').trim() || 'HR',
+          violation: fd.get('violation').trim(),
+          noticeText: fd.get('noticeText').trim(),
+          employeeResponse: '', employeeResponseDate: null,
+          investigationNotes: '', resolution: '', resolvedDate: null,
+        });
+        toast('NTE issued.');
+        closeModal();
+        renderList(main);
+      });
+    });
+  }
+
+  return { render: renderList };
+})();
+
+</script>
+
+<script>
+/* ================= js/views/attendance.js ================= */
+window.Views.attendance = (function () {
+  let selectedDate = todayISO();
+
+  function statusDotClass(status) {
+    return { Present: 'on', Late: 'late', Absent: 'absent', 'On Leave': 'off' }[status] || '';
+  }
+
+  function renderView(main) {
+    const employees = Store.listEmployees().filter(e => e.status !== 'Terminated');
+    const records = Store.attendanceForDate(selectedDate);
+    const recByEmp = {};
+    records.forEach(r => { recByEmp[r.employeeId] = r; });
+
+    const present = records.filter(r => r.status === 'Present' || r.status === 'Late').length;
+
+    main.innerHTML = `
+      <div class="crumb">HR</div>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Attendance</h1>
+          <div class="page-sub">Daily attendance and leave monitoring across all staff.</div>
+        </div>
+        <button class="btn btn-primary" id="btn-log-attendance">+ Log attendance</button>
+      </div>
+
+      <div class="filters">
+        <div class="field"><label>Date</label><input type="date" id="date-picker" value="${selectedDate}" /></div>
+        <button class="btn btn-ghost btn-sm" id="btn-prev-day">← Prev</button>
+        <button class="btn btn-ghost btn-sm" id="btn-today">Today</button>
+        <button class="btn btn-ghost btn-sm" id="btn-next-day">Next →</button>
+      </div>
+
+      <div class="page-sub" style="margin-bottom:10px;">${employees.length} staff members · ${present} on shift on ${fmtDate(selectedDate)}</div>
+
+      <div class="panel">
+        <table>
+          <thead><tr><th>Name</th><th>Category</th><th>Status</th><th>Time In</th><th>Time Out</th><th class="num">Hours</th><th></th></tr></thead>
+          <tbody>
+            ${employees.map(e => {
+              const r = recByEmp[e.id];
+              return `
+              <tr>
+                <td class="name">${escapeHtml(e.name)}</td>
+                <td class="dim">${e.category}</td>
+                <td>${r ? `<span class="status-dot ${statusDotClass(r.status)}">${r.status}</span>` : '<span class="status-dot">Not logged</span>'}</td>
+                <td class="dim">${r ? r.timeIn : '—'}</td>
+                <td class="dim">${r ? r.timeOut : '—'}</td>
+                <td class="num">${r ? r.hours : '—'}</td>
+                <td><button class="link-btn" data-emp="${e.id}" data-rec="${r ? r.id : ''}">${r ? 'Edit →' : 'Log →'}</button></td>
+              </tr>
+            `; }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    qs('#date-picker', main).addEventListener('change', (e) => { selectedDate = e.target.value; renderView(main); });
+    qs('#btn-prev-day', main).addEventListener('click', () => { selectedDate = addDays(selectedDate, -1); renderView(main); });
+    qs('#btn-today', main).addEventListener('click', () => { selectedDate = todayISO(); renderView(main); });
+    qs('#btn-next-day', main).addEventListener('click', () => { selectedDate = addDays(selectedDate, 1); renderView(main); });
+    qs('#btn-log-attendance', main).addEventListener('click', () => openAttendanceModal(main, null, null));
+    qsa('[data-emp]', main).forEach(b => b.addEventListener('click', () => openAttendanceModal(main, b.dataset.emp, b.dataset.rec || null)));
+  }
+
+  function openAttendanceModal(main, empId, recId) {
+    const rec = recId ? Store.listAttendance().find(a => a.id === recId) : null;
+    const r = rec || { employeeId: empId || '', date: selectedDate, status: 'Present', timeIn: '08:00', timeOut: '17:00', hours: 8 };
+
+    openModal(`
+      <h2>${rec ? 'Edit attendance' : 'Log attendance'}</h2>
+      <form id="att-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Employee</label><select name="employeeId">${employeeOptions(r.employeeId)}</select></div>
+          <div class="field"><label>Date</label><input type="date" name="date" value="${r.date}" /></div>
+          <div class="field"><label>Status</label>
+            <select name="status">${['Present', 'Late', 'Absent', 'On Leave'].map(s => `<option ${s === r.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Time in</label><input name="timeIn" value="${r.timeIn}" placeholder="08:00" /></div>
+          <div class="field"><label>Time out</label><input name="timeOut" value="${r.timeOut}" placeholder="17:00" /></div>
+          <div class="field"><label>Hours</label><input type="number" step="0.1" name="hours" value="${r.hours}" /></div>
+        </div>
+        <div class="modal-actions">
+          ${rec ? '<button type="button" class="btn btn-danger" id="btn-del-att">Delete</button>' : ''}
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">${rec ? 'Save changes' : 'Log attendance'}</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#att-form', bd).addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const patch = {
+          employeeId: fd.get('employeeId'),
+          date: fd.get('date'),
+          status: fd.get('status'),
+          timeIn: fd.get('timeIn'),
+          timeOut: fd.get('timeOut'),
+          hours: Number(fd.get('hours')) || 0,
+        };
+        if (rec) { Store.updateAttendance(rec.id, patch); toast('Attendance updated.'); }
+        else { Store.addAttendance(patch); toast('Attendance logged.'); }
+        closeModal();
+        renderView(main);
+      });
+      const delBtn = qs('#btn-del-att', bd);
+      if (delBtn) delBtn.addEventListener('click', () => {
+        Store.deleteAttendance(rec.id);
+        closeModal();
+        toast('Record deleted.');
+        renderView(main);
+      });
+    });
+  }
+
+  return { render: renderView };
+})();
+
+</script>
+
+<script>
+/* ================= js/views/payroll.js ================= */
+window.Views.payroll = (function () {
+  let activeTab = 'payroll';
+  const today = new Date(todayISO() + 'T00:00:00');
+  let group = '10-20';
+  let year = today.getFullYear();
+  let month = today.getMonth() + 1;
+  let half = defaultCutoffHalf(group, today.getDate());
+
+  function setGroup(g) {
+    group = g;
+    half = defaultCutoffHalf(group, new Date(todayISO() + 'T00:00:00').getDate());
+  }
+
+  function shiftMonth(delta) {
+    let m = month + delta;
+    let y = year;
+    while (m < 1) { m += 12; y -= 1; }
+    while (m > 12) { m -= 12; y += 1; }
+    month = m; year = y;
+  }
+
+  function computeRow(emp, from, to) {
+    const attendanceDays = Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id && (a.status === 'Present' || a.status === 'Late')).length;
+    const override = Store.getPayrollOverride(emp.id, from);
+    const daysPresent = override ? Number(override.daysPresent) : attendanceDays;
+    const isOverridden = !!override;
+    const basePay = emp.payType === 'Daily' ? emp.rate * daysPresent : emp.rate;
+    const allowance = (emp.allowancePerDay || 0) * daysPresent + (emp.fixedAllowance || 0);
+    const gross = basePay + allowance;
+    const tax = withholdingTax(gross);
+    const dedTotal = Store.deductionsInRange(from, to).filter(d => d.employeeId === emp.id).reduce((s, d) => s + Number(d.amount), 0);
+    const net = gross - tax - dedTotal;
+    return { emp, daysPresent, isOverridden, basePay, allowance, gross, tax, dedTotal, net };
+  }
+
+  function renderView(main) {
+    main.innerHTML = `
+      <div class="crumb">HR</div>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Payroll</h1>
+          <div class="page-sub">Engineers, Managers, and Admins are paid every 10th &amp; 20th of the month. Technicians are paid every 15th &amp; 30th/31st. Gross pay = base pay + allowance; net pay = gross pay − withholding tax − deductions.</div>
+        </div>
+        ${activeTab === 'deductions' ? '<button class="btn btn-primary" id="btn-new-deduction">+ New deduction</button>' : ''}
+      </div>
+
+      <div class="tabs">
+        <div class="tab ${activeTab === 'payroll' ? 'active' : ''}" data-tab="payroll">Payroll</div>
+        <div class="tab ${activeTab === 'deductions' ? 'active' : ''}" data-tab="deductions">Deductions</div>
+      </div>
+
+      <div id="tab-body"></div>
+    `;
+
+    qsa('.tab', main).forEach(t => t.addEventListener('click', () => { activeTab = t.dataset.tab; renderView(main); }));
+    const btnNew = qs('#btn-new-deduction', main);
+    if (btnNew) btnNew.addEventListener('click', () => openDeductionForm(main));
+
+    if (activeTab === 'payroll') renderPayrollTab(qs('#tab-body', main), main);
+    else renderDeductionsTab(qs('#tab-body', main), main);
+  }
+
+  function renderPayrollTab(body, main) {
+    const cutoffs = payCutoffs(group, year, month);
+    const selected = cutoffs.find(c => c.key === half) || cutoffs[0];
+    const monthValue = `${year}-${pad2(month)}`;
+    const monthLabel = new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    const employees = Store.listEmployees().filter(e => e.payCycle === group && e.status !== 'Terminated');
+    const rows = employees.map(e => computeRow(e, selected.from, selected.to));
+    rows.sort((a, b) => a.emp.name.localeCompare(b.emp.name));
+
+    const totalGross = rows.reduce((s, r) => s + r.gross, 0);
+    const totalAllowance = rows.reduce((s, r) => s + r.allowance, 0);
+    const totalTax = rows.reduce((s, r) => s + r.tax, 0);
+    const totalDed = rows.reduce((s, r) => s + r.dedTotal, 0);
+    const totalNet = rows.reduce((s, r) => s + r.net, 0);
+
+    body.innerHTML = `
+      <div class="filters">
+        <div class="field">
+          <label>Pay group</label>
+          <div class="seg" id="seg-group">
+            <button data-val="10-20" class="${group === '10-20' ? 'active' : ''}">Engineers / Managers / Admins</button>
+            <button data-val="15-30" class="${group === '15-30' ? 'active' : ''}">Technicians</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="filters">
+        <button class="btn btn-ghost btn-sm" id="btn-prev-month">← Prev month</button>
+        <div class="field"><label>Month</label><input type="month" id="month-input" value="${monthValue}" /></div>
+        <button class="btn btn-ghost btn-sm" id="btn-next-month">Next month →</button>
+        <div class="field">
+          <label>Cutoff</label>
+          <div class="seg" id="seg-cutoff">
+            ${cutoffs.map(c => `<button data-val="${c.key}" class="${half === c.key ? 'active' : ''}">${c.label}</button>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="page-sub" style="margin-bottom:10px;">${monthLabel} · ${selected.label} · payday ${fmtDate(selected.payDate)} · ${rows.length} staff on this schedule</div>
+
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-label">Total Base + Allowance (Gross)</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(totalGross)}</div><div class="kpi-sub">incl. ${fmtMoney(totalAllowance)} allowance</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Withholding Tax</div><div class="kpi-value ${totalTax ? 'red' : ''}" style="font-size:20px;">${fmtMoney(totalTax)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Deductions</div><div class="kpi-value ${totalDed ? 'red' : ''}" style="font-size:20px;">${fmtMoney(totalDed)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Net Pay</div><div class="kpi-value green" style="font-size:20px;">${fmtMoney(totalNet)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Staff on Schedule</div><div class="kpi-value">${rows.length}</div></div>
+      </div>
+
+      <div class="hint">Days present is editable — type over it and press Enter or click away to recompute allowance, gross, tax, and net pay for that cutoff. Edited values are saved and override the attendance-derived count.</div>
+
+      <div class="panel">
+        ${rows.length ? `
+        <table>
+          <thead><tr><th>Staff</th><th>Position</th><th class="num">Days Present</th><th class="num">Base Pay</th><th class="num">Allowance</th><th class="num">Gross Pay</th><th class="num">Withholding Tax</th><th class="num">Deductions</th><th class="num">Net Pay</th></tr></thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td class="name">${escapeHtml(r.emp.name)}</td>
+                <td class="dim">${escapeHtml(r.emp.position)}</td>
+                <td class="num">
+                  <input type="number" class="days-input" min="0" step="0.5" value="${r.daysPresent}" data-emp="${r.emp.id}" title="${r.isOverridden ? 'Manually edited — overrides attendance count' : 'From attendance records'}" style="${r.isOverridden ? 'border-color:var(--accent);' : ''}" />
+                </td>
+                <td class="num">${fmtMoney(r.basePay)}</td>
+                <td class="num ${r.allowance ? '' : 'dim'}">${r.allowance ? fmtMoney(r.allowance) : '—'}</td>
+                <td class="num" style="font-weight:600;">${fmtMoney(r.gross)}</td>
+                <td class="num ${r.tax ? '' : 'dim'}">${r.tax ? fmtMoney(r.tax) : '—'}</td>
+                <td class="num ${r.dedTotal ? '' : 'dim'}">${r.dedTotal ? fmtMoney(r.dedTotal) : '—'}</td>
+                <td class="num" style="font-weight:700;">${fmtMoney(r.net)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>` : '<div class="empty">No staff assigned to this pay schedule.</div>'}
+      </div>
+    `;
+
+    qsa('.days-input', body).forEach(input => {
+      input.addEventListener('change', () => {
+        const val = Number(input.value);
+        if (!isNaN(val) && val >= 0) {
+          Store.setPayrollOverride(input.dataset.emp, selected.from, val);
+          renderPayrollTab(body, main);
+        }
+      });
+    });
+    qsa('#seg-group button', body).forEach(b => b.addEventListener('click', () => { setGroup(b.dataset.val); renderPayrollTab(body, main); }));
+    qsa('#seg-cutoff button', body).forEach(b => b.addEventListener('click', () => { half = b.dataset.val; renderPayrollTab(body, main); }));
+    qs('#month-input', body).addEventListener('change', (ev) => {
+      const [y, m] = ev.target.value.split('-').map(Number);
+      year = y; month = m;
+      renderPayrollTab(body, main);
+    });
+    qs('#btn-prev-month', body).addEventListener('click', () => { shiftMonth(-1); renderPayrollTab(body, main); });
+    qs('#btn-next-month', body).addEventListener('click', () => { shiftMonth(1); renderPayrollTab(body, main); });
+  }
+
+  function renderDeductionsTab(body, main) {
+    const rows = Store.listDeductions().slice().sort((a, b) => b.date.localeCompare(a.date));
+    const total = rows.reduce((s, d) => s + Number(d.amount), 0);
+
+    body.innerHTML = `
+      <div class="hint">Deductions roll up to each staff member's net pay on the Payroll tab, matched by date against the selected cutoff. Use this list to log cash advances, tardiness, damage, and anything else under "Other."</div>
+      <div class="panel">
+        <div class="panel-head"><h3>${rows.length} entries</h3><div class="dim">Total ${fmtMoney(total)}</div></div>
+        ${rows.length ? `
+        <table>
+          <thead><tr><th>Date</th><th>Staff</th><th>Kind</th><th>Notes</th><th class="num">Amount</th><th></th></tr></thead>
+          <tbody>
+            ${rows.map(d => `
+              <tr>
+                <td class="dim">${fmtDate(d.date)}</td>
+                <td class="name">${escapeHtml(employeeName(d.employeeId))}</td>
+                <td><span class="badge badge-gray">${d.kind}</span></td>
+                <td class="dim">${escapeHtml(d.notes || '—')}</td>
+                <td class="num">${fmtMoney(d.amount)}</td>
+                <td><button class="link-btn" data-del="${d.id}">Delete</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>` : '<div class="empty">No deductions yet. Add one with the button above.</div>'}
+      </div>
+    `;
+
+    qsa('[data-del]', body).forEach(b => b.addEventListener('click', () => {
+      if (confirm('Delete this deduction?')) {
+        Store.deleteDeduction(b.dataset.del);
+        toast('Deduction deleted.');
+        renderDeductionsTab(body, main);
+      }
+    }));
+  }
+
+  function openDeductionForm(main) {
+    openModal(`
+      <h2>New deduction</h2>
+      <form id="ded-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Employee</label><select name="employeeId">${employeeOptions()}</select></div>
+          <div class="field"><label>Date</label><input type="date" name="date" value="${todayISO()}" /></div>
+          <div class="field"><label>Kind</label>
+            <select name="kind">${['Cash Advance', 'Tardy', 'Damage', 'Other'].map(k => `<option>${k}</option>`).join('')}</select>
+          </div>
+          <div class="field full"><label>Amount (PHP)</label><input type="number" name="amount" min="0" step="0.01" required /></div>
+          <div class="field full"><label>Notes</label><textarea name="notes" rows="2"></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Add deduction</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#ded-form', bd).addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        Store.addDeduction({
+          employeeId: fd.get('employeeId'),
+          date: fd.get('date'),
+          kind: fd.get('kind'),
+          notes: fd.get('notes').trim(),
+          amount: Number(fd.get('amount')) || 0,
+        });
+        toast('Deduction added.');
+        closeModal();
+        renderView(main);
+      });
+    });
+  }
+
+  return { render: renderView };
+})();
+
+</script>
+
+<script>
+/* ================= js/views/complaints.js ================= */
+window.Views.complaints = (function () {
+  let filterStatus = 'Open';
+
+  function renderList(main) {
+    const all = Store.listComplaints();
+    let rows = all.slice();
+    if (filterStatus === 'Open') rows = rows.filter(c => c.status === 'Open' || c.status === 'In Progress');
+    else if (filterStatus !== 'All') rows = rows.filter(c => c.status === filterStatus);
+    rows.sort((a, b) => b.dateReceived.localeCompare(a.dateReceived));
+
+    main.innerHTML = `
+      <div class="crumb">Records</div>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Customer Complaints</h1>
+          <div class="page-sub">Log, assign, and track customer complaints through to resolution.</div>
+        </div>
+        <button class="btn btn-primary" id="btn-log-complaint">+ Log complaint</button>
+      </div>
+
+      <div class="filters">
+        <div class="field">
+          <label>Status</label>
+          <div class="seg" id="seg-status">
+            ${['Open', 'All', 'Resolved', 'Closed'].map(s => `<button data-val="${s}" class="${filterStatus === s ? 'active' : ''}">${s}</button>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        ${rows.length ? `
+        <table>
+          <thead><tr><th>Customer</th><th>Description</th><th>Assigned</th><th>Priority</th><th>Status</th><th>Received</th></tr></thead>
+          <tbody>
+            ${rows.map(c => `
+              <tr>
+                <td class="name row-link" data-open="${c.id}">${escapeHtml(c.customerName)}</td>
+                <td class="dim" style="max-width:280px;">${escapeHtml(c.description.length > 60 ? c.description.slice(0, 60) + '…' : c.description)}</td>
+                <td class="dim">${c.assignedTo ? escapeHtml(employeeName(c.assignedTo)) : '—'}</td>
+                <td>${priorityBadge(c.priority)}</td>
+                <td>${complaintStatusBadge(c.status)}</td>
+                <td class="dim">${fmtDate(c.dateReceived)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>` : '<div class="empty">No complaints match this filter.</div>'}
+      </div>
+    `;
+
+    qs('#btn-log-complaint', main).addEventListener('click', () => openComplaintForm(main));
+    qsa('#seg-status button', main).forEach(b => b.addEventListener('click', () => { filterStatus = b.dataset.val; renderList(main); }));
+    qsa('[data-open]', main).forEach(el => el.addEventListener('click', () => openComplaintDetail(main, el.dataset.open)));
+  }
+
+  function openComplaintDetail(main, id) {
+    const c = Store.getComplaint(id);
+    if (!c) return;
+
+    openDrawer(`
+      <h2>${escapeHtml(c.customerName)}</h2>
+      <div class="page-sub" style="margin-bottom:10px;">${escapeHtml(c.contact || '—')}</div>
+      <div style="margin-bottom:14px; display:flex; gap:8px;">${priorityBadge(c.priority)}${complaintStatusBadge(c.status)}</div>
+      <div class="section-title">Description</div>
+      <div class="page-sub">${escapeHtml(c.description)}</div>
+      <div class="page-sub" style="margin-top:8px;">Received: ${fmtDate(c.dateReceived)}<br/>Assigned to: ${c.assignedTo ? escapeHtml(employeeName(c.assignedTo)) : 'Unassigned'}</div>
+      ${c.resolutionNotes ? `<div class="section-title">Resolution Notes</div><div class="page-sub">${escapeHtml(c.resolutionNotes)}</div>` : ''}
+
+      <div class="section-title">Update</div>
+      <div class="modal-grid">
+        <div class="field"><label>Assign to</label><select id="assign-select">${employeeOptions(c.assignedTo)}</select></div>
+        <div class="field"><label>Status</label>
+          <select id="status-select">${['Open', 'In Progress', 'Resolved', 'Closed'].map(s => `<option ${s === c.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
+        </div>
+        <div class="field full"><label>Resolution notes</label><textarea id="notes-input" rows="2">${escapeHtml(c.resolutionNotes || '')}</textarea></div>
+      </div>
+      <div class="modal-actions" style="justify-content:flex-start;">
+        <button class="btn btn-primary btn-sm" id="btn-save-complaint">Save update</button>
+        <button class="btn btn-ghost btn-sm" id="btn-del-complaint">Delete</button>
+      </div>
+    `, (dr) => {
+      qs('#btn-save-complaint', dr).addEventListener('click', () => {
+        const status = qs('#status-select', dr).value;
+        const patch = {
+          assignedTo: qs('#assign-select', dr).value || null,
+          status,
+          resolutionNotes: qs('#notes-input', dr).value.trim(),
+        };
+        if (status === 'Resolved' && c.status !== 'Resolved') patch.resolvedDate = todayISO();
+        Store.updateComplaint(c.id, patch);
+        toast('Complaint updated.');
+        closeDrawer();
+        renderList(main);
+      });
+      qs('#btn-del-complaint', dr).addEventListener('click', () => {
+        if (confirm('Delete this complaint?')) {
+          Store.deleteComplaint(c.id);
+          closeDrawer();
+          toast('Complaint deleted.');
+          renderList(main);
+        }
+      });
+    });
+  }
+
+  function openComplaintForm(main) {
+    openModal(`
+      <h2>Log complaint</h2>
+      <form id="complaint-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Customer name</label><input name="customerName" required /></div>
+          <div class="field"><label>Contact</label><input name="contact" placeholder="Phone or email" /></div>
+          <div class="field"><label>Date received</label><input type="date" name="dateReceived" value="${todayISO()}" /></div>
+          <div class="field"><label>Priority</label>
+            <select name="priority">${['Low', 'Medium', 'High'].map(p => `<option ${p === 'Medium' ? 'selected' : ''}>${p}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Assign to</label><select name="assignedTo"><option value="">Unassigned</option>${employeeOptions()}</select></div>
+          <div class="field full"><label>Description</label><textarea name="description" rows="3" required></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Log complaint</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#complaint-form', bd).addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        Store.addComplaint({
+          customerName: fd.get('customerName').trim(),
+          contact: fd.get('contact').trim(),
+          dateReceived: fd.get('dateReceived'),
+          priority: fd.get('priority'),
+          assignedTo: fd.get('assignedTo') || null,
+          description: fd.get('description').trim(),
+          status: 'Open',
+          resolutionNotes: '',
+          resolvedDate: null,
+        });
+        toast('Complaint logged.');
+        closeModal();
+        renderList(main);
+      });
+    });
+  }
+
+  return { render: renderList };
+})();
+
+</script>
