@@ -4,8 +4,8 @@
 --
 -- Pay cycle: '10-20' = Admins (paid the 10th & 20th), '15-30' = Technicians (paid the
 -- 15th & end of month). "rate" for Monthly pay type is the amount paid PER CUTOFF (not
--- the full monthly salary) — e.g. Bultron's 22,170.83 is paid twice a month, so his full
--- monthly salary is 44,341.66.
+-- the full monthly salary) — e.g. Bultron's 11,085.42 is paid twice a month, so his full
+-- monthly salary is 22,170.83.
 --
 -- Regular employees' exact hire dates weren't provided, so "dateHired" is left null for
 -- them — fill in from HR 201 files when convenient. Probationary employees use their
@@ -18,13 +18,13 @@ insert into employees
    "payType", rate, "allowancePerDay", "fixedAllowance", "housingAllowance", "payCycle", notes)
 values
   -- Engineers (category: Admin — pay cycle 10th & 20th)
-  ('e_bultron',        'John Rodolfo R. Bultron', 'Admin', 'Vice President - Operations and Shared Services', 'Active', 'Regular',      null,         null, null, 'Monthly', 22170.83, 0,   0, 0,   '10-20', ''),
-  ('e_casano',         'Joshua L. Casano',         'Admin', 'Engineering Manager',                             'Active', 'Regular',      null,         null, null, 'Monthly', 16954.17, 100, 0, 0,   '10-20', ''),
-  ('e_sangcupan',      'Julaisa S. Sangcupan',     'Admin', 'Engineering Officer',                              'Active', 'Regular',      null,         null, null, 'Monthly', 12550.00, 100, 0, 0,   '10-20', ''),
-  ('e_famini',         'Idine S. Famini',          'Admin', 'Service Engineer',                                 'Active', 'Probationary', '2026-05-25', null, null, 'Monthly', 11923.92, 0,   0, 0,   '10-20', ''),
+  ('e_bultron',        'John Rodolfo R. Bultron', 'Admin', 'Vice President - Operations and Shared Services', 'Active', 'Regular',      null,         null, null, 'Monthly', 11085.42, 0,   0, 0,   '10-20', ''),
+  ('e_casano',         'Joshua L. Casano',         'Admin', 'Engineering Manager',                             'Active', 'Regular',      null,         null, null, 'Monthly', 8477.09,  100, 0, 0,   '10-20', ''),
+  ('e_sangcupan',      'Julaisa S. Sangcupan',     'Admin', 'Engineering Officer',                              'Active', 'Regular',      null,         null, null, 'Monthly', 6275.00,  100, 0, 0,   '10-20', ''),
+  ('e_famini',         'Idine S. Famini',          'Admin', 'Service Engineer',                                 'Active', 'Probationary', '2026-05-25', null, null, 'Monthly', 5961.96,  0,   0, 0,   '10-20', ''),
 
   -- Logistics & Admin (category: Admin — pay cycle 10th & 20th)
-  ('e_soriano',        'Odilon T. Soriano',        'Admin', 'Logistic Manager',      'Active', 'Regular',      null,         null, null, 'Monthly', 12500.00, 0, 0, 0, '10-20', ''),
+  ('e_soriano',        'Odilon T. Soriano',        'Admin', 'Logistic Manager',      'Active', 'Regular',      null,         null, null, 'Monthly', 6250.00, 0, 0, 0, '10-20', ''),
   ('e_nabora',         'Rica Mae Nabora',          'Admin', 'Service Specialist / HR', 'Active', 'Regular',      null,         null, null, 'Daily',   1000.00,  0, 0, 0, '10-20', ''),
   ('e_cosme',          'Jennifer D. Cosme',        'Admin', 'Admin Assistant',        'Active', 'Probationary', '2026-06-17', null, null, 'Daily',   600.00,   0, 0, 0, '10-20', ''),
 
@@ -57,3 +57,15 @@ values
   ('pr_dean',       'e_dean',       '2026-06-26', 'Pending', null, '', 'Pending', null, ''),
   ('pr_vargas',     'e_vargas',     '2026-06-11', 'Pending', null, '', 'Pending', null, '')
 on conflict (id) do nothing;
+
+-- =================================================================
+-- One-time fix — if you already ran the insert above with the OLD (doubled) rates for
+-- these 5 employees, run this block once to correct the live rows. "rate" is per cutoff;
+-- these 5 were originally entered as the full monthly salary, which double-paid them
+-- since the app pays every employee twice a month.
+-- =================================================================
+update employees set rate = 11085.42 where id = 'e_bultron';
+update employees set rate = 8477.09  where id = 'e_casano';
+update employees set rate = 6275.00  where id = 'e_sangcupan';
+update employees set rate = 5961.96  where id = 'e_famini';
+update employees set rate = 6250.00  where id = 'e_soriano';

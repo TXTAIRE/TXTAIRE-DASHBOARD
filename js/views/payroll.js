@@ -1,4 +1,18 @@
 window.Views.payroll = (function () {
+  // Reference list for the Holidays tab's "Add holiday" form — the officially recurring
+  // PH holidays by type (Labor Code / Republic Act proclamations). "Other" always remains
+  // available for newly/locally declared holidays not on this list.
+  const REGULAR_HOLIDAYS = [
+    "New Year's Day", 'Araw ng Kagitingan', 'Maundy Thursday', 'Good Friday',
+    'Labor Day', 'Independence Day', 'National Heroes Day', 'Bonifacio Day',
+    'Christmas Day', 'Rizal Day',
+  ];
+  const SPECIAL_HOLIDAYS = [
+    'Ninoy Aquino Day', "All Saints' Day", 'Feast of the Immaculate Conception',
+    'Chinese New Year', 'Black Saturday', 'Christmas Eve', "New Year's Eve",
+    'EDSA People Power Anniversary',
+  ];
+
   let activeTab = 'payroll';
   const today = new Date(todayISO() + 'T00:00:00');
   let group = '10-20';
@@ -45,7 +59,9 @@ window.Views.payroll = (function () {
     const isAbsentOverridden = !!(override && override.daysAbsent != null);
     const daysAbsent = isAbsentOverridden ? Number(override.daysAbsent) : computedAbsent;
 
-    const basePay = emp.payType === 'Daily' ? emp.rate * daysPresent : emp.rate;
+    let basePay = emp.payType === 'Daily' ? emp.rate * daysPresent : emp.rate;
+    const isBasePayOverridden = !!(override && override.basePay != null);
+    if (isBasePayOverridden) basePay = Number(override.basePay);
 
     const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (workDays > 0 ? emp.rate / workDays : 0);
     const hourlyRate = dailyRateEq / 8;
@@ -102,7 +118,7 @@ window.Views.payroll = (function () {
     const dedTotal = manualDed + attendanceDed + lateUndertimeDed;
     const net = gross - tax - dedTotal;
     return {
-      emp, daysPresent, isOverridden, workDays, daysAbsent, isAbsentOverridden, basePay,
+      emp, daysPresent, isOverridden, workDays, daysAbsent, isAbsentOverridden, basePay, isBasePayOverridden,
       colaPay, isColaOverridden, housingPay, isHousingOverridden, nsdPay, isNsdOverridden,
       otPay, isOtOverridden, holidayPay, isHolidayOverridden,
       gross, tax, manualDed, attendanceDed, lateUndertimeDed, dedTotal, net,
@@ -199,7 +215,7 @@ window.Views.payroll = (function () {
         <div class="kpi-card"><div class="kpi-label">Staff on Schedule</div><div class="kpi-value">${rows.length}</div></div>
       </div>
 
-      <div class="hint">Days Present, Absent, COLA, Housing, NSD, OT, and Holiday are all editable — type over any of them and press Enter or click away to save and recompute Gross/Net Pay for that cutoff. Each is saved independently per employee per cutoff and takes priority over the computed value (highlighted with a blue border) until cleared back to the computed figure. Left alone, COLA/Housing come from the employee's profile, and NSD/OT/Holiday are computed automatically from logged time in/out and the Holidays tab's calendar (10% NSD differential; 125%/169%/260% OT tiers; 200%/130% holiday premiums, full pay for an unworked regular holiday). Absences are unpaid automatically for daily-rate staff (base pay only counts days present); for monthly-rate staff they're converted into an automatic deduction. Late/undertime (a logged day under 8 hours) is also unpaid for the shortfall. Both fold into the Deductions total.</div>
+      <div class="hint">Days Present, Absent, Base Pay, COLA, Housing, NSD, OT, and Holiday are all editable — type over any of them and press Enter or click away to save and recompute Gross/Net Pay for that cutoff. Each is saved independently per employee per cutoff and takes priority over the computed value (highlighted with a blue border) until cleared back to the computed figure. Left alone, COLA/Housing come from the employee's profile, and NSD/OT/Holiday are computed automatically from logged time in/out and the Holidays tab's calendar (10% NSD differential; 125%/169%/260% OT tiers; 200%/130% holiday premiums, full pay for an unworked regular holiday). Absences are unpaid automatically for daily-rate staff (base pay only counts days present); for monthly-rate staff they're converted into an automatic deduction. Late/undertime (a logged day under 8 hours) is also unpaid for the shortfall. Both fold into the Deductions total.</div>
 
       <div class="panel">
         ${rows.length ? `
@@ -216,21 +232,23 @@ window.Views.payroll = (function () {
                 <td class="num">
                   <input type="number" class="absent-input ${r.daysAbsent ? 'red' : ''}" min="0" step="0.5" value="${r.daysAbsent}" data-emp="${r.emp.id}" title="${r.isAbsentOverridden ? 'Manually edited — overrides the attendance-derived count' : 'Ordinary working days in cutoff (excl. holidays) − days present'}" style="${r.isAbsentOverridden ? 'border-color:var(--accent);' : ''}" />
                 </td>
-                <td class="num">${fmtMoney(r.basePay)}</td>
                 <td class="num">
-                  <input type="number" class="cola-input" min="0" step="0.01" value="${r.colaPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isColaOverridden ? 'Manually edited — overrides (allowance/day × days present) + fixed COLA' : "Computed from the employee's COLA rate"}" style="${r.isColaOverridden ? 'border-color:var(--accent);' : ''}" />
+                  <div class="money-input-wrap"><span class="currency-prefix">₱</span><input type="number" class="basepay-input" min="0" step="0.01" value="${r.basePay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isBasePayOverridden ? 'Manually edited — overrides rate × days present (or flat monthly rate)' : 'Computed from the employee’s rate'}" style="${r.isBasePayOverridden ? 'border-color:var(--accent);' : ''}" /></div>
                 </td>
                 <td class="num">
-                  <input type="number" class="housing-input" min="0" step="0.01" value="${r.housingPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isHousingOverridden ? "Manually edited — overrides the employee's housing allowance" : "From the employee's housing allowance"}" style="${r.isHousingOverridden ? 'border-color:var(--accent);' : ''}" />
+                  <div class="money-input-wrap"><span class="currency-prefix">₱</span><input type="number" class="cola-input" min="0" step="0.01" value="${r.colaPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isColaOverridden ? 'Manually edited — overrides (allowance/day × days present) + fixed COLA' : "Computed from the employee's COLA rate"}" style="${r.isColaOverridden ? 'border-color:var(--accent);' : ''}" /></div>
                 </td>
                 <td class="num">
-                  <input type="number" class="nsd-input" min="0" step="0.01" value="${r.nsdPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isNsdOverridden ? 'Manually edited — overrides the computed night shift differential' : 'Computed from logged time in/out, 10pm-6am'}" style="${r.isNsdOverridden ? 'border-color:var(--accent);' : ''}" />
+                  <div class="money-input-wrap"><span class="currency-prefix">₱</span><input type="number" class="housing-input" min="0" step="0.01" value="${r.housingPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isHousingOverridden ? "Manually edited — overrides the employee's housing allowance" : "From the employee's housing allowance"}" style="${r.isHousingOverridden ? 'border-color:var(--accent);' : ''}" /></div>
                 </td>
                 <td class="num">
-                  <input type="number" class="ot-input" min="0" step="0.01" value="${r.otPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isOtOverridden ? 'Manually edited — overrides the computed overtime pay' : 'Computed from logged hours beyond 8/day'}" style="${r.isOtOverridden ? 'border-color:var(--accent);' : ''}" />
+                  <div class="money-input-wrap"><span class="currency-prefix">₱</span><input type="number" class="nsd-input" min="0" step="0.01" value="${r.nsdPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isNsdOverridden ? 'Manually edited — overrides the computed night shift differential' : 'Computed from logged time in/out, 10pm-6am'}" style="${r.isNsdOverridden ? 'border-color:var(--accent);' : ''}" /></div>
                 </td>
                 <td class="num">
-                  <input type="number" class="holiday-input" min="0" step="0.01" value="${r.holidayPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isHolidayOverridden ? 'Manually edited — overrides the computed holiday pay' : 'Computed from the Holidays tab calendar'}" style="${r.isHolidayOverridden ? 'border-color:var(--accent);' : ''}" />
+                  <div class="money-input-wrap"><span class="currency-prefix">₱</span><input type="number" class="ot-input" min="0" step="0.01" value="${r.otPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isOtOverridden ? 'Manually edited — overrides the computed overtime pay' : 'Computed from logged hours beyond 8/day'}" style="${r.isOtOverridden ? 'border-color:var(--accent);' : ''}" /></div>
+                </td>
+                <td class="num">
+                  <div class="money-input-wrap"><span class="currency-prefix">₱</span><input type="number" class="holiday-input" min="0" step="0.01" value="${r.holidayPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isHolidayOverridden ? 'Manually edited — overrides the computed holiday pay' : 'Computed from the Holidays tab calendar'}" style="${r.isHolidayOverridden ? 'border-color:var(--accent);' : ''}" /></div>
                 </td>
                 <td class="num" style="font-weight:600;">${fmtMoney(r.gross)}</td>
                 <td class="num ${r.tax ? '' : 'dim'}">${r.tax ? fmtMoney(r.tax) : '—'}</td>
@@ -262,7 +280,7 @@ window.Views.payroll = (function () {
         }
       });
     });
-    [['cola-input', 'cola'], ['housing-input', 'housing'], ['nsd-input', 'nsd'], ['ot-input', 'ot'], ['holiday-input', 'holiday']].forEach(([cls, field]) => {
+    [['basepay-input', 'basePay'], ['cola-input', 'cola'], ['housing-input', 'housing'], ['nsd-input', 'nsd'], ['ot-input', 'ot'], ['holiday-input', 'holiday']].forEach(([cls, field]) => {
       qsa('.' + cls, body).forEach(input => {
         input.addEventListener('change', async () => {
           const val = Number(input.value);
@@ -365,18 +383,34 @@ window.Views.payroll = (function () {
   }
 
   function openHolidayForm(main) {
+    const populatePreset = (bd) => {
+      const type = qs('#holiday-type', bd).value;
+      const list = type === 'Regular' ? REGULAR_HOLIDAYS : SPECIAL_HOLIDAYS;
+      qs('#holiday-preset', bd).innerHTML =
+        list.map(n => `<option>${escapeHtml(n)}</option>`).join('') +
+        '<option value="__other__">Other (specify below)…</option>';
+      toggleCustom(bd);
+    };
+    const toggleCustom = (bd) => {
+      const isOther = qs('#holiday-preset', bd).value === '__other__';
+      qs('#holiday-custom-wrap', bd).classList.toggle('hidden', !isOther);
+      qs('#holiday-custom', bd).required = isOther;
+    };
+
     openModal(`
       <h2>Add holiday</h2>
+      <div class="modal-sub">Pick the holiday type to see the matching official Philippine holidays, or choose "Other" for a newly/locally declared one.</div>
       <form id="holiday-form">
         <div class="modal-grid">
           <div class="field"><label>Date</label><input type="date" name="date" required /></div>
           <div class="field"><label>Type</label>
-            <select name="type">
+            <select name="type" id="holiday-type">
               <option value="Regular">Regular Holiday</option>
               <option value="Special Non-Working">Special Non-Working</option>
             </select>
           </div>
-          <div class="field full"><label>Name</label><input name="name" required placeholder="e.g. Independence Day" /></div>
+          <div class="field full"><label>Holiday</label><select id="holiday-preset"></select></div>
+          <div class="field full" id="holiday-custom-wrap"><label>Holiday name</label><input id="holiday-custom" placeholder="e.g. Local Fiesta" /></div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
@@ -384,13 +418,19 @@ window.Views.payroll = (function () {
         </div>
       </form>
     `, (bd) => {
+      populatePreset(bd);
+      qs('#holiday-type', bd).addEventListener('change', () => populatePreset(bd));
+      qs('#holiday-preset', bd).addEventListener('change', () => toggleCustom(bd));
       qs('#holiday-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
+        const presetVal = qs('#holiday-preset', bd).value;
+        const name = presetVal === '__other__' ? qs('#holiday-custom', bd).value.trim() : presetVal;
+        if (!name) return;
         await Store.addHoliday({
           date: fd.get('date'),
           type: fd.get('type'),
-          name: fd.get('name').trim(),
+          name,
         });
         toast('Holiday added.');
         closeModal();

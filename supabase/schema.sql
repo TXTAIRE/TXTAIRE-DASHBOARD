@@ -132,6 +132,7 @@ create table "payrollOverrides" (
   "cutoffFrom" date not null,
   "daysPresent" numeric(4,2),
   "daysAbsent" numeric(4,2),
+  "basePay" numeric(12,2),
   cola numeric(12,2),
   housing numeric(12,2),
   nsd numeric(12,2),
@@ -223,3 +224,6 @@ alter publication supabase_realtime add table
 -- alter table "payrollOverrides" add column if not exists nsd numeric(12,2);
 -- alter table "payrollOverrides" add column if not exists ot numeric(12,2);
 -- alter table "payrollOverrides" add column if not exists holiday numeric(12,2);
+
+-- If you already ran this schema before "basePay" was added to payrollOverrides:
+-- alter table "payrollOverrides" add column if not exists "basePay" numeric(12,2);
