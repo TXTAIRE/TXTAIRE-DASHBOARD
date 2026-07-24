@@ -67,6 +67,11 @@ function openDrawer(innerHtml, onMount) {
 // cutoff). Opens as a fixed overlay; @media print rules in styles.css hide everything
 // else on the page so "Print" (or the browser's Print > Save as PDF) yields a clean sheet.
 function openDTR(emp, from, to) {
+  // Guard against stacking multiple DTRs in the DOM (e.g. clicking "DTR →" more than once
+  // without closing) — each one would render on its own printed page since printing
+  // renders every .dtr-overlay in document order, not just the visually-topmost one.
+  qsa('.dtr-overlay').forEach(el => el.remove());
+
   const records = Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id);
   const recByDate = {};
   records.forEach(r => { recByDate[r.date] = r; });
