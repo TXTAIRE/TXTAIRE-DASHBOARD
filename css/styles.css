@@ -513,28 +513,30 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 @media print {
   @page { size: A4 portrait; margin: 10mm; }
   html, body { height: auto; }
-  body * { visibility: hidden; }
-  .dtr-print, .dtr-print * { visibility: visible; }
-  .dtr-overlay { position: absolute; inset: auto; background: none; padding: 0; overflow: visible; }
+  /* display:none (not visibility:hidden) so the hidden dashboard behind the DTR is fully
+     removed from layout — visibility:hidden keeps its height reserved, which was pushing
+     the print engine to emit extra blank pages alongside the DTR. */
+  body > *:not(.dtr-overlay) { display: none !important; }
+  .dtr-overlay { position: static; inset: auto; background: none; padding: 0; overflow: visible; }
   .dtr-print {
     box-shadow: none; max-width: 100%; width: 100%; margin: 0; border-radius: 0;
     padding: 0; font-size: 10px;
   }
   .no-print { display: none !important; }
 
-  /* Compact everything so a full cutoff (up to 16 days) plus the pay computation
-     summary and signatures fits on a single A4 page. */
-  .dtr-header { padding-bottom: 6px; margin-bottom: 8px; gap: 10px; }
-  .dtr-logo { height: 28px; }
-  .dtr-header h2 { font-size: 14px; }
-  .dtr-meta { font-size: 10px; margin-bottom: 8px; gap: 2px 16px; }
-  .dtr-table { font-size: 9px; }
-  .dtr-table th, .dtr-table td { padding: 2px 5px; }
-  .dtr-summary { margin-top: 10px; }
-  .dtr-summary-title { font-size: 10.5px; margin-bottom: 4px; }
-  .dtr-summary .dtr-table .dim { font-size: 8.5px; }
-  .dtr-summary + .page-sub { font-size: 9px !important; margin-top: 4px !important; }
-  .dtr-signatures { margin-top: 18px; gap: 40px; }
-  .dtr-sig { font-size: 10px; }
-  .dtr-sig-line { padding-top: 20px; margin-bottom: 4px; }
+  /* Sized to fill the A4 page well while still comfortably fitting a full 16-day cutoff
+     (with OT/holiday rows and the pay computation summary) on a single page. */
+  .dtr-header { padding-bottom: 10px; margin-bottom: 14px; gap: 12px; }
+  .dtr-logo { height: 36px; }
+  .dtr-header h2 { font-size: 16px; }
+  .dtr-meta { font-size: 11.5px; margin-bottom: 12px; gap: 4px 18px; }
+  .dtr-table { font-size: 11px; }
+  .dtr-table th, .dtr-table td { padding: 3px 6px; }
+  .dtr-summary { margin-top: 16px; }
+  .dtr-summary-title { font-size: 12px; margin-bottom: 6px; }
+  .dtr-summary .dtr-table .dim { font-size: 10px; }
+  .dtr-summary + .page-sub { font-size: 10px !important; margin-top: 5px !important; }
+  .dtr-signatures { margin-top: 28px; gap: 40px; }
+  .dtr-sig { font-size: 11px; }
+  .dtr-sig-line { padding-top: 28px; margin-bottom: 5px; }
 }
