@@ -1,5 +1,6 @@
 window.Views.attendance = (function () {
   let selectedDate = todayISO();
+  let filterCategory = 'All';
 
   function statusDotClass(status) {
     return { Present: 'on', Late: 'late', Absent: 'absent', 'On Leave': 'off' }[status] || '';
@@ -50,6 +51,12 @@ window.Views.attendance = (function () {
       </div>
 
       <div class="filters">
+        <div class="field">
+          <label>Category</label>
+          <div class="seg" id="seg-category">
+            ${['All'].concat(CATEGORIES).map(c => `<button data-val="${c}" class="${filterCategory === c ? 'active' : ''}">${c}</button>`).join('')}
+          </div>
+        </div>
         <div class="field"><label>Date</label><input type="date" id="date-picker" value="${selectedDate}" /></div>
         <button class="btn btn-ghost btn-sm" id="btn-prev-day">← Prev</button>
         <button class="btn btn-ghost btn-sm" id="btn-today">Today</button>
@@ -58,13 +65,18 @@ window.Views.attendance = (function () {
 
       <div class="page-sub" style="margin-bottom:10px;">${employees.length} staff members · ${present} on shift on ${fmtDate(selectedDate)}</div>
 
+      ${filterCategory === 'All' || filterCategory === 'Admin' ? `
       <div class="section-title" style="margin-top:0;">Admins <span class="dim" style="font-weight:400;">(${admins.length})</span></div>
       <div class="panel">${attendanceTable(admins, recByEmp)}</div>
+      ` : ''}
 
-      <div class="section-title">Technicians <span class="dim" style="font-weight:400;">(${technicians.length})</span></div>
+      ${filterCategory === 'All' || filterCategory === 'Technician' ? `
+      <div class="section-title" ${filterCategory === 'Technician' ? 'style="margin-top:0;"' : ''}>Technicians <span class="dim" style="font-weight:400;">(${technicians.length})</span></div>
       <div class="panel">${attendanceTable(technicians, recByEmp)}</div>
+      ` : ''}
     `;
 
+    qsa('#seg-category button', main).forEach(b => b.addEventListener('click', () => { filterCategory = b.dataset.val; renderView(main); }));
     qs('#date-picker', main).addEventListener('change', (e) => { selectedDate = e.target.value; renderView(main); });
     qs('#btn-prev-day', main).addEventListener('click', () => { selectedDate = addDays(selectedDate, -1); renderView(main); });
     qs('#btn-today', main).addEventListener('click', () => { selectedDate = todayISO(); renderView(main); });
