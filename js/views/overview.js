@@ -7,6 +7,19 @@ window.Views.overview = {
     const today = todayISO();
     const todayAttendance = Store.attendanceForDate(today);
 
+    const probations = Store.listProbations().map(r => ({
+      r, emp: Store.getEmployee(r.employeeId),
+      thirdDue: addMonths(r.startDate, 3), sixthDue: addMonths(r.startDate, 6),
+    })).filter(row => row.emp);
+    const probationAlerts = probations.filter(row =>
+      (row.r.thirdMonthStatus === 'Pending' && daysBetween(today, row.thirdDue) <= 14) ||
+      (row.r.sixthMonthStatus === 'Pending' && daysBetween(today, row.sixthDue) <= 14)
+    ).sort((a, b) => {
+      const aDue = a.r.thirdMonthStatus === 'Pending' ? a.thirdDue : a.sixthDue;
+      const bDue = b.r.thirdMonthStatus === 'Pending' ? b.thirdDue : b.sixthDue;
+      return aDue.localeCompare(bDue);
+    });
+
     const activeEmployees = employees.filter(e => e.status === 'Active').length;
     const byCategory = CATEGORIES.map(cat => ({
       cat, count: employees.filter(e => e.category === cat).length
@@ -61,7 +74,36 @@ window.Views.overview = {
           <div class="kpi-value ${openComplaints ? 'red' : ''}">${openComplaints}</div>
           <div class="kpi-sub">of ${complaints.length} total</div>
         </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Probation Evaluations Due</div>
+          <div class="kpi-value ${probationAlerts.length ? 'red' : ''}">${probationAlerts.length}</div>
+          <div class="kpi-sub">3rd/6th month, within 14 days or overdue</div>
+        </div>
       </div>
+
+      ${probationAlerts.length ? `
+      <div class="section-title">Probation Evaluations Due Soon</div>
+      <div class="panel">
+        <table>
+          <thead><tr><th>Employee</th><th>Position</th><th>Milestone</th><th>Due</th></tr></thead>
+          <tbody>
+            ${probationAlerts.map(row => {
+              const isThird = row.r.thirdMonthStatus === 'Pending' && daysBetween(today, row.thirdDue) <= 14;
+              const due = isThird ? row.thirdDue : row.sixthDue;
+              const diff = daysBetween(today, due);
+              const badge = diff < 0 ? `<span class="badge badge-red">Overdue ${Math.abs(diff)}d</span>` : `<span class="badge badge-yellow">Due in ${diff}d</span>`;
+              return `
+              <tr>
+                <td class="name">${escapeHtml(row.emp.name)}</td>
+                <td class="dim">${escapeHtml(row.emp.position)}</td>
+                <td>${isThird ? '3rd Month' : '6th Month'}</td>
+                <td class="dim">${fmtDate(due)} ${badge}</td>
+              </tr>
+            `; }).join('')}
+          </tbody>
+        </table>
+      </div>
+      ` : ''}
 
       <div class="two-col">
         <div>

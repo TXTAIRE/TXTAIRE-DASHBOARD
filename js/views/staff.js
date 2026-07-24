@@ -18,7 +18,7 @@ window.Views.staff = (function () {
       <div class="page-head">
         <div>
           <h1 class="page-title">Employees</h1>
-          <div class="page-sub">Centralized employee records for Admin, HR, and Technician staff.</div>
+          <div class="page-sub">Centralized employee records for Admin and Technician staff.</div>
         </div>
         <button class="btn btn-primary" id="btn-add-employee">+ Add employee</button>
       </div>
@@ -39,7 +39,7 @@ window.Views.staff = (function () {
         <div class="field">
           <label>Employment</label>
           <div class="seg" id="seg-employment">
-            ${['All', 'Regular', 'Probationary'].map(s => `<button data-val="${s}" class="${filterEmployment === s ? 'active' : ''}">${s}</button>`).join('')}
+            ${['All', 'Regular', 'Probationary', 'Contractual'].map(s => `<button data-val="${s}" class="${filterEmployment === s ? 'active' : ''}">${s}</button>`).join('')}
           </div>
         </div>
       </div>
@@ -52,7 +52,7 @@ window.Views.staff = (function () {
           <thead>
             <tr>
               <th>Name</th><th>Category</th><th>Position</th><th>Status</th><th>Employment</th>
-              <th>Rate</th><th>Allowance</th><th>Night Diff.</th><th>Payday</th><th></th>
+              <th>Rate</th><th>COLA</th><th>Payday</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -65,7 +65,6 @@ window.Views.staff = (function () {
                 <td>${employmentStatusBadge(e.employmentStatus)}</td>
                 <td class="dim">${e.payType === 'Daily' ? fmtMoney(e.rate) + '/day' : fmtMoney(e.rate) + '/cutoff'}</td>
                 <td class="dim">${(e.allowancePerDay || e.fixedAllowance) ? [e.allowancePerDay ? fmtMoney(e.allowancePerDay) + '/day' : null, e.fixedAllowance ? fmtMoney(e.fixedAllowance) + '/cutoff' : null].filter(Boolean).join(' + ') : '—'}</td>
-                <td class="dim">${e.nightShiftDifferential ? 'Yes' : '—'}</td>
                 <td class="dim">${PAY_CYCLES[e.payCycle] ? PAY_CYCLES[e.payCycle].cutoffLabels.join(' & ') : '—'}</td>
                 <td><button class="link-btn" data-edit="${e.id}">Edit →</button></td>
               </tr>
@@ -94,15 +93,15 @@ window.Views.staff = (function () {
         <div class="kpi-card"><div class="kpi-label">Status</div><div class="kpi-value" style="font-size:16px;">${employeeStatusDot(e.status)}</div></div>
         <div class="kpi-card"><div class="kpi-label">Employment</div><div class="kpi-value" style="font-size:16px;">${employmentStatusBadge(e.employmentStatus)}</div></div>
       </div>
-      <div class="page-sub" style="margin-top:10px;">Date hired: ${fmtDate(e.dateHired)}</div>
+      <div class="page-sub" style="margin-top:10px;">Date hired: ${fmtDate(e.dateHired)} · Length of service: ${lengthOfService(e.dateHired)}</div>
       <div class="section-title" style="margin-top:18px;">Contact</div>
       <div class="page-sub">Phone: ${escapeHtml(e.phone || '—')}<br/>Email: ${escapeHtml(e.email || '—')}</div>
       <div class="section-title">Pay</div>
       <div class="page-sub">
         Rate: ${e.payType === 'Daily' ? fmtMoney(e.rate) + ' / day' : fmtMoney(e.rate) + ' / cutoff'}<br/>
-        ${e.allowancePerDay ? 'Allowance: ' + fmtMoney(e.allowancePerDay) + ' / day<br/>' : ''}
-        ${e.fixedAllowance ? 'Fixed allowance: ' + fmtMoney(e.fixedAllowance) + ' / cutoff<br/>' : ''}
-        ${e.nightShiftDifferential ? 'Night shift differential: eligible (hours ÷ 8 × rate × 10%, per attendance day)<br/>' : ''}
+        ${e.allowancePerDay ? 'COLA: ' + fmtMoney(e.allowancePerDay) + ' / day<br/>' : ''}
+        ${e.fixedAllowance ? 'Fixed COLA: ' + fmtMoney(e.fixedAllowance) + ' / cutoff<br/>' : ''}
+        ${e.housingAllowance ? 'Housing Allowance: ' + fmtMoney(e.housingAllowance) + ' / cutoff<br/>' : ''}
         Payday: ${PAY_CYCLES[e.payCycle] ? PAY_CYCLES[e.payCycle].cutoffLabels.join(' & ') : '—'}
       </div>
       ${e.notes ? `<div class="section-title">Notes</div><div class="page-sub">${escapeHtml(e.notes)}</div>` : ''}
@@ -123,7 +122,7 @@ window.Views.staff = (function () {
 
   function openEmployeeModal(main, id) {
     const editing = id ? Store.getEmployee(id) : null;
-    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, nightShiftDifferential: false, payCycle: '10-20', notes: '' };
+    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, housingAllowance: 0, payCycle: '10-20', notes: '' };
 
     openModal(`
       <h2>${editing ? 'Edit employee' : 'Add employee'}</h2>
@@ -139,14 +138,14 @@ window.Views.staff = (function () {
             <select name="status">${['Active', 'On Leave', 'Off', 'Terminated'].map(s => `<option ${s === e.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
           </div>
           <div class="field"><label>Employment status</label>
-            <select name="employmentStatus">${['Regular', 'Probationary'].map(s => `<option ${s === e.employmentStatus ? 'selected' : ''}>${s}</option>`).join('')}</select>
+            <select name="employmentStatus">${['Regular', 'Probationary', 'Contractual'].map(s => `<option ${s === e.employmentStatus ? 'selected' : ''}>${s}</option>`).join('')}</select>
           </div>
           <div class="field"><label>Date hired</label><input type="date" name="dateHired" value="${e.dateHired}" /></div>
           <div class="field"><label>Phone</label><input name="phone" value="${escapeHtml(e.phone)}" /></div>
           <div class="field"><label>Email</label><input type="email" name="email" value="${escapeHtml(e.email)}" /></div>
           <div class="field"><label>Pay cycle</label>
             <select name="payCycle">
-              <option value="10-20" ${e.payCycle === '10-20' ? 'selected' : ''}>10th &amp; 20th (Engineers/Managers/Admins)</option>
+              <option value="10-20" ${e.payCycle === '10-20' ? 'selected' : ''}>10th &amp; 20th (Admins)</option>
               <option value="15-30" ${e.payCycle === '15-30' ? 'selected' : ''}>15th &amp; 30th/31st (Technicians)</option>
             </select>
           </div>
@@ -154,12 +153,9 @@ window.Views.staff = (function () {
             <select name="payType">${['Monthly', 'Daily'].map(p => `<option ${p === e.payType ? 'selected' : ''}>${p}</option>`).join('')}</select>
           </div>
           <div class="field"><label>Rate (PHP)</label><input type="number" name="rate" min="0" step="0.01" value="${e.rate}" /></div>
-          <div class="field"><label>Allowance / day (PHP)</label><input type="number" name="allowancePerDay" min="0" step="0.01" value="${e.allowancePerDay || 0}" /></div>
-          <div class="field"><label>Fixed allowance / cutoff (PHP)</label><input type="number" name="fixedAllowance" min="0" step="0.01" value="${e.fixedAllowance || 0}" /></div>
-          <div class="field full" style="flex-direction:row; align-items:center; gap:8px;">
-            <input type="checkbox" name="nightShiftDifferential" id="chk-nsd" style="width:auto;" ${e.nightShiftDifferential ? 'checked' : ''} />
-            <label for="chk-nsd" style="text-transform:none; letter-spacing:0; font-size:13px;">Eligible for night shift differential (adds hours ÷ 8 × rate × 10% per attendance day in payroll)</label>
-          </div>
+          <div class="field"><label>Cost of Living Allowance (COLA) / day</label><input type="number" name="allowancePerDay" min="0" step="0.01" value="${e.allowancePerDay || 0}" /></div>
+          <div class="field"><label>Fixed COLA / cutoff (PHP)</label><input type="number" name="fixedAllowance" min="0" step="0.01" value="${e.fixedAllowance || 0}" /></div>
+          <div class="field"><label>Housing Allowance / cutoff (PHP)</label><input type="number" name="housingAllowance" min="0" step="0.01" value="${e.housingAllowance || 0}" /></div>
           <div class="field full"><label>Notes</label><textarea name="notes" rows="2">${escapeHtml(e.notes || '')}</textarea></div>
         </div>
         <div class="modal-actions">
@@ -186,7 +182,7 @@ window.Views.staff = (function () {
           rate: Number(fd.get('rate')) || 0,
           allowancePerDay: Number(fd.get('allowancePerDay')) || 0,
           fixedAllowance: Number(fd.get('fixedAllowance')) || 0,
-          nightShiftDifferential: fd.get('nightShiftDifferential') === 'on',
+          housingAllowance: Number(fd.get('housingAllowance')) || 0,
           notes: fd.get('notes').trim(),
         };
         if (editing) {

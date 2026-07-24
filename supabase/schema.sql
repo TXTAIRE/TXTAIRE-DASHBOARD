@@ -12,7 +12,7 @@
 create table employees (
   id text primary key,
   name text not null,
-  category text not null,                     -- 'Admin' | 'HR' | 'Technician'
+  category text not null,                     -- 'Admin' | 'Technician'
   position text,
   status text not null default 'Active',
   "employmentStatus" text not null default 'Regular',
@@ -21,9 +21,13 @@ create table employees (
   email text,
   "payType" text not null,                     -- 'Daily' | 'Monthly'
   rate numeric(12,2) not null default 0,
-  "allowancePerDay" numeric(12,2) not null default 0,
-  "fixedAllowance" numeric(12,2) not null default 0,
-  "nightShiftDifferential" boolean not null default false,  -- if true, payroll adds (hours/8) * (rate * 0.10) per attendance day
+  "allowancePerDay" numeric(12,2) not null default 0,        -- Cost of Living Allowance (COLA), per day
+  "fixedAllowance" numeric(12,2) not null default 0,          -- COLA, flat amount per cutoff
+  "housingAllowance" numeric(12,2) not null default 0,        -- Housing/lodging allowance, flat amount per cutoff (distinct from COLA)
+  "nightShiftDifferential" boolean not null default false,    -- superseded: NSD is now computed automatically for
+                                                                -- everyone from actual logged timeIn/timeOut vs. the
+                                                                -- 10pm-6am window (see js/store.js nightOverlapHours).
+                                                                -- Column kept for backward compatibility; unused by the app.
   "payCycle" text not null,                    -- '10-20' | '15-30'
   notes text default '',
   created_at timestamptz not null default now(),
@@ -126,8 +130,21 @@ create table "payrollOverrides" (
   id text primary key,
   "employeeId" text not null references employees(id) on delete cascade,
   "cutoffFrom" date not null,
-  "daysPresent" numeric(4,2) not null,
+  "daysPresent" numeric(4,2),
+  "daysAbsent" numeric(4,2),
   unique("employeeId", "cutoffFrom")
+);
+
+-- ---------- holidays ----------
+-- Reference calendar for Philippine holiday pay. Populate with the officially proclaimed
+-- dates for each year — deliberately seeded empty rather than guessed, since exact dates
+-- for movable/proclaimed holidays (Eid'l Fitr, Eid'l Adha, National Heroes Day, special
+-- non-working days, etc.) are only certain once Malacañang issues the proclamation.
+create table holidays (
+  id text primary key,
+  date date not null unique,
+  name text not null,
+  type text not null default 'Regular'         -- 'Regular' | 'Special Non-Working'
 );
 
 -- =================================================================
@@ -142,6 +159,7 @@ alter table attendance enable row level security;
 alter table deductions enable row level security;
 alter table "probationRecords" enable row level security;
 alter table "payrollOverrides" enable row level security;
+alter table holidays enable row level security;
 
 create policy "authenticated full access" on employees
   for all to authenticated using (true) with check (true);
@@ -159,10 +177,36 @@ create policy "authenticated full access" on "probationRecords"
   for all to authenticated using (true) with check (true);
 create policy "authenticated full access" on "payrollOverrides"
   for all to authenticated using (true) with check (true);
+create policy "authenticated full access" on holidays
+  for all to authenticated using (true) with check (true);
 
 -- =================================================================
 -- Realtime — publish all 8 tables so the app's subscriptions receive changes
 -- =================================================================
 alter publication supabase_realtime add table
   employees, candidates, "disciplinaryCases", complaints,
-  attendance, deductions, "probationRecords", "payrollOverrides";
+  attendance, deductions, "probationRecords", "payrollOverrides", holidays;
+
+-- =================================================================
+-- Incremental migration — if you already ran this schema before the "holidays"
+-- table existed, running the whole file again will fail on the earlier `create table`
+-- statements (tables already exist). Run ONLY this block instead in that case.
+-- =================================================================
+-- create table holidays (
+--   id text primary key,
+--   date date not null unique,
+--   name text not null,
+--   type text not null default 'Regular'
+-- );
+-- alter table holidays enable row level security;
+-- create policy "authenticated full access" on holidays
+--   for all to authenticated using (true) with check (true);
+-- alter publication supabase_realtime add table holidays;
+
+-- If you already ran this schema before the "housingAllowance" column existed:
+-- alter table employees add column if not exists "housingAllowance" numeric(12,2) not null default 0;
+
+-- If you already ran this schema before "daysAbsent" was added to payrollOverrides
+-- (and before "daysPresent" became nullable, to allow an absent-only override row):
+-- alter table "payrollOverrides" add column if not exists "daysAbsent" numeric(4,2);
+-- alter table "payrollOverrides" alter column "daysPresent" drop not null;

@@ -4,13 +4,13 @@
  * file's render-time code is unchanged. Store.init() populates the cache on boot and opens
  * a realtime subscription per table; any change (from this client or another device) refetches
  * that table and notifies app.js via onRemoteChange() so the current view re-renders. All
- * mutators (add*/update*/delete*/move*/decide*/set*) are async: they write to Supabase, then
+ * mutators (add*, update*, delete*, move*, decide*, set*) are async: they write to Supabase, then
  * refetch the affected table so the local cache reflects the confirmed row.
  */
 
 window.Views = window.Views || {};
 
-const CATEGORIES = ['Admin', 'HR', 'Technician'];
+const CATEGORIES = ['Admin', 'Technician'];
 
 const STAGES_STANDARD = ['Screening', 'Phone Interview', 'Face-to-Face Interview', '3-Day Trade Test', 'Evaluation', 'Decision'];
 const STAGES_TECHNICIAN = ['Screening', 'Phone Interview', 'Candidate Agreement', '7-Day Trade Test', 'Evaluation', 'Decision'];
@@ -85,7 +85,7 @@ function withholdingTax(gross) {
 }
 
 const PAY_CYCLES = {
-  '10-20': { label: 'Engineers, Managers & Admins — 10th & 20th', cutoffLabels: ['10th', '20th'] },
+  '10-20': { label: 'Admins — 10th & 20th', cutoffLabels: ['10th', '20th'] },
   '15-30': { label: 'Technicians — 15th & 30th/31st', cutoffLabels: ['15th', 'end of month'] },
 };
 
@@ -93,24 +93,113 @@ function pad2(n) { return String(n).padStart(2, '0'); }
 
 function daysInMonth(year, month) { return new Date(year, month, 0).getDate(); }
 
+function ordinal(n) {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return n + 'th';
+  const rem10 = n % 10;
+  return n + (rem10 === 1 ? 'st' : rem10 === 2 ? 'nd' : rem10 === 3 ? 'rd' : 'th');
+}
+
 function payCutoffs(payCycle, year, month) {
   const y = year, m = month;
   const last = daysInMonth(y, m);
   if (payCycle === '15-30') {
     return [
       { key: 'A', label: `1 – 15 (paid the 15th)`, from: `${y}-${pad2(m)}-01`, to: `${y}-${pad2(m)}-15`, payDate: `${y}-${pad2(m)}-15` },
-      { key: 'B', label: `16 – ${last} (paid the ${last}th)`, from: `${y}-${pad2(m)}-16`, to: `${y}-${pad2(m)}-${pad2(last)}`, payDate: `${y}-${pad2(m)}-${pad2(last)}` },
+      { key: 'B', label: `16 – ${last} (paid the ${ordinal(last)})`, from: `${y}-${pad2(m)}-16`, to: `${y}-${pad2(m)}-${pad2(last)}`, payDate: `${y}-${pad2(m)}-${pad2(last)}` },
     ];
   }
+  // '10-20': cutoffs run 26 (previous month) – 10, and 11 – 25, so every calendar day
+  // is covered exactly once across the year (the tail, 26–end of THIS month, belongs to
+  // next month's "A" cutoff). Labor Code compliance: paid twice a month, each period ≤16
+  // days (A is at most 6 prior-month days + 10 = 16; B is a fixed 15), with paydays
+  // landing exactly on the 10th and 20th as required — unlike a plain 1–10/11–20 split,
+  // which would leave days 21–end of month uncovered by any payroll cutoff at all.
+  let prevMonth = m - 1, prevYear = y;
+  if (prevMonth < 1) { prevMonth = 12; prevYear -= 1; }
   return [
-    { key: 'A', label: `1 – 10 (paid the 10th)`, from: `${y}-${pad2(m)}-01`, to: `${y}-${pad2(m)}-10`, payDate: `${y}-${pad2(m)}-10` },
-    { key: 'B', label: `11 – 20 (paid the 20th)`, from: `${y}-${pad2(m)}-11`, to: `${y}-${pad2(m)}-20`, payDate: `${y}-${pad2(m)}-20` },
+    { key: 'A', label: `26 (prev. mo.) – 10 (paid the 10th)`, from: `${prevYear}-${pad2(prevMonth)}-26`, to: `${y}-${pad2(m)}-10`, payDate: `${y}-${pad2(m)}-10` },
+    { key: 'B', label: `11 – 25 (paid the 20th)`, from: `${y}-${pad2(m)}-11`, to: `${y}-${pad2(m)}-25`, payDate: `${y}-${pad2(m)}-20` },
   ];
 }
 
-function defaultCutoffHalf(payCycle, day) {
-  if (payCycle === '15-30') return day <= 15 ? 'A' : 'B';
-  return day <= 10 ? 'A' : 'B';
+// Which cutoff (and, for the 10-20 cycle, potentially which month) "today" falls into —
+// used to pick a sensible default view. Days 26+ of a month belong to NEXT month's "A"
+// cutoff under the 10-20 scheme (see payCutoffs above), so the month can roll forward.
+function defaultCutoffPosition(payCycle, year, month, day) {
+  if (payCycle === '15-30') {
+    return { year, month, half: day <= 15 ? 'A' : 'B' };
+  }
+  if (day <= 10) return { year, month, half: 'A' };
+  if (day <= 25) return { year, month, half: 'B' };
+  let m = month + 1, y = year;
+  if (m > 12) { m = 1; y += 1; }
+  return { year: y, month: m, half: 'A' };
+}
+
+// Standard working days in a cutoff (Mon–Sat, Sunday off), used as the divisor for
+// deriving a monthly-rate employee's per-day equivalent for absence deductions.
+function workDaysInRange(from, to) {
+  let count = 0;
+  let d = from;
+  while (d <= to) {
+    if (new Date(d + 'T00:00:00').getDay() !== 0) count++;
+    d = addDays(d, 1);
+  }
+  return count;
+}
+
+// Hours of a shift ("HH:MM"-"HH:MM") that fall within the legal night-shift-differential
+// window, 10:00 PM to 6:00 AM. Handles shifts that cross midnight (e.g. 22:00-06:00) and
+// early-morning shifts that don't (e.g. 04:00-13:00, where 04:00-06:00 counts).
+function nightOverlapHours(timeIn, timeOut) {
+  if (!timeIn || !timeOut) return 0;
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  let start = toMin(timeIn);
+  let end = toMin(timeOut);
+  const crossesMidnight = end <= start;
+  if (crossesMidnight) end += 1440;
+  let overlap = Math.max(0, Math.min(end, 1800) - Math.max(start, 1320)); // 22:00–06:00(+1d)
+  if (!crossesMidnight) {
+    overlap += Math.max(0, Math.min(end, 360) - Math.max(start, 0)); // tail of prior night, 00:00–06:00
+  }
+  return overlap / 60;
+}
+
+// Single source of truth for a day's NSD/OT/holiday pay, shared by the Payroll tab's
+// totals and the printable DTR so the two never drift apart. `dailyRateEq` is the
+// employee's daily-rate equivalent (their own rate if Daily, or monthly rate / working
+// days in the cutoff if Monthly); `rec` is that day's attendance record (or null/undefined
+// if absent); `holiday` is that day's holidays-calendar entry (or null/undefined).
+//
+// Overtime: 125% ordinary / 169% special-day-worked / 260% regular-holiday-worked, applied
+// to hours beyond 8. Night Shift Differential: +10% of the hourly rate for each hour
+// actually worked 10pm-6am, regardless of holiday. Holiday pay: a worked holiday earns a
+// premium on top of its already-counted 1x base (200% regular / 130% special, prorated by
+// regular hours worked up to 8); an unworked REGULAR holiday still pays a full day ("no
+// work, no pay" does not apply to regular holidays); an unworked special day pays nothing
+// extra.
+function computeDayPay(dailyRateEq, rec, holiday) {
+  const hourlyRate = dailyRateEq / 8;
+  const hrs = rec ? (Number(rec.hours) || 0) : 0;
+  const otHrs = rec ? Math.max(0, hrs - 8) : 0;
+  const otMultiplier = holiday ? (holiday.type === 'Regular' ? 2.6 : 1.69) : 1.25;
+  const otPay = otHrs * hourlyRate * otMultiplier;
+  const nsdHrs = rec ? nightOverlapHours(rec.timeIn, rec.timeOut) : 0;
+  const nsdPay = nsdHrs * hourlyRate * 0.10;
+
+  let holidayPay = 0;
+  if (holiday) {
+    if (rec) {
+      const regHrs = Math.min(hrs, 8);
+      const mult = holiday.type === 'Regular' ? 2.0 : 1.3;
+      holidayPay = dailyRateEq * (mult - 1) * (regHrs / 8);
+    } else if (holiday.type === 'Regular') {
+      holidayPay = dailyRateEq;
+    }
+  }
+
+  return { otHrs, otPay, nsdHrs, nsdPay, holidayPay };
 }
 
 const Store = (function () {
@@ -123,11 +212,12 @@ const Store = (function () {
     deductions: 'deductions',
     probationRecords: 'probationRecords',
     payrollOverrides: 'payrollOverrides',
+    holidays: 'holidays',
   };
 
   const state = {
     employees: [], candidates: [], disciplinaryCases: [], complaints: [],
-    attendance: [], deductions: [], probationRecords: [], payrollOverrides: [],
+    attendance: [], deductions: [], probationRecords: [], payrollOverrides: [], holidays: [],
   };
 
   let remoteChangeCallback = null;
@@ -307,12 +397,12 @@ const Store = (function () {
   function getPayrollOverride(employeeId, cutoffFrom) {
     return state.payrollOverrides.find(o => o.employeeId === employeeId && o.cutoffFrom === cutoffFrom);
   }
-  async function setPayrollOverride(employeeId, cutoffFrom, daysPresent) {
+  async function setPayrollOverride(employeeId, cutoffFrom, patch) {
     const existing = getPayrollOverride(employeeId, cutoffFrom);
     if (existing) {
-      await updateRow('payrollOverrides', existing.id, { daysPresent });
+      await updateRow('payrollOverrides', existing.id, patch);
     } else {
-      await insertRow('payrollOverrides', { id: genId('po'), employeeId, cutoffFrom, daysPresent });
+      await insertRow('payrollOverrides', Object.assign({ id: genId('po'), employeeId, cutoffFrom }, patch));
     }
   }
 
@@ -327,6 +417,22 @@ const Store = (function () {
     await deleteRow('deductions', id);
   }
 
+  // ---- Holidays (reference calendar for holiday pay) ----
+  function listHolidays() { return state.holidays.slice(); }
+  function getHoliday(id) { return state.holidays.find(h => h.id === id); }
+  function holidaysInRange(from, to) { return state.holidays.filter(h => h.date >= from && h.date <= to); }
+  async function addHoliday(h) {
+    h.id = genId('hol');
+    return insertRow('holidays', h);
+  }
+  async function updateHoliday(id, patch) {
+    await updateRow('holidays', id, patch);
+    return getHoliday(id);
+  }
+  async function deleteHoliday(id) {
+    await deleteRow('holidays', id);
+  }
+
   return {
     init, onRemoteChange,
     listEmployees, getEmployee, addEmployee, updateEmployee, deleteEmployee,
@@ -337,5 +443,6 @@ const Store = (function () {
     listDeductions, deductionsInRange, addDeduction, deleteDeduction,
     listProbations, getProbation, getProbationByEmployee, addProbation, updateProbation, deleteProbation,
     getPayrollOverride, setPayrollOverride,
+    listHolidays, getHoliday, holidaysInRange, addHoliday, updateHoliday, deleteHoliday,
   };
 })();

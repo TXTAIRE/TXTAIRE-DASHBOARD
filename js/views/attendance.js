@@ -64,7 +64,7 @@ window.Views.attendance = (function () {
 
   function openAttendanceModal(main, empId, recId) {
     const rec = recId ? Store.listAttendance().find(a => a.id === recId) : null;
-    const r = rec || { employeeId: empId || '', date: selectedDate, status: 'Present', timeIn: '08:00', timeOut: '17:00', hours: 8 };
+    const r = rec || { employeeId: empId || '', date: selectedDate, status: 'Present', timeIn: '09:00', timeOut: '18:00', hours: 8 };
 
     openModal(`
       <h2>${rec ? 'Edit attendance' : 'Log attendance'}</h2>

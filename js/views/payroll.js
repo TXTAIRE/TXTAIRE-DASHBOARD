@@ -2,13 +2,16 @@ window.Views.payroll = (function () {
   let activeTab = 'payroll';
   const today = new Date(todayISO() + 'T00:00:00');
   let group = '10-20';
-  let year = today.getFullYear();
-  let month = today.getMonth() + 1;
-  let half = defaultCutoffHalf(group, today.getDate());
+  let pos = defaultCutoffPosition(group, today.getFullYear(), today.getMonth() + 1, today.getDate());
+  let year = pos.year;
+  let month = pos.month;
+  let half = pos.half;
 
   function setGroup(g) {
     group = g;
-    half = defaultCutoffHalf(group, new Date(todayISO() + 'T00:00:00').getDate());
+    const t = new Date(todayISO() + 'T00:00:00');
+    const p = defaultCutoffPosition(group, t.getFullYear(), t.getMonth() + 1, t.getDate());
+    year = p.year; month = p.month; half = p.half;
   }
 
   function shiftMonth(delta) {
@@ -20,24 +23,73 @@ window.Views.payroll = (function () {
   }
 
   function computeRow(emp, from, to) {
-    const presentRecords = Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id && (a.status === 'Present' || a.status === 'Late'));
+    const allRecords = Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id);
+    const presentRecords = allRecords.filter(a => a.status === 'Present' || a.status === 'Late');
     const attendanceDays = presentRecords.length;
     const override = Store.getPayrollOverride(emp.id, from);
-    const daysPresent = override ? Number(override.daysPresent) : attendanceDays;
-    const isOverridden = !!override;
+    const daysPresent = override && override.daysPresent != null ? Number(override.daysPresent) : attendanceDays;
+    const isOverridden = !!(override && override.daysPresent != null);
+
+    const holidays = Store.holidaysInRange(from, to);
+    const holidayByDate = {};
+    holidays.forEach(h => { holidayByDate[h.date] = h; });
+
+    // Absence accounting excludes ALL holidays (regular or special) — a monthly-paid
+    // employee's salary isn't reduced for either, per standard DOLE treatment. Only
+    // genuine no-shows on ordinary working days count as a deductible absence.
+    const workDays = workDaysInRange(from, to);
+    const holidayWorkDayCount = holidays.filter(h => new Date(h.date + 'T00:00:00').getDay() !== 0).length;
+    const ordinaryWorkDays = Math.max(0, workDays - holidayWorkDayCount);
+    const presentOnOrdinaryDays = presentRecords.filter(r => !holidayByDate[r.date]).length;
+    const computedAbsent = Math.max(0, ordinaryWorkDays - presentOnOrdinaryDays);
+    const isAbsentOverridden = !!(override && override.daysAbsent != null);
+    const daysAbsent = isAbsentOverridden ? Number(override.daysAbsent) : computedAbsent;
+
     const basePay = emp.payType === 'Daily' ? emp.rate * daysPresent : emp.rate;
-    const allowance = (emp.allowancePerDay || 0) * daysPresent + (emp.fixedAllowance || 0);
-    // Night shift differential = (hours ÷ 8) × (daily rate × 10%), summed per logged attendance day.
-    // Always computed from actual attendance records (needs real hours logged that day) even if
-    // "days present" above was manually overridden for base pay/allowance purposes.
-    const nightDiff = emp.nightShiftDifferential
-      ? presentRecords.reduce((s, r) => s + (Number(r.hours) || 0) / 8 * (emp.rate * 0.10), 0)
-      : 0;
-    const gross = basePay + allowance + nightDiff;
+    const colaPay = (emp.allowancePerDay || 0) * daysPresent + (emp.fixedAllowance || 0);
+    const housingPay = emp.housingAllowance || 0;
+
+    const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (workDays > 0 ? emp.rate / workDays : 0);
+    const hourlyRate = dailyRateEq / 8;
+
+    // NSD, OT, and holiday pay per day, via the shared computeDayPay() (also used by the
+    // printable DTR so both stay in agreement).
+    let otPay = 0, nsdPay = 0;
+    presentRecords.forEach(r => {
+      const day = computeDayPay(dailyRateEq, r, holidayByDate[r.date]);
+      otPay += day.otPay;
+      nsdPay += day.nsdPay;
+    });
+
+    let holidayPay = 0;
+    holidays.forEach(h => {
+      const rec = presentRecords.find(r => r.date === h.date);
+      holidayPay += computeDayPay(dailyRateEq, rec, h).holidayPay;
+    });
+
+    // Late/undertime: for any Present/Late day logged under 8 hours, the shortfall is
+    // unpaid ("no work, no pay" applies to partial days too) — separate from the
+    // full-day absence deduction above, and separate from OT (which only ever adds).
+    let lateUndertimeDed = 0;
+    presentRecords.forEach(r => {
+      const hrs = Number(r.hours) || 0;
+      lateUndertimeDed += Math.max(0, 8 - hrs) * hourlyRate;
+    });
+
+    const gross = basePay + colaPay + housingPay + nsdPay + otPay + holidayPay;
     const tax = withholdingTax(gross);
-    const dedTotal = Store.deductionsInRange(from, to).filter(d => d.employeeId === emp.id).reduce((s, d) => s + Number(d.amount), 0);
+
+    const manualDed = Store.deductionsInRange(from, to).filter(d => d.employeeId === emp.id).reduce((s, d) => s + Number(d.amount), 0);
+    // Daily-rate staff are already unpaid for absent days (base pay only counts days present).
+    // Monthly-rate staff get a flat rate regardless of attendance, so ordinary-day absences are
+    // converted into an automatic deduction at the per-day-equivalent rate.
+    const attendanceDed = emp.payType === 'Monthly' && ordinaryWorkDays > 0 ? (emp.rate / ordinaryWorkDays) * daysAbsent : 0;
+    const dedTotal = manualDed + attendanceDed + lateUndertimeDed;
     const net = gross - tax - dedTotal;
-    return { emp, daysPresent, isOverridden, basePay, allowance, nightDiff, gross, tax, dedTotal, net };
+    return {
+      emp, daysPresent, isOverridden, workDays, daysAbsent, isAbsentOverridden, basePay, colaPay, housingPay,
+      nsdPay, otPay, holidayPay, gross, tax, manualDed, attendanceDed, lateUndertimeDed, dedTotal, net,
+    };
   }
 
   function renderView(main) {
@@ -46,25 +98,30 @@ window.Views.payroll = (function () {
       <div class="page-head">
         <div>
           <h1 class="page-title">Payroll</h1>
-          <div class="page-sub">Engineers, Managers, and Admins are paid every 10th &amp; 20th of the month. Technicians are paid every 15th &amp; 30th/31st. Gross pay = base pay + allowance + night shift differential; net pay = gross pay − withholding tax − deductions.</div>
+          <div class="page-sub">Admins (Admin &amp; Office Staff) are paid every 10th &amp; 20th; Technicians (Field Personnel) every 15th &amp; the last day of the month. Both schedules pay twice a month with no cutoff exceeding 16 days, per the Labor Code of the Philippines. Gross pay = base pay + COLA + housing allowance + night shift differential + overtime + holiday pay; net pay = gross pay − withholding tax − deductions.</div>
         </div>
         ${activeTab === 'deductions' ? '<button class="btn btn-primary" id="btn-new-deduction">+ New deduction</button>' : ''}
+        ${activeTab === 'holidays' ? '<button class="btn btn-primary" id="btn-new-holiday">+ Add holiday</button>' : ''}
       </div>
 
       <div class="tabs">
         <div class="tab ${activeTab === 'payroll' ? 'active' : ''}" data-tab="payroll">Payroll</div>
         <div class="tab ${activeTab === 'deductions' ? 'active' : ''}" data-tab="deductions">Deductions</div>
+        <div class="tab ${activeTab === 'holidays' ? 'active' : ''}" data-tab="holidays">Holidays</div>
       </div>
 
       <div id="tab-body"></div>
     `;
 
     qsa('.tab', main).forEach(t => t.addEventListener('click', () => { activeTab = t.dataset.tab; renderView(main); }));
-    const btnNew = qs('#btn-new-deduction', main);
-    if (btnNew) btnNew.addEventListener('click', () => openDeductionForm(main));
+    const btnNewDed = qs('#btn-new-deduction', main);
+    if (btnNewDed) btnNewDed.addEventListener('click', () => openDeductionForm(main));
+    const btnNewHol = qs('#btn-new-holiday', main);
+    if (btnNewHol) btnNewHol.addEventListener('click', () => openHolidayForm(main));
 
     if (activeTab === 'payroll') renderPayrollTab(qs('#tab-body', main), main);
-    else renderDeductionsTab(qs('#tab-body', main), main);
+    else if (activeTab === 'deductions') renderDeductionsTab(qs('#tab-body', main), main);
+    else renderHolidaysTab(qs('#tab-body', main), main);
   }
 
   function renderPayrollTab(body, main) {
@@ -78,10 +135,16 @@ window.Views.payroll = (function () {
     rows.sort((a, b) => a.emp.name.localeCompare(b.emp.name));
 
     const totalGross = rows.reduce((s, r) => s + r.gross, 0);
-    const totalAllowance = rows.reduce((s, r) => s + r.allowance, 0);
-    const totalNightDiff = rows.reduce((s, r) => s + r.nightDiff, 0);
+    const totalCola = rows.reduce((s, r) => s + r.colaPay, 0);
+    const totalHousing = rows.reduce((s, r) => s + r.housingPay, 0);
+    const totalNsd = rows.reduce((s, r) => s + r.nsdPay, 0);
+    const totalOt = rows.reduce((s, r) => s + r.otPay, 0);
+    const totalHoliday = rows.reduce((s, r) => s + r.holidayPay, 0);
     const totalTax = rows.reduce((s, r) => s + r.tax, 0);
     const totalDed = rows.reduce((s, r) => s + r.dedTotal, 0);
+    const totalAttendanceDed = rows.reduce((s, r) => s + r.attendanceDed, 0);
+    const totalLateUndertimeDed = rows.reduce((s, r) => s + r.lateUndertimeDed, 0);
+    const totalAbsentDays = rows.reduce((s, r) => s + r.daysAbsent, 0);
     const totalNet = rows.reduce((s, r) => s + r.net, 0);
 
     body.innerHTML = `
@@ -89,7 +152,7 @@ window.Views.payroll = (function () {
         <div class="field">
           <label>Pay group</label>
           <div class="seg" id="seg-group">
-            <button data-val="10-20" class="${group === '10-20' ? 'active' : ''}">Engineers / Managers / Admins</button>
+            <button data-val="10-20" class="${group === '10-20' ? 'active' : ''}">Admins</button>
             <button data-val="15-30" class="${group === '15-30' ? 'active' : ''}">Technicians</button>
           </div>
         </div>
@@ -105,39 +168,48 @@ window.Views.payroll = (function () {
             ${cutoffs.map(c => `<button data-val="${c.key}" class="${half === c.key ? 'active' : ''}">${c.label}</button>`).join('')}
           </div>
         </div>
+        <button class="btn btn-ghost btn-sm" id="btn-reset-absences" style="align-self:flex-end;" title="Sets Absent to 0 for every staff member shown below, for this cutoff only">Reset absences to 0</button>
       </div>
 
       <div class="page-sub" style="margin-bottom:10px;">${monthLabel} · ${selected.label} · payday ${fmtDate(selected.payDate)} · ${rows.length} staff on this schedule</div>
 
       <div class="kpi-row">
-        <div class="kpi-card"><div class="kpi-label">Total Gross</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(totalGross)}</div><div class="kpi-sub">incl. ${fmtMoney(totalAllowance)} allowance, ${fmtMoney(totalNightDiff)} night diff.</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Gross</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(totalGross)}</div><div class="kpi-sub">incl. ${fmtMoney(totalCola)} COLA, ${fmtMoney(totalHousing)} housing, ${fmtMoney(totalNsd)} NSD, ${fmtMoney(totalOt)} OT, ${fmtMoney(totalHoliday)} holiday</div></div>
         <div class="kpi-card"><div class="kpi-label">Total Withholding Tax</div><div class="kpi-value ${totalTax ? 'red' : ''}" style="font-size:20px;">${fmtMoney(totalTax)}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Total Deductions</div><div class="kpi-value ${totalDed ? 'red' : ''}" style="font-size:20px;">${fmtMoney(totalDed)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Deductions</div><div class="kpi-value ${totalDed ? 'red' : ''}" style="font-size:20px;">${fmtMoney(totalDed)}</div>${totalAttendanceDed || totalLateUndertimeDed ? `<div class="kpi-sub">incl. ${fmtMoney(totalAttendanceDed)} absences, ${fmtMoney(totalLateUndertimeDed)} late/undertime</div>` : ''}</div>
+        <div class="kpi-card"><div class="kpi-label">Total Absent Days</div><div class="kpi-value ${totalAbsentDays ? 'red' : ''}" style="font-size:20px;">${totalAbsentDays}</div></div>
         <div class="kpi-card"><div class="kpi-label">Total Net Pay</div><div class="kpi-value green" style="font-size:20px;">${fmtMoney(totalNet)}</div></div>
         <div class="kpi-card"><div class="kpi-label">Staff on Schedule</div><div class="kpi-value">${rows.length}</div></div>
       </div>
 
-      <div class="hint">Days present is editable — type over it and press Enter or click away to recompute base pay, allowance, gross, tax, and net pay for that cutoff. Edited values are saved and override the attendance-derived count. Night shift differential is the exception: it's always computed from actual logged attendance hours for that cutoff, regardless of any days-present override.</div>
+      <div class="hint">Days Present and Absent are both editable — type over either and press Enter or click away to recompute pay for that cutoff. Edited values are saved per employee per cutoff and override the attendance-derived counts (each independently). Night shift differential (10% of hourly rate, 10pm-6am) and overtime (125% ordinary / 169% special holiday / 260% regular holiday) are the exception: both are always computed from actual logged time in/out and hours for that cutoff, regardless of any override. Holiday pay uses the Holidays tab's calendar — 200%/130% premium if worked, full pay for an unworked regular holiday, nothing extra for an unworked special day. Absences are unpaid automatically for daily-rate staff (base pay only counts days present); for monthly-rate staff they're converted into an automatic deduction at the per-day-equivalent rate. Late/undertime (a logged day under 8 hours) is also unpaid for the shortfall, separately from full-day absences. Both fold into the Deductions total.</div>
 
       <div class="panel">
         ${rows.length ? `
         <table>
-          <thead><tr><th>Staff</th><th>Position</th><th class="num">Days Present</th><th class="num">Base Pay</th><th class="num">Allowance</th><th class="num">Night Diff.</th><th class="num">Gross Pay</th><th class="num">Withholding Tax</th><th class="num">Deductions</th><th class="num">Net Pay</th></tr></thead>
+          <thead><tr><th>Staff</th><th>Position</th><th class="num">Days Present</th><th class="num">Absent</th><th class="num">Base Pay</th><th class="num">COLA</th><th class="num">Housing</th><th class="num">NSD</th><th class="num">OT</th><th class="num">Holiday</th><th class="num">Gross Pay</th><th class="num">Withholding Tax</th><th class="num">Deductions</th><th class="num">Net Pay</th><th></th></tr></thead>
           <tbody>
             ${rows.map(r => `
               <tr>
                 <td class="name">${escapeHtml(r.emp.name)}</td>
                 <td class="dim">${escapeHtml(r.emp.position)}</td>
                 <td class="num">
-                  <input type="number" class="days-input" min="0" step="0.5" value="${r.daysPresent}" data-emp="${r.emp.id}" title="${r.isOverridden ? 'Manually edited — overrides attendance count' : 'From attendance records'}" style="${r.isOverridden ? 'border-color:var(--accent);' : ''}" />
+                  <input type="number" class="days-input" min="0" step="0.5" value="${r.daysPresent}" data-emp="${r.emp.id}" title="${r.isOverridden ? 'Manually edited — overrides attendance count' : 'From attendance records'} · ${r.workDays} working days in this cutoff" style="${r.isOverridden ? 'border-color:var(--accent);' : ''}" />
+                </td>
+                <td class="num">
+                  <input type="number" class="absent-input ${r.daysAbsent ? 'red' : ''}" min="0" step="0.5" value="${r.daysAbsent}" data-emp="${r.emp.id}" title="${r.isAbsentOverridden ? 'Manually edited — overrides the attendance-derived count' : 'Ordinary working days in cutoff (excl. holidays) − days present'}" style="${r.isAbsentOverridden ? 'border-color:var(--accent);' : ''}" />
                 </td>
                 <td class="num">${fmtMoney(r.basePay)}</td>
-                <td class="num ${r.allowance ? '' : 'dim'}">${r.allowance ? fmtMoney(r.allowance) : '—'}</td>
-                <td class="num ${r.nightDiff ? '' : 'dim'}">${r.nightDiff ? fmtMoney(r.nightDiff) : '—'}</td>
+                <td class="num ${r.colaPay ? '' : 'dim'}">${r.colaPay ? fmtMoney(r.colaPay) : '—'}</td>
+                <td class="num ${r.housingPay ? '' : 'dim'}">${r.housingPay ? fmtMoney(r.housingPay) : '—'}</td>
+                <td class="num ${r.nsdPay ? '' : 'dim'}">${r.nsdPay ? fmtMoney(r.nsdPay) : '—'}</td>
+                <td class="num ${r.otPay ? '' : 'dim'}">${r.otPay ? fmtMoney(r.otPay) : '—'}</td>
+                <td class="num ${r.holidayPay ? '' : 'dim'}">${r.holidayPay ? fmtMoney(r.holidayPay) : '—'}</td>
                 <td class="num" style="font-weight:600;">${fmtMoney(r.gross)}</td>
                 <td class="num ${r.tax ? '' : 'dim'}">${r.tax ? fmtMoney(r.tax) : '—'}</td>
-                <td class="num ${r.dedTotal ? '' : 'dim'}">${r.dedTotal ? fmtMoney(r.dedTotal) : '—'}</td>
+                <td class="num ${r.dedTotal ? '' : 'dim'}" title="${[r.attendanceDed ? 'Incl. ' + fmtMoney(r.attendanceDed) + ' for ' + r.daysAbsent + ' absent day(s)' : '', r.lateUndertimeDed ? fmtMoney(r.lateUndertimeDed) + ' for late/undertime' : ''].filter(Boolean).join('; ')}">${r.dedTotal ? fmtMoney(r.dedTotal) : '—'}</td>
                 <td class="num" style="font-weight:700;">${fmtMoney(r.net)}</td>
+                <td><button class="link-btn" data-dtr="${r.emp.id}">DTR →</button></td>
               </tr>
             `).join('')}
           </tbody>
@@ -149,10 +221,30 @@ window.Views.payroll = (function () {
       input.addEventListener('change', async () => {
         const val = Number(input.value);
         if (!isNaN(val) && val >= 0) {
-          await Store.setPayrollOverride(input.dataset.emp, selected.from, val);
+          await Store.setPayrollOverride(input.dataset.emp, selected.from, { daysPresent: val });
           renderPayrollTab(body, main);
         }
       });
+    });
+    qsa('.absent-input', body).forEach(input => {
+      input.addEventListener('change', async () => {
+        const val = Number(input.value);
+        if (!isNaN(val) && val >= 0) {
+          await Store.setPayrollOverride(input.dataset.emp, selected.from, { daysAbsent: val });
+          renderPayrollTab(body, main);
+        }
+      });
+    });
+    qsa('[data-dtr]', body).forEach(btn => btn.addEventListener('click', () => {
+      const row = rows.find(r => r.emp.id === btn.dataset.dtr);
+      if (row) openDTR(row.emp, selected.from, selected.to);
+    }));
+    qs('#btn-reset-absences', body).addEventListener('click', async () => {
+      if (!rows.length) return;
+      if (!confirm(`Set Absent to 0 for all ${rows.length} staff shown, for ${selected.label}?`)) return;
+      await Promise.all(rows.map(r => Store.setPayrollOverride(r.emp.id, selected.from, { daysAbsent: 0 })));
+      toast('Absences reset to 0 for this cutoff.');
+      renderPayrollTab(body, main);
     });
     qsa('#seg-group button', body).forEach(b => b.addEventListener('click', () => { setGroup(b.dataset.val); renderPayrollTab(body, main); }));
     qsa('#seg-cutoff button', body).forEach(b => b.addEventListener('click', () => { half = b.dataset.val; renderPayrollTab(body, main); }));
@@ -199,6 +291,74 @@ window.Views.payroll = (function () {
         renderDeductionsTab(body, main);
       }
     }));
+  }
+
+  function renderHolidaysTab(body, main) {
+    const rows = Store.listHolidays().slice().sort((a, b) => a.date.localeCompare(b.date));
+
+    body.innerHTML = `
+      <div class="hint">Holiday pay is computed automatically on the Payroll tab from this calendar. Add the officially proclaimed dates for each year as they're announced — regular-holiday dates that are fixed by law (Jan 1, Apr 9, May 1, Jun 12, Nov 30, Dec 25, Dec 30, plus Maundy Thursday/Good Friday) can be added as soon as the year is known; movable/proclaimed dates (special non-working days, Eid'l Fitr, Eid'l Adha, National Heroes Day, etc.) should wait for the Malacañang proclamation.</div>
+      <div class="panel">
+        <div class="panel-head"><h3>${rows.length} holiday${rows.length === 1 ? '' : 's'}</h3></div>
+        ${rows.length ? `
+        <table>
+          <thead><tr><th>Date</th><th>Name</th><th>Type</th><th></th></tr></thead>
+          <tbody>
+            ${rows.map(h => `
+              <tr>
+                <td class="dim">${fmtDate(h.date)}</td>
+                <td class="name">${escapeHtml(h.name)}</td>
+                <td><span class="badge ${h.type === 'Regular' ? 'badge-blue' : 'badge-yellow'}">${escapeHtml(h.type)}</span></td>
+                <td><button class="link-btn" data-del="${h.id}">Delete</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>` : '<div class="empty">No holidays on the calendar yet. Add one with the button above.</div>'}
+      </div>
+    `;
+
+    qsa('[data-del]', body).forEach(b => b.addEventListener('click', async () => {
+      if (confirm('Delete this holiday?')) {
+        await Store.deleteHoliday(b.dataset.del);
+        toast('Holiday deleted.');
+        renderHolidaysTab(body, main);
+      }
+    }));
+  }
+
+  function openHolidayForm(main) {
+    openModal(`
+      <h2>Add holiday</h2>
+      <form id="holiday-form">
+        <div class="modal-grid">
+          <div class="field"><label>Date</label><input type="date" name="date" required /></div>
+          <div class="field"><label>Type</label>
+            <select name="type">
+              <option value="Regular">Regular Holiday</option>
+              <option value="Special Non-Working">Special Non-Working</option>
+            </select>
+          </div>
+          <div class="field full"><label>Name</label><input name="name" required placeholder="e.g. Independence Day" /></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Add holiday</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#holiday-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        await Store.addHoliday({
+          date: fd.get('date'),
+          type: fd.get('type'),
+          name: fd.get('name').trim(),
+        });
+        toast('Holiday added.');
+        closeModal();
+        renderView(main);
+      });
+    });
   }
 
   function openDeductionForm(main) {
