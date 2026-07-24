@@ -69,11 +69,18 @@ window.Views.payroll = (function () {
     // COLA, Housing, NSD, OT, and Holiday Pay are each computed automatically, but HR can
     // type a figure directly into any of them on the Payroll tab — same override pattern
     // as Days Present/Absent, saved per employee per cutoff and taking priority whenever set.
+    //
+    // COLA is inherently attendance-based already: allowance/day × days present, so a day
+    // absent simply earns no COLA for that day. Housing Allowance is a flat figure per
+    // cutoff (e.g. "₱500 every cutoff"), so it's prorated the same way monthly base pay is
+    // for absences: full amount if present the whole cutoff, reduced proportionally for
+    // any absence, based on days present ÷ ordinary working days in the cutoff.
     let colaPay = (emp.allowancePerDay || 0) * daysPresent + (emp.fixedAllowance || 0);
     const isColaOverridden = !!(override && override.cola != null);
     if (isColaOverridden) colaPay = Number(override.cola);
 
-    let housingPay = emp.housingAllowance || 0;
+    const housingRatio = ordinaryWorkDays > 0 ? Math.min(1, daysPresent / ordinaryWorkDays) : 0;
+    let housingPay = (emp.housingAllowance || 0) * housingRatio;
     const isHousingOverridden = !!(override && override.housing != null);
     if (isHousingOverridden) housingPay = Number(override.housing);
 
