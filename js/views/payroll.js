@@ -191,7 +191,7 @@ window.Views.payroll = (function () {
       <div class="page-sub" style="margin-bottom:10px;">${monthLabel} · ${selected.label} · payday ${fmtDate(selected.payDate)} · ${rows.length} staff on this schedule</div>
 
       <div class="kpi-row">
-        <div class="kpi-card"><div class="kpi-label">Total Gross</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(totalGross)}</div><div class="kpi-sub">incl. ${fmtMoney(totalCola)} COLA, ${fmtMoney(totalHousing)} housing, ${fmtMoney(totalNsd)} NSD, ${fmtMoney(totalOt)} OT, ${fmtMoney(totalHoliday)} holiday</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Gross</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(totalGross)}</div><div class="kpi-sub">incl. ${fmtMoney(totalCola)} COLA, ${fmtMoney(totalHousing)} housing allowance,${fmtMoney(totalNsd)} NSD, ${fmtMoney(totalOt)} OT, ${fmtMoney(totalHoliday)} holiday</div></div>
         <div class="kpi-card"><div class="kpi-label">Total Withholding Tax</div><div class="kpi-value ${totalTax ? 'red' : ''}" style="font-size:20px;">${fmtMoney(totalTax)}</div></div>
         <div class="kpi-card"><div class="kpi-label">Total Deductions</div><div class="kpi-value ${totalDed ? 'red' : ''}" style="font-size:20px;">${fmtMoney(totalDed)}</div>${totalAttendanceDed || totalLateUndertimeDed ? `<div class="kpi-sub">incl. ${fmtMoney(totalAttendanceDed)} absences, ${fmtMoney(totalLateUndertimeDed)} late/undertime</div>` : ''}</div>
         <div class="kpi-card"><div class="kpi-label">Total Absent Days</div><div class="kpi-value ${totalAbsentDays ? 'red' : ''}" style="font-size:20px;">${totalAbsentDays}</div></div>
@@ -204,7 +204,7 @@ window.Views.payroll = (function () {
       <div class="panel">
         ${rows.length ? `
         <table>
-          <thead><tr><th>Staff</th><th>Position</th><th class="num">Days Present</th><th class="num">Absent</th><th class="num">Base Pay</th><th class="num">COLA</th><th class="num">Housing</th><th class="num">NSD</th><th class="num">OT</th><th class="num">Holiday</th><th class="num">Gross Pay</th><th class="num">Withholding Tax</th><th class="num">Deductions</th><th class="num">Net Pay</th><th></th></tr></thead>
+          <thead><tr><th>Staff</th><th>Position</th><th class="num">Days Present</th><th class="num">Absent</th><th class="num">Base Pay</th><th class="num">COLA</th><th class="num">Housing Allowance</th><th class="num">NSD</th><th class="num">OT</th><th class="num">Holiday</th><th class="num">Gross Pay</th><th class="num">Withholding Tax</th><th class="num">Deductions</th><th class="num">Net Pay</th><th></th></tr></thead>
           <tbody>
             ${rows.map(r => `
               <tr>
