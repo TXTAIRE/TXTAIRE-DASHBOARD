@@ -132,6 +132,11 @@ create table "payrollOverrides" (
   "cutoffFrom" date not null,
   "daysPresent" numeric(4,2),
   "daysAbsent" numeric(4,2),
+  cola numeric(12,2),
+  housing numeric(12,2),
+  nsd numeric(12,2),
+  ot numeric(12,2),
+  holiday numeric(12,2),
   unique("employeeId", "cutoffFrom")
 );
 
@@ -210,3 +215,11 @@ alter publication supabase_realtime add table
 -- (and before "daysPresent" became nullable, to allow an absent-only override row):
 -- alter table "payrollOverrides" add column if not exists "daysAbsent" numeric(4,2);
 -- alter table "payrollOverrides" alter column "daysPresent" drop not null;
+
+-- If you already ran this schema before cola/housing/nsd/ot/holiday were added to
+-- payrollOverrides (to let HR manually enter those figures per employee per cutoff):
+-- alter table "payrollOverrides" add column if not exists cola numeric(12,2);
+-- alter table "payrollOverrides" add column if not exists housing numeric(12,2);
+-- alter table "payrollOverrides" add column if not exists nsd numeric(12,2);
+-- alter table "payrollOverrides" add column if not exists ot numeric(12,2);
+-- alter table "payrollOverrides" add column if not exists holiday numeric(12,2);

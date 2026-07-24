@@ -46,26 +46,41 @@ window.Views.payroll = (function () {
     const daysAbsent = isAbsentOverridden ? Number(override.daysAbsent) : computedAbsent;
 
     const basePay = emp.payType === 'Daily' ? emp.rate * daysPresent : emp.rate;
-    const colaPay = (emp.allowancePerDay || 0) * daysPresent + (emp.fixedAllowance || 0);
-    const housingPay = emp.housingAllowance || 0;
 
     const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (workDays > 0 ? emp.rate / workDays : 0);
     const hourlyRate = dailyRateEq / 8;
 
-    // NSD, OT, and holiday pay per day, via the shared computeDayPay() (also used by the
-    // printable DTR so both stay in agreement).
+    // COLA, Housing, NSD, OT, and Holiday Pay are each computed automatically, but HR can
+    // type a figure directly into any of them on the Payroll tab — same override pattern
+    // as Days Present/Absent, saved per employee per cutoff and taking priority whenever set.
+    let colaPay = (emp.allowancePerDay || 0) * daysPresent + (emp.fixedAllowance || 0);
+    const isColaOverridden = !!(override && override.cola != null);
+    if (isColaOverridden) colaPay = Number(override.cola);
+
+    let housingPay = emp.housingAllowance || 0;
+    const isHousingOverridden = !!(override && override.housing != null);
+    if (isHousingOverridden) housingPay = Number(override.housing);
+
+    // NSD and OT pay per day, via the shared computeDayPay() (also used by the printable
+    // DTR so both stay in agreement), before any override is applied.
     let otPay = 0, nsdPay = 0;
     presentRecords.forEach(r => {
       const day = computeDayPay(dailyRateEq, r, holidayByDate[r.date]);
       otPay += day.otPay;
       nsdPay += day.nsdPay;
     });
+    const isNsdOverridden = !!(override && override.nsd != null);
+    if (isNsdOverridden) nsdPay = Number(override.nsd);
+    const isOtOverridden = !!(override && override.ot != null);
+    if (isOtOverridden) otPay = Number(override.ot);
 
     let holidayPay = 0;
     holidays.forEach(h => {
       const rec = presentRecords.find(r => r.date === h.date);
       holidayPay += computeDayPay(dailyRateEq, rec, h).holidayPay;
     });
+    const isHolidayOverridden = !!(override && override.holiday != null);
+    if (isHolidayOverridden) holidayPay = Number(override.holiday);
 
     // Late/undertime: for any Present/Late day logged under 8 hours, the shortfall is
     // unpaid ("no work, no pay" applies to partial days too) — separate from the
@@ -87,8 +102,10 @@ window.Views.payroll = (function () {
     const dedTotal = manualDed + attendanceDed + lateUndertimeDed;
     const net = gross - tax - dedTotal;
     return {
-      emp, daysPresent, isOverridden, workDays, daysAbsent, isAbsentOverridden, basePay, colaPay, housingPay,
-      nsdPay, otPay, holidayPay, gross, tax, manualDed, attendanceDed, lateUndertimeDed, dedTotal, net,
+      emp, daysPresent, isOverridden, workDays, daysAbsent, isAbsentOverridden, basePay,
+      colaPay, isColaOverridden, housingPay, isHousingOverridden, nsdPay, isNsdOverridden,
+      otPay, isOtOverridden, holidayPay, isHolidayOverridden,
+      gross, tax, manualDed, attendanceDed, lateUndertimeDed, dedTotal, net,
     };
   }
 
@@ -182,7 +199,7 @@ window.Views.payroll = (function () {
         <div class="kpi-card"><div class="kpi-label">Staff on Schedule</div><div class="kpi-value">${rows.length}</div></div>
       </div>
 
-      <div class="hint">Days Present and Absent are both editable — type over either and press Enter or click away to recompute pay for that cutoff. Edited values are saved per employee per cutoff and override the attendance-derived counts (each independently). Night shift differential (10% of hourly rate, 10pm-6am) and overtime (125% ordinary / 169% special holiday / 260% regular holiday) are the exception: both are always computed from actual logged time in/out and hours for that cutoff, regardless of any override. Holiday pay uses the Holidays tab's calendar — 200%/130% premium if worked, full pay for an unworked regular holiday, nothing extra for an unworked special day. Absences are unpaid automatically for daily-rate staff (base pay only counts days present); for monthly-rate staff they're converted into an automatic deduction at the per-day-equivalent rate. Late/undertime (a logged day under 8 hours) is also unpaid for the shortfall, separately from full-day absences. Both fold into the Deductions total.</div>
+      <div class="hint">Days Present, Absent, COLA, Housing, NSD, OT, and Holiday are all editable — type over any of them and press Enter or click away to save and recompute Gross/Net Pay for that cutoff. Each is saved independently per employee per cutoff and takes priority over the computed value (highlighted with a blue border) until cleared back to the computed figure. Left alone, COLA/Housing come from the employee's profile, and NSD/OT/Holiday are computed automatically from logged time in/out and the Holidays tab's calendar (10% NSD differential; 125%/169%/260% OT tiers; 200%/130% holiday premiums, full pay for an unworked regular holiday). Absences are unpaid automatically for daily-rate staff (base pay only counts days present); for monthly-rate staff they're converted into an automatic deduction. Late/undertime (a logged day under 8 hours) is also unpaid for the shortfall. Both fold into the Deductions total.</div>
 
       <div class="panel">
         ${rows.length ? `
@@ -200,11 +217,21 @@ window.Views.payroll = (function () {
                   <input type="number" class="absent-input ${r.daysAbsent ? 'red' : ''}" min="0" step="0.5" value="${r.daysAbsent}" data-emp="${r.emp.id}" title="${r.isAbsentOverridden ? 'Manually edited — overrides the attendance-derived count' : 'Ordinary working days in cutoff (excl. holidays) − days present'}" style="${r.isAbsentOverridden ? 'border-color:var(--accent);' : ''}" />
                 </td>
                 <td class="num">${fmtMoney(r.basePay)}</td>
-                <td class="num ${r.colaPay ? '' : 'dim'}">${r.colaPay ? fmtMoney(r.colaPay) : '—'}</td>
-                <td class="num ${r.housingPay ? '' : 'dim'}">${r.housingPay ? fmtMoney(r.housingPay) : '—'}</td>
-                <td class="num ${r.nsdPay ? '' : 'dim'}">${r.nsdPay ? fmtMoney(r.nsdPay) : '—'}</td>
-                <td class="num ${r.otPay ? '' : 'dim'}">${r.otPay ? fmtMoney(r.otPay) : '—'}</td>
-                <td class="num ${r.holidayPay ? '' : 'dim'}">${r.holidayPay ? fmtMoney(r.holidayPay) : '—'}</td>
+                <td class="num">
+                  <input type="number" class="cola-input" min="0" step="0.01" value="${r.colaPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isColaOverridden ? 'Manually edited — overrides (allowance/day × days present) + fixed COLA' : "Computed from the employee's COLA rate"}" style="${r.isColaOverridden ? 'border-color:var(--accent);' : ''}" />
+                </td>
+                <td class="num">
+                  <input type="number" class="housing-input" min="0" step="0.01" value="${r.housingPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isHousingOverridden ? "Manually edited — overrides the employee's housing allowance" : "From the employee's housing allowance"}" style="${r.isHousingOverridden ? 'border-color:var(--accent);' : ''}" />
+                </td>
+                <td class="num">
+                  <input type="number" class="nsd-input" min="0" step="0.01" value="${r.nsdPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isNsdOverridden ? 'Manually edited — overrides the computed night shift differential' : 'Computed from logged time in/out, 10pm-6am'}" style="${r.isNsdOverridden ? 'border-color:var(--accent);' : ''}" />
+                </td>
+                <td class="num">
+                  <input type="number" class="ot-input" min="0" step="0.01" value="${r.otPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isOtOverridden ? 'Manually edited — overrides the computed overtime pay' : 'Computed from logged hours beyond 8/day'}" style="${r.isOtOverridden ? 'border-color:var(--accent);' : ''}" />
+                </td>
+                <td class="num">
+                  <input type="number" class="holiday-input" min="0" step="0.01" value="${r.holidayPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isHolidayOverridden ? 'Manually edited — overrides the computed holiday pay' : 'Computed from the Holidays tab calendar'}" style="${r.isHolidayOverridden ? 'border-color:var(--accent);' : ''}" />
+                </td>
                 <td class="num" style="font-weight:600;">${fmtMoney(r.gross)}</td>
                 <td class="num ${r.tax ? '' : 'dim'}">${r.tax ? fmtMoney(r.tax) : '—'}</td>
                 <td class="num ${r.dedTotal ? '' : 'dim'}" title="${[r.attendanceDed ? 'Incl. ' + fmtMoney(r.attendanceDed) + ' for ' + r.daysAbsent + ' absent day(s)' : '', r.lateUndertimeDed ? fmtMoney(r.lateUndertimeDed) + ' for late/undertime' : ''].filter(Boolean).join('; ')}">${r.dedTotal ? fmtMoney(r.dedTotal) : '—'}</td>
@@ -233,6 +260,17 @@ window.Views.payroll = (function () {
           await Store.setPayrollOverride(input.dataset.emp, selected.from, { daysAbsent: val });
           renderPayrollTab(body, main);
         }
+      });
+    });
+    [['cola-input', 'cola'], ['housing-input', 'housing'], ['nsd-input', 'nsd'], ['ot-input', 'ot'], ['holiday-input', 'holiday']].forEach(([cls, field]) => {
+      qsa('.' + cls, body).forEach(input => {
+        input.addEventListener('change', async () => {
+          const val = Number(input.value);
+          if (!isNaN(val) && val >= 0) {
+            await Store.setPayrollOverride(input.dataset.emp, selected.from, { [field]: val });
+            renderPayrollTab(body, main);
+          }
+        });
       });
     });
     qsa('[data-dtr]', body).forEach(btn => btn.addEventListener('click', () => {
