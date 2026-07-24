@@ -69,3 +69,8 @@ update employees set rate = 8477.09  where id = 'e_casano';
 update employees set rate = 6275.00  where id = 'e_sangcupan';
 update employees set rate = 5961.96  where id = 'e_famini';
 update employees set rate = 6250.00  where id = 'e_soriano';
+
+-- Night-shift default: these 3 typically work nights, so the Attendance page defaults
+-- their Time In/Out to 10pm-6am instead of the standard 9am-6pm. Does not by itself grant
+-- NSD pay — that's still computed from whatever time in/out actually gets logged.
+update employees set "nightShiftDifferential" = true where id in ('e_dulfo', 'e_francisco', 'e_vargas');

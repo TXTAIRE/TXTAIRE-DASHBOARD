@@ -24,10 +24,11 @@ create table employees (
   "allowancePerDay" numeric(12,2) not null default 0,        -- Cost of Living Allowance (COLA), per day
   "fixedAllowance" numeric(12,2) not null default 0,          -- COLA, flat amount per cutoff
   "housingAllowance" numeric(12,2) not null default 0,        -- Housing/lodging allowance, flat amount per cutoff (distinct from COLA)
-  "nightShiftDifferential" boolean not null default false,    -- superseded: NSD is now computed automatically for
-                                                                -- everyone from actual logged timeIn/timeOut vs. the
-                                                                -- 10pm-6am window (see js/store.js nightOverlapHours).
-                                                                -- Column kept for backward compatibility; unused by the app.
+  "nightShiftDifferential" boolean not null default false,    -- "Typically works night shift" — does NOT affect NSD pay
+                                                                -- itself (that's always computed from actual logged
+                                                                -- timeIn/timeOut vs. the 10pm-6am window, see
+                                                                -- js/store.js nightOverlapHours); only used to default
+                                                                -- the Attendance form's Time In/Out for this employee.
   "payCycle" text not null,                    -- '10-20' | '15-30'
   notes text default '',
   created_at timestamptz not null default now(),

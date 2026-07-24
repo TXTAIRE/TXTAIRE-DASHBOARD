@@ -122,7 +122,7 @@ window.Views.staff = (function () {
 
   function openEmployeeModal(main, id) {
     const editing = id ? Store.getEmployee(id) : null;
-    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, housingAllowance: 0, payCycle: '10-20', notes: '' };
+    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, housingAllowance: 0, nightShiftDifferential: false, payCycle: '10-20', notes: '' };
 
     openModal(`
       <h2>${editing ? 'Edit employee' : 'Add employee'}</h2>
@@ -156,6 +156,12 @@ window.Views.staff = (function () {
           <div class="field"><label>Cost of Living Allowance (COLA) / day</label><input type="number" name="allowancePerDay" min="0" step="0.01" value="${e.allowancePerDay || 0}" /></div>
           <div class="field"><label>Fixed COLA / cutoff (PHP)</label><input type="number" name="fixedAllowance" min="0" step="0.01" value="${e.fixedAllowance || 0}" /></div>
           <div class="field"><label>Housing Allowance / cutoff (PHP)</label><input type="number" name="housingAllowance" min="0" step="0.01" value="${e.housingAllowance || 0}" /></div>
+          <div class="field" style="display:flex; align-items:flex-end; gap:8px; padding-bottom:6px;">
+            <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer;">
+              <input type="checkbox" name="nightShiftDifferential" ${e.nightShiftDifferential ? 'checked' : ''} style="width:auto;" />
+              Typically works night shift
+            </label>
+          </div>
           <div class="field full"><label>Notes</label><textarea name="notes" rows="2">${escapeHtml(e.notes || '')}</textarea></div>
         </div>
         <div class="modal-actions">
@@ -183,6 +189,7 @@ window.Views.staff = (function () {
           allowancePerDay: Number(fd.get('allowancePerDay')) || 0,
           fixedAllowance: Number(fd.get('fixedAllowance')) || 0,
           housingAllowance: Number(fd.get('housingAllowance')) || 0,
+          nightShiftDifferential: fd.get('nightShiftDifferential') === 'on',
           notes: fd.get('notes').trim(),
         };
         if (editing) {
