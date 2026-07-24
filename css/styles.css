@@ -506,7 +506,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .dtr-table .dim { color: #666; font-size: 11.5px; }
 .dtr-summary { margin-top: 22px; }
 .dtr-summary-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
-.dtr-signatures { display: flex; justify-content: space-between; margin-top: 40px; gap: 40px; }
+.dtr-signatures { display: flex; justify-content: space-between; margin-top: 56px; gap: 40px; }
 .dtr-sig { flex: 1; text-align: center; font-size: 12px; }
 .dtr-sig-line { border-top: 1px solid #333; margin-bottom: 6px; padding-top: 36px; }
 
@@ -536,7 +536,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   .dtr-summary-title { font-size: 12px; margin-bottom: 6px; }
   .dtr-summary .dtr-table .dim { font-size: 10px; }
   .dtr-summary + .page-sub { font-size: 10px !important; margin-top: 5px !important; }
-  .dtr-signatures { margin-top: 28px; gap: 40px; }
+  .dtr-signatures { margin-top: 42px; gap: 40px; }
   .dtr-sig { font-size: 11px; }
   .dtr-sig-line { padding-top: 28px; margin-bottom: 5px; }
 }
