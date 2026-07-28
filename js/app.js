@@ -242,7 +242,7 @@ function employeeStatusDot(status) {
   return '<span class="status-dot ' + (map[status] || '') + '">' + escapeHtml(status) + '</span>';
 }
 
-const ROUTES = ['overview', 'staff', 'recruitment', 'probation', 'disciplinary', 'attendance', 'payroll', 'complaints'];
+const ROUTES = ['overview', 'staff', 'recruitment', 'probation', 'disciplinary', 'attendance', 'payroll', 'complaints', 'leaveRequests', 'attendanceCorrections', 'auditLog'];
 
 function currentRoute() {
   const h = (location.hash || '').replace('#', '').split('/')[0];
@@ -271,10 +271,13 @@ function render() {
 }
 
 let appStarted = false;
+let signedInEmail = null;
+function currentUserEmail() { return signedInEmail; }
 
 async function startApp(session) {
   if (appStarted) return;
   appStarted = true;
+  signedInEmail = session.user.email;
 
   hideAuthScreen();
   qs('#user-email').textContent = session.user.email;

@@ -105,6 +105,16 @@ window.Views.staff = (function () {
         Payday: ${PAY_CYCLES[e.payCycle] ? PAY_CYCLES[e.payCycle].cutoffLabels.join(' & ') : '—'}
       </div>
       ${e.notes ? `<div class="section-title">Notes</div><div class="page-sub">${escapeHtml(e.notes)}</div>` : ''}
+      <div class="section-title">Employee Self-Service</div>
+      <div class="page-sub">
+        Employee ID: ${e.employeeCode ? `<strong>${escapeHtml(e.employeeCode)}</strong>` : '<span class="dim">not assigned</span>'}<br/>
+        Portal access: ${e.authUserId ? '<span class="badge badge-green">Enabled</span>' : '<span class="badge badge-gray">Not enabled</span>'}
+      </div>
+      <div class="modal-actions" style="margin-top:8px; justify-content:flex-start;">
+        ${e.authUserId
+          ? `<button class="btn btn-ghost btn-sm" id="btn-revoke-ess">Revoke portal access</button>`
+          : `<button class="btn btn-ghost btn-sm" id="btn-grant-ess">Grant portal access</button>`}
+      </div>
       <div class="section-title">Disciplinary History</div>
       ${cases.length ? `<div class="timeline">${cases.map(c => `
         <div class="tl-item"><div class="tl-dot"></div><div class="tl-body">
@@ -117,6 +127,56 @@ window.Views.staff = (function () {
       </div>
     `, (dr) => {
       qs('#drawer-edit', dr).addEventListener('click', () => { closeDrawer(); openEmployeeModal(main, id); });
+      const grantBtn = qs('#btn-grant-ess', dr);
+      if (grantBtn) grantBtn.addEventListener('click', () => openGrantEssAccess(main, e));
+      const revokeBtn = qs('#btn-revoke-ess', dr);
+      if (revokeBtn) revokeBtn.addEventListener('click', async () => {
+        if (confirm(`Revoke ${e.name}'s Employee Self-Service login? They will no longer be able to sign into the portal.`)) {
+          await Store.updateEmployee(e.id, { authUserId: null });
+          toast('Portal access revoked.');
+          closeDrawer();
+          renderList(main);
+        }
+      });
+    });
+  }
+
+  // Links this employee's row to a Supabase Auth user so they can sign into ess.html.
+  // The actual auth account is created manually in the Supabase Dashboard (Authentication
+  // → Add user, synthetic email `<employeeCode-lowercased>@employees.txtaire.local`) —
+  // same invite-only process already used for HR/Admin logins. This just pastes in the
+  // resulting user's UUID and, if missing, assigns an Employee ID.
+  function openGrantEssAccess(main, e) {
+    const suggestedCode = e.employeeCode || '';
+    openModal(`
+      <h2>Grant portal access — ${escapeHtml(e.name)}</h2>
+      <div class="modal-sub">
+        First, create the login in Supabase Dashboard → Authentication → Add user, using the
+        email <code>${escapeHtml((e.employeeCode || 'EMPLOYEE-ID').toLowerCase())}@employees.txtaire.local</code>
+        and an initial password. Then paste that user's UUID here.
+      </div>
+      <form id="ess-grant-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Employee ID</label><input name="employeeCode" required value="${escapeHtml(suggestedCode)}" placeholder="e.g. TXAT-021" /></div>
+          <div class="field full"><label>Supabase Auth User UUID</label><input name="authUserId" required placeholder="e.g. 3fa85f64-5717-4562-b3fc-2c963f66afa6" /></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Grant access</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#ess-grant-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        await Store.updateEmployee(e.id, {
+          employeeCode: fd.get('employeeCode').trim(),
+          authUserId: fd.get('authUserId').trim(),
+        });
+        toast('Portal access granted.');
+        closeModal();
+        renderList(main);
+      });
     });
   }
 

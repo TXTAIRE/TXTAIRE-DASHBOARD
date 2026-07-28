@@ -152,5 +152,16 @@ window.Views.attendance = (function () {
     });
   }
 
-  return { render: renderView };
+  // Jumps straight to editing (or logging) one employee's attendance for one date —
+  // used by the Attendance Corrections review screen's "Edit attendance record" link.
+  function openFor(employeeId, date) {
+    const main = qs('#main-content');
+    if (!main) return;
+    selectedDate = date;
+    renderView(main);
+    const rec = Store.listAttendance().find(a => a.employeeId === employeeId && a.date === date);
+    openAttendanceModal(main, employeeId, rec ? rec.id : null);
+  }
+
+  return { render: renderView, openFor };
 })();

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TxTAIRE · My Portal</title>
+<link rel="stylesheet" href="css/styles.css" />
+<link rel="stylesheet" href="css/ess.css" />
+</head>
+<body>
+<div id="ess-login" class="hidden"></div>
+<div id="ess-app" class="hidden">
+  <header class="ess-header">
+    <img src="assets/logo.svg" alt="TxTAIRE" class="ess-logo" />
+    <button id="ess-logout" class="link-btn">Sign out</button>
+  </header>
+  <main id="ess-main" class="ess-main"></main>
+  <nav id="ess-nav" class="ess-nav">
+    <button class="ess-nav-btn" data-route="attendance"><span class="ess-nav-ic">&#128337;</span>My Attendance</button>
+    <button class="ess-nav-btn" data-route="payroll"><span class="ess-nav-ic">&#128176;</span>My Payroll</button>
+    <button class="ess-nav-btn" data-route="leave"><span class="ess-nav-ic">&#128196;</span>My Leave</button>
+    <button class="ess-nav-btn" data-route="profile"><span class="ess-nav-ic">&#128100;</span>My Profile</button>
+  </nav>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/store.js"></script>
+<script src="js/ess-app.js"></script>
+<script src="js/ess-views/attendance.js"></script>
+<script src="js/ess-views/payroll.js"></script>
+<script src="js/ess-views/leave.js"></script>
+<script src="js/ess-views/profile.js"></script>
+</body>
+</html>

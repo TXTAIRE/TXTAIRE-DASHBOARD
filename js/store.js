@@ -202,6 +202,87 @@ function computeDayPay(dailyRateEq, rec, holiday) {
   return { otHrs, otPay, nsdHrs, nsdPay, holidayPay };
 }
 
+// Full payroll computation for one employee over one cutoff — shared by the admin
+// Payroll tab and the Employee Self-Service "My Payroll" page so both always show
+// exactly the same numbers. Reads attendance/holidays/deductions/overrides straight
+// from the Store, so it stays live as records change.
+function computeRow(emp, from, to) {
+  const allRecords = Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id);
+  const presentRecords = allRecords.filter(a => a.status === 'Present' || a.status === 'Late');
+  const attendanceDays = presentRecords.length;
+  const override = Store.getPayrollOverride(emp.id, from);
+  const daysPresent = override && override.daysPresent != null ? Number(override.daysPresent) : attendanceDays;
+  const isOverridden = !!(override && override.daysPresent != null);
+
+  const holidays = Store.holidaysInRange(from, to);
+  const holidayByDate = {};
+  holidays.forEach(h => { holidayByDate[h.date] = h; });
+
+  const workDays = workDaysInRange(from, to);
+  const holidayWorkDayCount = holidays.filter(h => new Date(h.date + 'T00:00:00').getDay() !== 0).length;
+  const ordinaryWorkDays = Math.max(0, workDays - holidayWorkDayCount);
+  const presentOnOrdinaryDays = presentRecords.filter(r => !holidayByDate[r.date]).length;
+  const computedAbsent = Math.max(0, ordinaryWorkDays - presentOnOrdinaryDays);
+  const isAbsentOverridden = !!(override && override.daysAbsent != null);
+  const daysAbsent = isAbsentOverridden ? Number(override.daysAbsent) : computedAbsent;
+
+  let basePay = emp.payType === 'Daily' ? emp.rate * daysPresent : emp.rate;
+  const isBasePayOverridden = !!(override && override.basePay != null);
+  if (isBasePayOverridden) basePay = Number(override.basePay);
+
+  const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (workDays > 0 ? emp.rate / workDays : 0);
+  const hourlyRate = dailyRateEq / 8;
+
+  let colaPay = (emp.allowancePerDay || 0) * daysPresent + (emp.fixedAllowance || 0);
+  const isColaOverridden = !!(override && override.cola != null);
+  if (isColaOverridden) colaPay = Number(override.cola);
+
+  const housingRatio = ordinaryWorkDays > 0 ? Math.min(1, daysPresent / ordinaryWorkDays) : 0;
+  let housingPay = (emp.housingAllowance || 0) * housingRatio;
+  const isHousingOverridden = !!(override && override.housing != null);
+  if (isHousingOverridden) housingPay = Number(override.housing);
+
+  let otPay = 0, nsdPay = 0;
+  presentRecords.forEach(r => {
+    const day = computeDayPay(dailyRateEq, r, holidayByDate[r.date]);
+    otPay += day.otPay;
+    nsdPay += day.nsdPay;
+  });
+  const isNsdOverridden = !!(override && override.nsd != null);
+  if (isNsdOverridden) nsdPay = Number(override.nsd);
+  const isOtOverridden = !!(override && override.ot != null);
+  if (isOtOverridden) otPay = Number(override.ot);
+
+  let holidayPay = 0;
+  holidays.forEach(h => {
+    const rec = presentRecords.find(r => r.date === h.date);
+    holidayPay += computeDayPay(dailyRateEq, rec, h).holidayPay;
+  });
+  const isHolidayOverridden = !!(override && override.holiday != null);
+  if (isHolidayOverridden) holidayPay = Number(override.holiday);
+
+  let lateUndertimeDed = 0;
+  presentRecords.forEach(r => {
+    const hrs = Number(r.hours) || 0;
+    lateUndertimeDed += Math.max(0, 8 - hrs) * hourlyRate;
+  });
+
+  const gross = basePay + colaPay + housingPay + nsdPay + otPay + holidayPay;
+  const tax = withholdingTax(gross);
+
+  const manualDed = Store.deductionsInRange(from, to).filter(d => d.employeeId === emp.id).reduce((s, d) => s + Number(d.amount), 0);
+  const attendanceDed = emp.payType === 'Monthly' && ordinaryWorkDays > 0 ? (emp.rate / ordinaryWorkDays) * daysAbsent : 0;
+  const dedTotal = manualDed + attendanceDed + lateUndertimeDed;
+  const net = gross - tax - dedTotal;
+
+  return {
+    emp, daysPresent, isOverridden, workDays, daysAbsent, isAbsentOverridden, basePay, isBasePayOverridden,
+    colaPay, isColaOverridden, housingPay, isHousingOverridden, nsdPay, isNsdOverridden,
+    otPay, isOtOverridden, holidayPay, isHolidayOverridden,
+    gross, tax, manualDed, attendanceDed, lateUndertimeDed, dedTotal, net,
+  };
+}
+
 const Store = (function () {
   const TABLES = {
     employees: 'employees',
@@ -213,11 +294,15 @@ const Store = (function () {
     probationRecords: 'probationRecords',
     payrollOverrides: 'payrollOverrides',
     holidays: 'holidays',
+    leaveRequests: 'leaveRequests',
+    attendanceCorrections: 'attendanceCorrections',
+    auditLog: 'auditLog',
   };
 
   const state = {
     employees: [], candidates: [], disciplinaryCases: [], complaints: [],
     attendance: [], deductions: [], probationRecords: [], payrollOverrides: [], holidays: [],
+    leaveRequests: [], attendanceCorrections: [], auditLog: [],
   };
 
   let remoteChangeCallback = null;
@@ -260,18 +345,37 @@ const Store = (function () {
     }
   }
 
+  // Best-effort audit trail: one row per mutation (employees, payroll overrides,
+  // disciplinary actions, etc.), independent of the main operation — a logging failure
+  // never blocks or fails the actual save. Not used for auditLog itself (would recurse).
+  async function logAudit(action, table, id, details) {
+    if (table === TABLES.auditLog) return;
+    try {
+      const { data } = await sb.auth.getUser();
+      await sb.from(TABLES.auditLog).insert({
+        id: genId('log'),
+        actorEmail: data && data.user ? data.user.email : null,
+        action, targetTable: table, targetId: id || null,
+        details: details || {},
+      });
+    } catch (e) { /* audit logging is best-effort */ }
+  }
+
   async function insertRow(key, row) {
     await mutate(sb.from(TABLES[key]).insert(sanitize(row)), 'Save failed');
     await refetch(key);
+    logAudit(key + '.insert', TABLES[key], row.id, row);
     return row;
   }
   async function updateRow(key, id, patch) {
     await mutate(sb.from(TABLES[key]).update(sanitize(patch)).eq('id', id), 'Save failed');
     await refetch(key);
+    logAudit(key + '.update', TABLES[key], id, patch);
   }
   async function deleteRow(key, id) {
     await mutate(sb.from(TABLES[key]).delete().eq('id', id), 'Delete failed');
     await refetch(key);
+    logAudit(key + '.delete', TABLES[key], id, null);
   }
 
   // ---- Employees ----
@@ -433,6 +537,37 @@ const Store = (function () {
     await deleteRow('holidays', id);
   }
 
+  // ---- Leave Requests (Employee Self-Service) ----
+  function listLeaveRequests() { return state.leaveRequests.slice(); }
+  function getLeaveRequest(id) { return state.leaveRequests.find(r => r.id === id); }
+  function leaveRequestsForEmployee(employeeId) { return state.leaveRequests.filter(r => r.employeeId === employeeId); }
+  async function addLeaveRequest(r) {
+    r.id = genId('lr');
+    r.status = 'Pending';
+    return insertRow('leaveRequests', r);
+  }
+  async function reviewLeaveRequest(id, status, reviewedBy, reviewNotes) {
+    await updateRow('leaveRequests', id, { status, reviewedBy, reviewedDate: todayISO(), reviewNotes: reviewNotes || '' });
+    return getLeaveRequest(id);
+  }
+
+  // ---- Attendance Corrections (Employee Self-Service) ----
+  function listAttendanceCorrections() { return state.attendanceCorrections.slice(); }
+  function getAttendanceCorrection(id) { return state.attendanceCorrections.find(c => c.id === id); }
+  function attendanceCorrectionsForEmployee(employeeId) { return state.attendanceCorrections.filter(c => c.employeeId === employeeId); }
+  async function addAttendanceCorrection(c) {
+    c.id = genId('ac');
+    c.status = 'Pending';
+    return insertRow('attendanceCorrections', c);
+  }
+  async function reviewAttendanceCorrection(id, status, reviewedBy, reviewNotes) {
+    await updateRow('attendanceCorrections', id, { status, reviewedBy, reviewedDate: todayISO(), reviewNotes: reviewNotes || '' });
+    return getAttendanceCorrection(id);
+  }
+
+  // ---- Audit Log (read-only in the app; populated automatically by insertRow/updateRow/deleteRow) ----
+  function listAuditLog() { return state.auditLog.slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')); }
+
   return {
     init, onRemoteChange,
     listEmployees, getEmployee, addEmployee, updateEmployee, deleteEmployee,
@@ -444,5 +579,8 @@ const Store = (function () {
     listProbations, getProbation, getProbationByEmployee, addProbation, updateProbation, deleteProbation,
     getPayrollOverride, setPayrollOverride,
     listHolidays, getHoliday, holidaysInRange, addHoliday, updateHoliday, deleteHoliday,
+    listLeaveRequests, getLeaveRequest, leaveRequestsForEmployee, addLeaveRequest, reviewLeaveRequest,
+    listAttendanceCorrections, getAttendanceCorrection, attendanceCorrectionsForEmployee, addAttendanceCorrection, reviewAttendanceCorrection,
+    listAuditLog,
   };
 })();
