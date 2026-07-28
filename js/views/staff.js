@@ -143,7 +143,7 @@ window.Views.staff = (function () {
 
   // Links this employee's row to a Supabase Auth user so they can sign into ess.html.
   // The actual auth account is created manually in the Supabase Dashboard (Authentication
-  // → Add user, synthetic email `<employeeCode-lowercased>@employees.txtaire.local`) —
+  // → Add user, synthetic email `<employeeCode-lowercased>@txtaire.local`) —
   // same invite-only process already used for HR/Admin logins. This just pastes in the
   // resulting user's UUID and, if missing, assigns an Employee ID.
   function openGrantEssAccess(main, e) {
@@ -152,7 +152,7 @@ window.Views.staff = (function () {
       <h2>Grant portal access — ${escapeHtml(e.name)}</h2>
       <div class="modal-sub">
         First, create the login in Supabase Dashboard → Authentication → Add user, using the
-        email <code>${escapeHtml((e.employeeCode || 'EMPLOYEE-ID').toLowerCase())}@employees.txtaire.local</code>
+        email <code>${escapeHtml((e.employeeCode || 'EMPLOYEE-ID').toLowerCase())}@txtaire.local</code>
         and an initial password. Then paste that user's UUID here.
       </div>
       <form id="ess-grant-form">
