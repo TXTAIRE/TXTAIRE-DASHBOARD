@@ -589,6 +589,11 @@ const Store = (function () {
   // ---- Audit Log (read-only in the app; populated automatically by insertRow/updateRow/deleteRow) ----
   function listAuditLog() { return state.auditLog.slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')); }
 
+  // ---- Backup: a full snapshot of every table currently loaded in memory. The free
+  // Supabase tier has no automatic backups/point-in-time recovery, so this is what backs
+  // the admin "Download Backup" button — a plain JSON export HR can save wherever they like.
+  function exportAllData() { return JSON.parse(JSON.stringify(state)); }
+
   return {
     init, onRemoteChange,
     listEmployees, getEmployee, addEmployee, updateEmployee, deleteEmployee,
@@ -604,5 +609,6 @@ const Store = (function () {
     listLeaveRequests, getLeaveRequest, leaveRequestsForEmployee, addLeaveRequest, reviewLeaveRequest,
     listAttendanceCorrections, getAttendanceCorrection, attendanceCorrectionsForEmployee, addAttendanceCorrection, reviewAttendanceCorrection,
     listAuditLog,
+    exportAllData, logAudit,
   };
 })();

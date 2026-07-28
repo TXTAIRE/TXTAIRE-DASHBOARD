@@ -46,6 +46,7 @@ window.Views.overview = {
           <h1 class="page-title">Overview</h1>
           <div class="page-sub">Company-wide snapshot across HR, recruitment, disciplinary cases, and customer complaints.</div>
         </div>
+        <button class="btn btn-ghost" id="btn-download-backup" title="Download every table as one JSON file">⬇ Download Backup</button>
       </div>
 
       <div class="kpi-row">
@@ -179,5 +180,24 @@ window.Views.overview = {
         </div>
       </div>
     `;
+
+    qs('#btn-download-backup', main).addEventListener('click', () => {
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        exportedBy: currentUserEmail(),
+        data: Store.exportAllData(),
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `txtaire-backup-${todayISO()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      Store.logAudit('backup.export', 'all_tables', null, { tables: Object.keys(payload.data) });
+      toast('✔ Backup downloaded');
+    });
   }
 };
