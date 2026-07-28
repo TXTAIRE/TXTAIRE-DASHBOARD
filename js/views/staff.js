@@ -194,6 +194,7 @@ window.Views.staff = (function () {
             <select name="category">${CATEGORIES.map(c => `<option ${c === e.category ? 'selected' : ''}>${c}</option>`).join('')}</select>
           </div>
           <div class="field"><label>Position</label><input name="position" required value="${escapeHtml(e.position)}" /></div>
+          <div class="field"><label>Employee ID</label><input name="employeeCode" value="${escapeHtml(e.employeeCode || '')}" placeholder="e.g. TXT001" /></div>
           <div class="field"><label>Status</label>
             <select name="status">${['Active', 'On Leave', 'Off', 'Terminated'].map(s => `<option ${s === e.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
           </div>
@@ -238,6 +239,7 @@ window.Views.staff = (function () {
           name: fd.get('name').trim(),
           category: fd.get('category'),
           position: fd.get('position').trim(),
+          employeeCode: fd.get('employeeCode').trim().toUpperCase(),
           status: fd.get('status'),
           employmentStatus: fd.get('employmentStatus'),
           dateHired: fd.get('dateHired'),

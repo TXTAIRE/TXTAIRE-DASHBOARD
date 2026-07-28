@@ -66,7 +66,7 @@ function showEssLogin(errorMessage) {
       <form id="ess-login-form">
         <div class="field full" style="margin-bottom:12px;">
           <label>Employee ID</label>
-          <input name="employeeCode" required autocomplete="username" placeholder="e.g. TXAT-015" />
+          <input name="employeeCode" required autocomplete="username" placeholder="e.g. TXT001" />
         </div>
         <div class="field full" style="margin-bottom:18px;">
           <label>Password</label>
