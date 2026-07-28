@@ -502,6 +502,14 @@ const Store = (function () {
     return data.signedUrl;
   }
 
+  // Best-effort: used when deleting/redoing a self-clock-in record. Never blocks the
+  // attendance row's own delete on failure — an orphaned photo file isn't worth failing over.
+  async function deleteAttendancePhoto(path) {
+    if (!path) return;
+    const { error } = await sb.storage.from('attendance-photos').remove([path]);
+    if (error) console.error('Failed to delete attendance photo', error);
+  }
+
   // ---- Probation / Regularization ----
   function listProbations() { return state.probationRecords.slice(); }
   function getProbation(id) { return state.probationRecords.find(p => p.id === id); }
@@ -601,7 +609,7 @@ const Store = (function () {
     listCases, getCase, addCase, updateCase, deleteCase,
     listComplaints, getComplaint, addComplaint, updateComplaint, deleteComplaint,
     listAttendance, attendanceForDate, attendanceInRange, addAttendance, updateAttendance, deleteAttendance,
-    uploadAttendancePhoto, getSignedPhotoUrl,
+    uploadAttendancePhoto, getSignedPhotoUrl, deleteAttendancePhoto,
     listDeductions, deductionsInRange, addDeduction, deleteDeduction,
     listProbations, getProbation, getProbationByEmployee, addProbation, updateProbation, deleteProbation,
     getPayrollOverride, setPayrollOverride,

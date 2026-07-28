@@ -61,6 +61,7 @@ window.EssViews.attendance = (function () {
       ${todayRec && !todayRec.timeOut ? `<button class="btn btn-primary" id="btn-clock-out" style="width:100%; justify-content:center; margin-bottom:14px;">🕒 Time Out</button>` : ''}
       ${todayRec && todayRec.timeOut ? `<div class="ess-sub" style="text-align:center; margin-bottom:14px;">✔ Done for today</div>` : ''}
 
+      ${todayRec ? `<button class="btn btn-ghost btn-sm" id="btn-delete-redo" style="width:100%; justify-content:center; margin-bottom:6px;">Delete &amp; Redo Today's Attendance</button>` : ''}
       <button class="btn btn-ghost btn-sm" id="btn-report-concern" style="width:100%; justify-content:center; margin-bottom:6px;">Report Attendance Concern</button>
 
       <div class="ess-section-title">History</div>
@@ -76,6 +77,19 @@ window.EssViews.attendance = (function () {
     if (clockInBtn) clockInBtn.addEventListener('click', () => openCameraCapture(main, emp, 'in'));
     const clockOutBtn = qs('#btn-clock-out', main);
     if (clockOutBtn) clockOutBtn.addEventListener('click', () => openCameraCapture(main, emp, 'out'));
+    const deleteRedoBtn = qs('#btn-delete-redo', main);
+    if (deleteRedoBtn) deleteRedoBtn.addEventListener('click', () => deleteAndRedoToday(main, emp, todayRec));
+  }
+
+  async function deleteAndRedoToday(main, emp, rec) {
+    if (!confirm("Delete today's Time In/Out and start over? This can't be undone.")) return;
+    await Store.deleteAttendance(rec.id);
+    await Promise.all([
+      rec.timeInPhotoPath ? Store.deleteAttendancePhoto(rec.timeInPhotoPath) : null,
+      rec.timeOutPhotoPath ? Store.deleteAttendancePhoto(rec.timeOutPhotoPath) : null,
+    ]);
+    toast("✔ Today's attendance deleted — you can log it again.");
+    render(main, emp);
   }
 
   function stopStream(stream) {

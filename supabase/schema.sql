@@ -265,15 +265,19 @@ create policy "admin full access" on attendance
   for all to authenticated using (is_admin()) with check (is_admin());
 create policy "employee reads own attendance" on attendance
   for select to authenticated using ("employeeId" = my_employee_id());
--- Self clock-in/out: an employee may create today's own attendance row (Time In) and
--- later update that same row (Time Out) — never a past/future date, never anyone else's
--- row. The only write access a linked employee has anywhere in the schema.
+-- Self clock-in/out: an employee may create today's own attendance row (Time In),
+-- later update that same row (Time Out), or delete it outright to redo it from
+-- scratch — never a past/future date, never anyone else's row. Deletes are still
+-- captured in auditLog (employees have no access to that table), so HR retains a
+-- record that a redo happened even though the original data itself is gone.
 create policy "employee clocks in for today" on attendance
   for insert to authenticated with check ("employeeId" = my_employee_id() and date = current_date);
 create policy "employee clocks out for today" on attendance
   for update to authenticated
   using ("employeeId" = my_employee_id() and date = current_date)
   with check ("employeeId" = my_employee_id() and date = current_date);
+create policy "employee deletes own attendance for today" on attendance
+  for delete to authenticated using ("employeeId" = my_employee_id() and date = current_date);
 
 create policy "admin full access" on deductions
   for all to authenticated using (is_admin()) with check (is_admin());
@@ -322,6 +326,9 @@ create policy "employee uploads own attendance photos" on storage.objects
   with check (bucket_id = 'attendance-photos' and (storage.foldername(name))[1] = my_employee_id());
 create policy "employee reads own attendance photos" on storage.objects
   for select to authenticated
+  using (bucket_id = 'attendance-photos' and (storage.foldername(name))[1] = my_employee_id());
+create policy "employee deletes own attendance photos" on storage.objects
+  for delete to authenticated
   using (bucket_id = 'attendance-photos' and (storage.foldername(name))[1] = my_employee_id());
 create policy "admin full access to attendance photos" on storage.objects
   for all to authenticated
@@ -569,3 +576,19 @@ create policy "admin full access to attendance photos" on storage.objects
   for all to authenticated
   using (bucket_id = 'attendance-photos' and is_admin())
   with check (bucket_id = 'attendance-photos' and is_admin());
+
+-- =================================================================
+-- Employee delete-and-redo for today's own attendance — incremental migration. Run once
+-- against a database that already has the migrations above applied. Safe to re-run.
+-- Lets an employee delete their own Time In/Out record (and its photo) for today only,
+-- to log it again from scratch. The delete itself is still captured in auditLog.
+-- =================================================================
+
+drop policy if exists "employee deletes own attendance for today" on attendance;
+create policy "employee deletes own attendance for today" on attendance
+  for delete to authenticated using ("employeeId" = my_employee_id() and date = current_date);
+
+drop policy if exists "employee deletes own attendance photos" on storage.objects;
+create policy "employee deletes own attendance photos" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'attendance-photos' and (storage.foldername(name))[1] = my_employee_id());
