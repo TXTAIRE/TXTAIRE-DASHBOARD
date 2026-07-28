@@ -27,14 +27,27 @@ window.Views.attendance = (function () {
     return { Present: 'on', Late: 'late', Absent: 'absent', 'On Leave': 'off' }[status] || '';
   }
 
+  // Opens a self-clock-in/out photo. Opens the tab synchronously (on the click itself) so
+  // browsers don't treat it as an unrequested popup, then points it at the signed URL once
+  // fetched — createSignedUrl is async and the tab must already exist before that resolves.
+  function viewPhoto(path) {
+    if (!path) return;
+    const win = window.open('', '_blank');
+    Store.getSignedPhotoUrl(path).then((url) => {
+      if (url && win) win.location.href = url;
+      else if (win) win.close();
+    });
+  }
+
   function attendanceTable(employees, recByEmp) {
     if (!employees.length) return '<div class="empty">No staff in this group.</div>';
     return `
       <table>
-        <thead><tr><th>Name</th><th>Position</th><th>Status</th><th>Time In</th><th>Time Out</th><th class="num">Hours</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Position</th><th>Status</th><th>Time In</th><th>Time Out</th><th class="num">Hours</th><th></th><th></th></tr></thead>
         <tbody>
           ${employees.map(e => {
             const r = recByEmp[e.id];
+            const photos = [r && r.timeInPhotoPath, r && r.timeOutPhotoPath].filter(Boolean);
             return `
             <tr>
               <td class="name">${escapeHtml(e.name)}</td>
@@ -43,6 +56,7 @@ window.Views.attendance = (function () {
               <td class="dim">${r ? to12Hour(r.timeIn) : '—'}</td>
               <td class="dim">${r ? to12Hour(r.timeOut) : '—'}</td>
               <td class="num">${r ? r.hours : '—'}</td>
+              <td>${photos.length ? photos.map((p, i) => `<button class="link-btn" data-photo="${p}" title="Self-clock-in photo proof">📷${photos.length > 1 ? (i === 0 ? ' In' : ' Out') : ''}</button>`).join(' ') : ''}</td>
               <td><button class="link-btn" data-emp="${e.id}" data-rec="${r ? r.id : ''}">${r ? 'Edit →' : 'Log →'}</button></td>
             </tr>
           `; }).join('')}
@@ -121,6 +135,7 @@ window.Views.attendance = (function () {
     qs('#btn-today', body).addEventListener('click', () => { selectedDate = todayISO(); renderDailyTab(body, main); });
     qs('#btn-next-day', body).addEventListener('click', () => { selectedDate = addDays(selectedDate, 1); renderDailyTab(body, main); });
     qsa('[data-emp]', body).forEach(b => b.addEventListener('click', () => openAttendanceModal(main, b.dataset.emp, b.dataset.rec || null)));
+    qsa('[data-photo]', body).forEach(b => b.addEventListener('click', () => viewPhoto(b.dataset.photo)));
   }
 
   // Calendar tab: rows = employees in the selected pay group, columns = every day in the
@@ -135,6 +150,9 @@ window.Views.attendance = (function () {
     if (pay && pay.nsdHrs) badges.push('<span class="badge badge-blue" title="Night Shift Differential">NSD</span>');
     if (pay && pay.otHrs) badges.push('<span class="badge badge-orange" title="Overtime">OT</span>');
     if (holiday) badges.push(`<span class="badge ${holiday.type === 'Regular' ? 'badge-blue' : 'badge-yellow'}" title="${escapeHtml(holiday.name)}">HOL</span>`);
+    if (rec && (rec.timeInPhotoPath || rec.timeOutPhotoPath)) {
+      badges.push(`<span class="badge badge-gray" data-view-photo="${rec.timeOutPhotoPath || rec.timeInPhotoPath}" title="Self-clock-in photo proof">📷</span>`);
+    }
 
     let cls = 'cal-cell';
     if (rec) {
@@ -235,7 +253,9 @@ window.Views.attendance = (function () {
     });
     qs('#cal-btn-prev-month', body).addEventListener('click', () => { shiftCalMonth(-1); renderCalendarTab(body, main); });
     qs('#cal-btn-next-month', body).addEventListener('click', () => { shiftCalMonth(1); renderCalendarTab(body, main); });
-    qsa('.cal-cell', body).forEach(cell => cell.addEventListener('click', () => {
+    qsa('.cal-cell', body).forEach(cell => cell.addEventListener('click', (ev) => {
+      const photoEl = ev.target.closest('[data-view-photo]');
+      if (photoEl) { viewPhoto(photoEl.dataset.viewPhoto); return; }
       const empId = cell.dataset.emp, date = cell.dataset.date;
       const rec = Store.listAttendance().find(a => a.employeeId === empId && a.date === date);
       selectedDate = date;

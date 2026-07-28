@@ -481,6 +481,27 @@ const Store = (function () {
     await deleteRow('attendance', id);
   }
 
+  // Uploads a clock-in/out proof photo to the private "attendance-photos" Storage bucket,
+  // under "<employeeId>/<filename>" (matches the RLS policy's foldername check). Returns
+  // the storage path (not a URL — the bucket is private, so viewing requires a signed URL
+  // fetched on demand via getSignedPhotoUrl).
+  async function uploadAttendancePhoto(employeeId, blob, kind) {
+    const path = `${employeeId}/${genId(kind)}.jpg`;
+    const { error } = await sb.storage.from('attendance-photos').upload(path, blob, { contentType: 'image/jpeg' });
+    if (error) {
+      toast('Photo upload failed: ' + error.message);
+      throw error;
+    }
+    return path;
+  }
+
+  async function getSignedPhotoUrl(path) {
+    if (!path) return null;
+    const { data, error } = await sb.storage.from('attendance-photos').createSignedUrl(path, 3600);
+    if (error) { console.error('Failed to sign photo URL', error); return null; }
+    return data.signedUrl;
+  }
+
   // ---- Probation / Regularization ----
   function listProbations() { return state.probationRecords.slice(); }
   function getProbation(id) { return state.probationRecords.find(p => p.id === id); }
@@ -575,6 +596,7 @@ const Store = (function () {
     listCases, getCase, addCase, updateCase, deleteCase,
     listComplaints, getComplaint, addComplaint, updateComplaint, deleteComplaint,
     listAttendance, attendanceForDate, attendanceInRange, addAttendance, updateAttendance, deleteAttendance,
+    uploadAttendancePhoto, getSignedPhotoUrl,
     listDeductions, deductionsInRange, addDeduction, deleteDeduction,
     listProbations, getProbation, getProbationByEmployee, addProbation, updateProbation, deleteProbation,
     getPayrollOverride, setPayrollOverride,

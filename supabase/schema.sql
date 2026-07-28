@@ -101,6 +101,8 @@ create table attendance (
   "timeOut" text,
   status text not null default 'Present',
   hours numeric(4,2) default 0,
+  "timeInPhotoPath" text,   -- storage.objects path in the private "attendance-photos" bucket
+  "timeOutPhotoPath" text,  -- (self-clock-in/out photo proof), null for HR-entered records
   created_at timestamptz not null default now()
 );
 
@@ -263,6 +265,15 @@ create policy "admin full access" on attendance
   for all to authenticated using (is_admin()) with check (is_admin());
 create policy "employee reads own attendance" on attendance
   for select to authenticated using ("employeeId" = my_employee_id());
+-- Self clock-in/out: an employee may create today's own attendance row (Time In) and
+-- later update that same row (Time Out) — never a past/future date, never anyone else's
+-- row. The only write access a linked employee has anywhere in the schema.
+create policy "employee clocks in for today" on attendance
+  for insert to authenticated with check ("employeeId" = my_employee_id() and date = current_date);
+create policy "employee clocks out for today" on attendance
+  for update to authenticated
+  using ("employeeId" = my_employee_id() and date = current_date)
+  with check ("employeeId" = my_employee_id() and date = current_date);
 
 create policy "admin full access" on deductions
   for all to authenticated using (is_admin()) with check (is_admin());
@@ -297,6 +308,25 @@ create policy "employee reads own attendance corrections" on "attendanceCorrecti
   for select to authenticated using ("employeeId" = my_employee_id());
 create policy "employee submits own attendance corrections" on "attendanceCorrections"
   for insert to authenticated with check ("employeeId" = my_employee_id());
+
+-- =================================================================
+-- Storage — private bucket for self-clock-in/out photo proof. Objects are stored under
+-- "<employeeId>/<filename>", so (storage.foldername(name))[1] is the owning employee's id.
+-- =================================================================
+insert into storage.buckets (id, name, public)
+values ('attendance-photos', 'attendance-photos', false)
+on conflict (id) do nothing;
+
+create policy "employee uploads own attendance photos" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'attendance-photos' and (storage.foldername(name))[1] = my_employee_id());
+create policy "employee reads own attendance photos" on storage.objects
+  for select to authenticated
+  using (bucket_id = 'attendance-photos' and (storage.foldername(name))[1] = my_employee_id());
+create policy "admin full access to attendance photos" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'attendance-photos' and is_admin())
+  with check (bucket_id = 'attendance-photos' and is_admin());
 
 -- =================================================================
 -- Realtime — publish every table so the app's subscriptions receive changes
@@ -436,6 +466,12 @@ create policy "admin full access" on attendance
   for all to authenticated using (is_admin()) with check (is_admin());
 create policy "employee reads own attendance" on attendance
   for select to authenticated using ("employeeId" = my_employee_id());
+create policy "employee clocks in for today" on attendance
+  for insert to authenticated with check ("employeeId" = my_employee_id() and date = current_date);
+create policy "employee clocks out for today" on attendance
+  for update to authenticated
+  using ("employeeId" = my_employee_id() and date = current_date)
+  with check ("employeeId" = my_employee_id() and date = current_date);
 
 create policy "admin full access" on deductions
   for all to authenticated using (is_admin()) with check (is_admin());
@@ -490,3 +526,41 @@ update employees set "employeeCode" = 'TXAT-017' where id = 'e_alomia';
 update employees set "employeeCode" = 'TXAT-018' where id = 'e_francisco';
 update employees set "employeeCode" = 'TXAT-019' where id = 'e_dean';
 update employees set "employeeCode" = 'TXAT-020' where id = 'e_vargas';
+
+-- =================================================================
+-- Self clock-in/out with photo proof — incremental migration. Run this once against a
+-- database that already has the ESS migration above applied. Safe to re-run.
+-- =================================================================
+
+alter table attendance add column if not exists "timeInPhotoPath" text;
+alter table attendance add column if not exists "timeOutPhotoPath" text;
+
+drop policy if exists "employee clocks in for today" on attendance;
+create policy "employee clocks in for today" on attendance
+  for insert to authenticated with check ("employeeId" = my_employee_id() and date = current_date);
+
+drop policy if exists "employee clocks out for today" on attendance;
+create policy "employee clocks out for today" on attendance
+  for update to authenticated
+  using ("employeeId" = my_employee_id() and date = current_date)
+  with check ("employeeId" = my_employee_id() and date = current_date);
+
+insert into storage.buckets (id, name, public)
+values ('attendance-photos', 'attendance-photos', false)
+on conflict (id) do nothing;
+
+drop policy if exists "employee uploads own attendance photos" on storage.objects;
+create policy "employee uploads own attendance photos" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'attendance-photos' and (storage.foldername(name))[1] = my_employee_id());
+
+drop policy if exists "employee reads own attendance photos" on storage.objects;
+create policy "employee reads own attendance photos" on storage.objects
+  for select to authenticated
+  using (bucket_id = 'attendance-photos' and (storage.foldername(name))[1] = my_employee_id());
+
+drop policy if exists "admin full access to attendance photos" on storage.objects;
+create policy "admin full access to attendance photos" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'attendance-photos' and is_admin())
+  with check (bucket_id = 'attendance-photos' and is_admin());
