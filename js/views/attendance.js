@@ -31,7 +31,7 @@ window.Views.attendance = (function () {
   }
 
   function renderView(main) {
-    const employees = Store.listEmployees().filter(e => e.status !== 'Terminated');
+    const employees = Store.listEmployees().filter(e => e.status !== 'Terminated').sort((a, b) => a.name.localeCompare(b.name));
     const admins = employees.filter(e => e.category === 'Admin');
     const technicians = employees.filter(e => e.category === 'Technician');
     const records = Store.attendanceForDate(selectedDate);
