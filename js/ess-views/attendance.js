@@ -89,9 +89,45 @@ window.EssViews.attendance = (function () {
     return Math.round(((end - start) / 60) * 100) / 100;
   }
 
+  // Original brand mark, preloaded once so it's ready by the time a photo is captured.
+  let logoImg = null;
+  (function preloadLogo() {
+    const img = new Image();
+    img.onload = () => { logoImg = img; };
+    img.src = 'assets/logo.svg';
+  })();
+
+  function roundRect(ctx, x, y, rw, rh, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + rw, y, x + rw, y + rh, r);
+    ctx.arcTo(x + rw, y + rh, x, y + rh, r);
+    ctx.arcTo(x, y + rh, x, y, r);
+    ctx.arcTo(x, y, x + rw, y, r);
+    ctx.closePath();
+  }
+
+  function drawCheckBadge(ctx, cx, cy, r) {
+    ctx.save();
+    ctx.fillStyle = '#3fc46a';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = Math.max(1.5, r * 0.28);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.5, cy);
+    ctx.lineTo(cx - r * 0.1, cy + r * 0.4);
+    ctx.lineTo(cx + r * 0.55, cy - r * 0.4);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   // Draws the same info a physical time clock would stamp — logo, time, date, location,
-  // name, company — directly onto the captured frame. Original design (our own brand
-  // colors/wordmark), not copied from any third-party product.
+  // name, company, verification code — directly onto the captured frame. Original design
+  // (our own brand, wordmark and layout), not copied from any third-party product.
   function drawOverlay(ctx, w, h, emp, locationText) {
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
@@ -103,58 +139,97 @@ window.EssViews.attendance = (function () {
     const dowStr = now.toLocaleDateString('en-US', { weekday: 'short' });
     const code = Math.random().toString(36).slice(2, 10).toUpperCase();
 
-    const scrimH = h * 0.44;
+    const scrimH = h * 0.58;
     const grad = ctx.createLinearGradient(0, h - scrimH, 0, h);
     grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.75)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.8)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, h - scrimH, w, scrimH);
 
     const px = w * 0.05;
-    let y = h - scrimH + h * 0.05;
+    let y = h - scrimH + h * 0.055;
 
     ctx.textAlign = 'left';
-    ctx.font = `800 ${Math.round(w * 0.05)}px Arial`;
-    ctx.fillStyle = '#4f8dff';
-    ctx.fillText('TXT', px, y);
-    const txtW = ctx.measureText('TXT').width;
-    ctx.fillStyle = '#3fc46a';
-    ctx.fillText('AIRE', px + txtW, y);
+    if (logoImg && logoImg.naturalWidth) {
+      const logoH = w * 0.1;
+      const logoW = logoH * (logoImg.naturalWidth / logoImg.naturalHeight);
+      const padX = w * 0.018, padY = logoH * 0.22;
+      ctx.fillStyle = 'rgba(255,255,255,0.94)';
+      roundRect(ctx, px - padX, y - logoH - padY, logoW + padX * 2, logoH + padY * 2, w * 0.014);
+      ctx.fill();
+      ctx.drawImage(logoImg, px, y - logoH, logoW, logoH);
+    } else {
+      ctx.font = `800 ${Math.round(w * 0.05)}px Arial`;
+      ctx.fillStyle = '#4f8dff';
+      ctx.fillText('TXT', px, y);
+      const txtW = ctx.measureText('TXT').width;
+      ctx.fillStyle = '#3fc46a';
+      ctx.fillText('AIRE', px + txtW, y);
+    }
 
-    y += w * 0.1;
-    ctx.font = `800 ${Math.round(w * 0.115)}px Arial`;
+    y += w * 0.13;
+    ctx.font = `800 ${Math.round(w * 0.12)}px Arial`;
     ctx.fillStyle = '#ffffff';
     ctx.fillText(timeStr, px, y);
     const timeW = ctx.measureText(timeStr).width;
-    ctx.font = `600 ${Math.round(w * 0.035)}px Arial`;
-    ctx.fillText(ampm, px + timeW + w * 0.015, y);
-
     ctx.font = `600 ${Math.round(w * 0.032)}px Arial`;
-    ctx.fillStyle = '#f2c14e';
-    ctx.fillText(dateStr, px + timeW + w * 0.1, y - w * 0.035);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(dowStr, px + timeW + w * 0.1, y);
+    ctx.fillText(ampm, px + timeW + w * 0.012, y);
 
-    y += w * 0.055;
+    const dividerX = px + timeW + w * 0.075;
+    ctx.strokeStyle = '#f2c14e';
+    ctx.lineWidth = Math.max(2, w * 0.004);
+    ctx.beginPath();
+    ctx.moveTo(dividerX, y - w * 0.075);
+    ctx.lineTo(dividerX, y);
+    ctx.stroke();
+
+    const dateX = dividerX + w * 0.025;
+    ctx.font = `600 ${Math.round(w * 0.03)}px Arial`;
+    ctx.fillStyle = '#f2c14e';
+    ctx.fillText(dateStr, dateX, y - w * 0.036);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(dowStr, dateX, y);
+
+    y += w * 0.05;
     if (locationText) {
-      ctx.font = `500 ${Math.round(w * 0.03)}px Arial`;
+      ctx.font = `500 ${Math.round(w * 0.028)}px Arial`;
       ctx.fillStyle = '#ffffff';
       ctx.fillText(locationText, px, y);
-      y += w * 0.045;
+      y += w * 0.05;
     }
 
     y += w * 0.015;
-    ctx.font = `600 ${Math.round(w * 0.032)}px Arial`;
+    const boxH = w * 0.16;
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    roundRect(ctx, px, y, w - px * 2, boxH, w * 0.02);
+    ctx.fill();
+    ctx.font = `600 ${Math.round(w * 0.03)}px Arial`;
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(`Name: ${emp.name}`, px, y);
-    y += w * 0.042;
-    ctx.fillText('Company: TXTAIRE', px, y);
+    ctx.fillText(`Name: ${emp.name}`, px + w * 0.025, y + boxH * 0.42);
+    ctx.fillText('Company: TXTAIRE', px + w * 0.025, y + boxH * 0.82);
+    y += boxH + w * 0.035;
 
-    ctx.textAlign = 'right';
-    ctx.font = `500 ${Math.round(w * 0.022)}px Arial`;
-    ctx.fillStyle = 'rgba(255,255,255,0.65)';
-    ctx.fillText(`Code: ${code}`, w - px, h - h * 0.025);
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px, y);
+    ctx.lineTo(w - px, y);
+    ctx.stroke();
+    y += w * 0.045;
+
+    drawCheckBadge(ctx, px + w * 0.014, y - w * 0.013, w * 0.017);
+    ctx.font = `500 ${Math.round(w * 0.024)}px Arial`;
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.fillText(`Photo Code: ${code}`, px + w * 0.042, y);
+
+    ctx.save();
+    ctx.translate(w - w * 0.025, h - h * 0.035);
+    ctx.rotate(-Math.PI / 2);
     ctx.textAlign = 'left';
+    ctx.font = `500 ${Math.round(w * 0.02)}px Arial`;
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillText(`© ${code}   TXTAIRE Verified`, 0, 0);
+    ctx.restore();
   }
 
   function bestEffortLocation() {
