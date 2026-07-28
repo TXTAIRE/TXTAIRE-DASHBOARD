@@ -50,7 +50,7 @@ let essRoute = 'attendance';
 let myEmployee = null;
 
 function essEmailFor(employeeCode) {
-  return employeeCode.trim().toLowerCase() + '@txtaire.local';
+  return employeeCode.trim().toLowerCase() + '@employees.txtaire.local';
 }
 
 function showEssLogin(errorMessage) {
