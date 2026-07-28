@@ -1,0 +1,75 @@
+name: Build mobile app (My Portal)
+
+# Manual trigger only — this project has no local Node.js, so these builds run entirely on
+# GitHub's runners. Run it from the Actions tab ("Run workflow") whenever you want fresh
+# Android/iOS builds. See README-MOBILE.md for what's needed before these produce real,
+# installable store artifacts.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - run: npm install
+      - run: npm run assemble-www
+      - run: npx cap add android
+      - run: node scripts/patch-native.js
+      - run: npx cap sync android
+
+      # Produces an unsigned debug APK — installable for testing (enable "Unknown sources"),
+      # but NOT what Google Play accepts. A real release needs a signing keystore: create one
+      # with `keytool -genkey -v -keystore release.keystore -alias txtaire -keyalg RSA
+      # -keysize 2048 -validity 10000`, then add ANDROID_KEYSTORE_BASE64 (base64 of that
+      # file), ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD as repo
+      # secrets, and swap this step for `./gradlew bundleRelease` with signing configured in
+      # android/app/build.gradle.
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: txtaire-my-portal-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install
+      - run: npm run assemble-www
+      - run: npx cap add ios
+      - run: node scripts/patch-native.js
+      - run: npx cap sync ios
+
+      # Compile-only smoke test targeting the Simulator SDK, which needs no signing — this
+      # just confirms the project builds. A real App Store build needs an Apple Developer
+      # Program membership: a distribution certificate + provisioning profile added as repo
+      # secrets (APPLE_CERTIFICATE_BASE64, APPLE_CERTIFICATE_PASSWORD,
+      # APPLE_PROVISIONING_PROFILE_BASE64, APPLE_TEAM_ID), then this step should build with
+      # `-sdk iphoneos CODE_SIGNING_ALLOWED=YES` and `xcodebuild -exportArchive` to produce a
+      # signed .ipa for App Store Connect.
+      - name: Build for iOS Simulator (smoke test)
+        run: |
+          xcodebuild -workspace ios/App/App.xcworkspace -scheme App \
+            -configuration Debug -sdk iphonesimulator \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build

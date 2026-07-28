@@ -1,2 +1,6 @@
 .claude/settings.local.json
 deploy/
+node_modules/
+www/
+android/
+ios/
