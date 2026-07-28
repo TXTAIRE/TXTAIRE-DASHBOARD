@@ -157,7 +157,7 @@ window.Views.staff = (function () {
       </div>
       <form id="ess-grant-form">
         <div class="modal-grid">
-          <div class="field full"><label>Employee ID</label><input name="employeeCode" required value="${escapeHtml(suggestedCode)}" placeholder="e.g. TXAT-021" /></div>
+          <div class="field full"><label>Employee ID</label><input name="employeeCode" required value="${escapeHtml(suggestedCode)}" placeholder="e.g. TXT021" /></div>
           <div class="field full"><label>Supabase Auth User UUID</label><input name="authUserId" required placeholder="e.g. 3fa85f64-5717-4562-b3fc-2c963f66afa6" /></div>
         </div>
         <div class="modal-actions">

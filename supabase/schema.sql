@@ -31,7 +31,7 @@ create table employees (
                                                                 -- the Attendance form's Time In/Out for this employee.
   "payCycle" text not null,                    -- '10-20' | '15-30'
   notes text default '',
-  "employeeCode" text unique,                  -- Employee Self-Service login ID, e.g. 'TXAT-015'
+  "employeeCode" text unique,                  -- Employee Self-Service login ID = real company Employee Number, e.g. 'TXT015'
   "authUserId" uuid references auth.users(id), -- set once ESS portal access is granted (js/views/staff.js
                                                 -- "Grant portal access"); null = no portal login yet.
   created_at timestamptz not null default now(),
@@ -504,28 +504,33 @@ create policy "employee submits own attendance corrections" on "attendanceCorrec
 
 alter publication supabase_realtime add table "leaveRequests", "attendanceCorrections", "auditLog";
 
--- One-time: assign Employee IDs (TXAT-001..TXAT-020) to the 20 seeded employees, in the
--- same name order as supabase/seed.sql, so each can later be granted ESS portal access.
-update employees set "employeeCode" = 'TXAT-001' where id = 'e_bultron';
-update employees set "employeeCode" = 'TXAT-002' where id = 'e_casano';
-update employees set "employeeCode" = 'TXAT-003' where id = 'e_sangcupan';
-update employees set "employeeCode" = 'TXAT-004' where id = 'e_famini';
-update employees set "employeeCode" = 'TXAT-005' where id = 'e_soriano';
-update employees set "employeeCode" = 'TXAT-006' where id = 'e_nabora';
-update employees set "employeeCode" = 'TXAT-007' where id = 'e_cosme';
-update employees set "employeeCode" = 'TXAT-008' where id = 'e_arnel_parala';
-update employees set "employeeCode" = 'TXAT-009' where id = 'e_argee_parala';
-update employees set "employeeCode" = 'TXAT-010' where id = 'e_michael_parala';
-update employees set "employeeCode" = 'TXAT-011' where id = 'e_aldrin_parala';
-update employees set "employeeCode" = 'TXAT-012' where id = 'e_cabanez';
-update employees set "employeeCode" = 'TXAT-013' where id = 'e_rotazo';
-update employees set "employeeCode" = 'TXAT-014' where id = 'e_delacruz';
-update employees set "employeeCode" = 'TXAT-015' where id = 'e_albano';
-update employees set "employeeCode" = 'TXAT-016' where id = 'e_dulfo';
-update employees set "employeeCode" = 'TXAT-017' where id = 'e_alomia';
-update employees set "employeeCode" = 'TXAT-018' where id = 'e_francisco';
-update employees set "employeeCode" = 'TXAT-019' where id = 'e_dean';
-update employees set "employeeCode" = 'TXAT-020' where id = 'e_vargas';
+-- One-time: assign each employee their real company Employee Number (per HR's official
+-- roster spreadsheet, TXT000..TXT022) so each can later be granted ESS portal access.
+-- Superseded the earlier placeholder TXAT-001..TXAT-020 scheme below.
+update employees set "employeeCode" = 'TXT001' where id = 'e_bultron';
+update employees set "employeeCode" = 'TXT002' where id = 'e_casano';
+update employees set "employeeCode" = 'TXT006' where id = 'e_sangcupan';
+update employees set "employeeCode" = 'TXT020' where id = 'e_famini';
+update employees set "employeeCode" = 'TXT003' where id = 'e_soriano';
+update employees set "employeeCode" = 'TXT004' where id = 'e_nabora';
+update employees set "employeeCode" = 'TXT019' where id = 'e_cosme';
+update employees set "employeeCode" = 'TXT007' where id = 'e_arnel_parala';
+update employees set "employeeCode" = 'TXT008' where id = 'e_argee_parala';
+update employees set "employeeCode" = 'TXT009' where id = 'e_michael_parala';
+update employees set "employeeCode" = 'TXT010' where id = 'e_aldrin_parala';
+update employees set "employeeCode" = 'TXT011' where id = 'e_cabanez';
+update employees set "employeeCode" = 'TXT012' where id = 'e_rotazo';
+update employees set "employeeCode" = 'TXT013' where id = 'e_delacruz';
+update employees set "employeeCode" = 'TXT014' where id = 'e_albano';
+update employees set "employeeCode" = 'TXT015' where id = 'e_dulfo';
+update employees set "employeeCode" = 'TXT016' where id = 'e_alomia';
+update employees set "employeeCode" = 'TXT018' where id = 'e_francisco';
+update employees set "employeeCode" = 'TXT021' where id = 'e_dean';
+update employees set "employeeCode" = 'TXT022' where id = 'e_vargas';
+-- Not yet in this system — TXT000 Joel M. Aviso (President), TXT005 Anie Lou A. Bangay
+-- (Accounting & Finance Manager), and TXT017 Dino Dulfo (Service Technician) appear on
+-- the roster sheet but have no employee record here yet. Ask HR for their rate/pay type/
+-- category before adding them, so payroll numbers aren't guessed.
 
 -- =================================================================
 -- Self clock-in/out with photo proof — incremental migration. Run this once against a
