@@ -20,8 +20,8 @@ window.EssViews.attendance = (function () {
       <div class="ess-card">
         <div class="ess-card-label">${dow}</div>
         ${rec ? `
-        <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(rec.timeIn)} ✅</span></div>
-        <div class="ess-row"><span class="label">Time Out</span><span class="value">${rec.timeOut ? to12Hour(rec.timeOut) : '—'}</span></div>
+        <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(rec.timeIn)} ✅ ${rec.timeInPhotoPath ? `<button class="link-btn" data-view-photo="${rec.timeInPhotoPath}" title="View photo">📷</button>` : ''}</span></div>
+        <div class="ess-row"><span class="label">Time Out</span><span class="value">${rec.timeOut ? to12Hour(rec.timeOut) : '—'} ${rec.timeOutPhotoPath ? `<button class="link-btn" data-view-photo="${rec.timeOutPhotoPath}" title="View photo">📷</button>` : ''}</span></div>
         <div class="ess-row"><span class="label">Hours</span><span class="value">${rec.hours}</span></div>
         <div class="ess-row"><span class="label">Status</span><span class="value">${escapeHtml(rec.status)}</span></div>
         ${pay.nsdHrs ? `<div class="ess-row"><span class="label">Night Shift Diff.</span><span class="value">${pay.nsdHrs.toFixed(2)} hr</span></div>` : ''}
@@ -30,6 +30,17 @@ window.EssViews.attendance = (function () {
         ` : `<div class="ess-sub">Not logged${holiday ? ' · ' + escapeHtml(holiday.name) : ''}</div>`}
       </div>
     `;
+  }
+
+  // Opens a self-clock-in/out photo. Opens the tab synchronously (on the click itself) so
+  // Safari doesn't treat the async signed-URL fetch as a blocked popup.
+  function viewPhoto(path) {
+    if (!path) return;
+    const win = window.open('', '_blank');
+    Store.getSignedPhotoUrl(path).then((url) => {
+      if (url && win) win.location.href = url;
+      else if (win) win.close();
+    });
   }
 
   function render(main, emp) {
@@ -51,8 +62,8 @@ window.EssViews.attendance = (function () {
       <div class="ess-section-title" style="margin-top:0;">Today's Attendance</div>
       <div class="ess-card">
         ${todayRec ? `
-        <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(todayRec.timeIn)} ✅</span></div>
-        <div class="ess-row"><span class="label">Time Out</span><span class="value">${todayRec.timeOut ? to12Hour(todayRec.timeOut) + ' ✅' : '—'}</span></div>
+        <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(todayRec.timeIn)} ✅ ${todayRec.timeInPhotoPath ? `<button class="link-btn" data-view-photo="${todayRec.timeInPhotoPath}" title="View photo">📷</button>` : ''}</span></div>
+        <div class="ess-row"><span class="label">Time Out</span><span class="value">${todayRec.timeOut ? to12Hour(todayRec.timeOut) + ' ✅' : '—'} ${todayRec.timeOutPhotoPath ? `<button class="link-btn" data-view-photo="${todayRec.timeOutPhotoPath}" title="View photo">📷</button>` : ''}</span></div>
         <div class="ess-row"><span class="label">Status</span><span class="value">${escapeHtml(todayRec.status)}</span></div>
         ` : `<div class="ess-sub">No attendance logged yet for today.</div>`}
       </div>
@@ -79,6 +90,7 @@ window.EssViews.attendance = (function () {
     if (clockOutBtn) clockOutBtn.addEventListener('click', () => openCameraCapture(main, emp, 'out'));
     const deleteRedoBtn = qs('#btn-delete-redo', main);
     if (deleteRedoBtn) deleteRedoBtn.addEventListener('click', () => deleteAndRedoToday(main, emp, todayRec));
+    qsa('[data-view-photo]', main).forEach(b => b.addEventListener('click', () => viewPhoto(b.dataset.viewPhoto)));
   }
 
   async function deleteAndRedoToday(main, emp, rec) {
