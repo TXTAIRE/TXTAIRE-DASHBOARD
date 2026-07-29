@@ -277,6 +277,18 @@ function currentUserEmail() { return signedInEmail; }
 async function startApp(session) {
   if (appStarted) return;
   appStarted = true;
+
+  // This dashboard is HR/Admin only — an Employee Self-Service account (linked to an
+  // employees row) belongs on the ess.html portal instead. is_admin() is the same
+  // security-definer check RLS itself uses, so this mirrors the server-side boundary
+  // rather than trusting anything client-side.
+  const { data: isAdmin, error: adminCheckError } = await sb.rpc('is_admin');
+  if (adminCheckError || !isAdmin) {
+    await sb.auth.signOut();
+    showAuthScreen('This dashboard is for HR/Admin accounts only. Employees should sign in at the My Portal link instead.');
+    return;
+  }
+
   signedInEmail = session.user.email;
 
   hideAuthScreen();
