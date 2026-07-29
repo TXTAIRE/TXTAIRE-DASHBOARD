@@ -121,6 +121,10 @@ window.EssViews.attendance = (function () {
       toast('Request cancelled.');
       render(main, emp);
     }));
+
+    updateOfflineBanner(main, emp);
+    ensureOnlineListener(emp);
+    trySyncQueue(emp); // fire-and-forget: catches the case of reopening the app already online
   }
 
   // Every Time In / Time Out photo the employee has ever taken, newest first, with a
@@ -365,18 +369,18 @@ window.EssViews.attendance = (function () {
     });
   }
 
-  async function saveClockEvent(emp, kind, photoPath) {
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const today = todayISO();
+  // timeStr/date are always captured at the moment the employee presses Confirm — never
+  // recomputed here — so a clock-in/out queued offline still records the real time it
+  // happened, not whenever the connection happens to come back and this finally runs.
+  async function saveClockEvent(emp, kind, photoPath, timeStr, date) {
     if (kind === 'in') {
       await Store.addAttendance({
-        employeeId: emp.id, date: today, status: 'Present',
+        employeeId: emp.id, date, status: 'Present',
         timeIn: timeStr, timeOut: null, hours: 0,
         timeInPhotoPath: photoPath,
       });
     } else {
-      const rec = Store.attendanceForDate(today).find(r => r.employeeId === emp.id);
+      const rec = Store.attendanceForDate(date).find(r => r.employeeId === emp.id);
       if (!rec) { toast('No Time In found for today.'); return; }
       await Store.updateAttendance(rec.id, {
         timeOut: timeStr,
@@ -384,6 +388,78 @@ window.EssViews.attendance = (function () {
         timeOutPhotoPath: photoPath,
       });
     }
+  }
+
+  function isLikelyNetworkError(e) {
+    return e instanceof TypeError || (e && /fetch|network|failed/i.test(e.message || ''));
+  }
+
+  // Stores the captured photo + intended attendance fields in IndexedDB instead of
+  // Supabase. Nothing here touches the network — safe to call with no connection at all.
+  async function queueOffline(emp, kind, blob, timeStr, date) {
+    await OfflineQueue.add({
+      localId: genId('offatt'),
+      employeeId: emp.id, kind, timeStr, date, photoBlob: blob,
+      createdAt: Date.now(),
+    });
+  }
+
+  // True only while the employee actually has the Attendance tab open — syncing must never
+  // force-navigate them away from Payroll/Leave/Profile just because a background sync
+  // finished while they were looking at something else.
+  function isAttendanceRouteActive() {
+    const btn = document.querySelector('.ess-nav-btn[data-route="attendance"]');
+    return !!(btn && btn.classList.contains('active'));
+  }
+
+  // Pushes every queued item (oldest first) to Supabase once actually online. Stops at the
+  // first failure to keep Time In before Time Out ordering intact — the rest just wait for
+  // the next trigger (another 'online' event, or the next time this page renders). Only
+  // touches the DOM if Attendance is the tab currently on screen.
+  async function trySyncQueue(emp) {
+    if (!navigator.onLine) return;
+    let pending;
+    try { pending = await OfflineQueue.listForEmployee(emp.id); } catch (e) { return; }
+    if (!pending.length) return;
+    let syncedAny = false;
+    for (const item of pending) {
+      try {
+        const path = await Store.uploadAttendancePhoto(emp.id, item.photoBlob, item.kind);
+        await saveClockEvent(emp, item.kind, path, item.timeStr, item.date);
+        await OfflineQueue.remove(item.localId);
+        syncedAny = true;
+      } catch (e) {
+        break; // keep this and later items queued; try again on the next trigger
+      }
+    }
+    if (!isAttendanceRouteActive()) return;
+    const main = qs('#ess-main');
+    if (syncedAny) {
+      toast('✔ Synced queued attendance now that you\'re back online.');
+      render(main, emp);
+    } else {
+      updateOfflineBanner(main, emp);
+    }
+  }
+
+  async function updateOfflineBanner(main, emp) {
+    let pending;
+    try { pending = await OfflineQueue.listForEmployee(emp.id); } catch (e) { pending = []; }
+    const existing = qs('#offline-banner', main);
+    if (pending.length) {
+      const html = `<div id="offline-banner" class="ess-card" style="background:#fff8e1; border-color:#f2c14e;">📴 ${pending.length} clock-in/out ${pending.length === 1 ? 'is' : 'are'} queued offline — will sync automatically once you're back online.</div>`;
+      if (existing) existing.outerHTML = html;
+      else main.insertAdjacentHTML('afterbegin', html);
+    } else if (existing) {
+      existing.remove();
+    }
+  }
+
+  let onlineListenerAttached = false;
+  function ensureOnlineListener(emp) {
+    if (onlineListenerAttached) return;
+    onlineListenerAttached = true;
+    window.addEventListener('online', () => trySyncQueue(emp));
   }
 
   function showPreview(bdEl, canvas, main, emp, kind, stream, locationText) {
@@ -420,17 +496,39 @@ window.EssViews.attendance = (function () {
       const confirmBtn = qs('#btn-confirm', bdEl);
       confirmBtn.disabled = true;
       confirmBtn.textContent = 'Saving…';
+      // Captured now, at the moment of confirming — never recomputed later, so a clock-in/
+      // out that ends up queued offline still records the real time it actually happened.
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const date = todayISO();
+
       canvas.toBlob(async (blob) => {
+        if (!navigator.onLine) {
+          await queueOffline(emp, kind, blob, timeStr, date);
+          stopStream(stream);
+          closeEssModal();
+          toast('📴 No connection — queued offline. Will sync automatically once you\'re back online.');
+          render(main, emp);
+          return;
+        }
         try {
           const path = await Store.uploadAttendancePhoto(emp.id, blob, kind);
-          await saveClockEvent(emp, kind, path);
+          await saveClockEvent(emp, kind, path, timeStr, date);
           stopStream(stream);
           closeEssModal();
           toast(kind === 'in' ? '✔ Time In recorded' : '✔ Time Out recorded');
           render(main, emp);
         } catch (e) {
-          confirmBtn.disabled = false;
-          confirmBtn.textContent = `Confirm ${kind === 'in' ? 'Time In' : 'Time Out'}`;
+          if (isLikelyNetworkError(e)) {
+            await queueOffline(emp, kind, blob, timeStr, date);
+            stopStream(stream);
+            closeEssModal();
+            toast('📴 Connection lost — queued offline. Will sync automatically once you\'re back online.');
+            render(main, emp);
+          } else {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = `Confirm ${kind === 'in' ? 'Time In' : 'Time Out'}`;
+          }
         }
       }, 'image/jpeg', 0.85);
     });
