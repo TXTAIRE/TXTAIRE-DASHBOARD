@@ -13,6 +13,17 @@ window.Views.payroll = (function () {
     'EDSA People Power Anniversary',
   ];
 
+  // Unlike js/store.js's FIXED_PH_HOLIDAYS (annually-fixed, auto-detected), these shift
+  // every year and only become certain once Malacañang issues the actual proclamation —
+  // deliberately not auto-dated, just a reminder to add them once confirmed.
+  const MOVABLE_HOLIDAYS = [
+    { name: 'Maundy Thursday', type: 'Regular' },
+    { name: 'Good Friday', type: 'Regular' },
+    { name: 'National Heroes Day', type: 'Regular' },
+    { name: 'Black Saturday', type: 'Special' },
+    { name: 'Chinese New Year', type: 'Special' },
+  ];
+
   let activeTab = 'payroll';
   const today = new Date(todayISO() + 'T00:00:00');
   let group = '10-20';
@@ -265,9 +276,20 @@ window.Views.payroll = (function () {
 
   function renderHolidaysTab(body, main) {
     const rows = Store.listHolidays().slice().sort((a, b) => a.date.localeCompare(b.date));
+    const thisYear = new Date(todayISO() + 'T00:00:00').getFullYear();
+    const namesThisYear = new Set(rows.filter(h => h.date.startsWith(String(thisYear))).map(h => h.name));
+    const missingMovable = MOVABLE_HOLIDAYS.filter(mh => !namesThisYear.has(mh.name));
 
     body.innerHTML = `
       <div class="hint">Holiday pay is computed automatically on the Payroll tab from this calendar. Add the officially proclaimed dates for each year as they're announced — regular-holiday dates that are fixed by law (Jan 1, Apr 9, May 1, Jun 12, Nov 30, Dec 25, Dec 30, plus Maundy Thursday/Good Friday) can be added as soon as the year is known; movable/proclaimed dates (special non-working days, Eid'l Fitr, Eid'l Adha, National Heroes Day, etc.) should wait for the Malacañang proclamation.</div>
+      ${missingMovable.length ? `
+      <div class="panel" style="margin-bottom:14px;">
+        <div class="panel-head"><h3>⚠ Movable holidays not yet added for ${thisYear}</h3></div>
+        <div class="page-sub" style="padding-bottom:10px;">These shift every year and only become certain once Malacañang issues the actual proclamation — add each one via "+ Add holiday" once its date is confirmed.</div>
+        <div style="display:flex; flex-wrap:wrap; gap:8px;">
+          ${missingMovable.map(mh => `<span class="badge ${mh.type === 'Regular' ? 'badge-blue' : 'badge-yellow'}">${escapeHtml(mh.name)}</span>`).join('')}
+        </div>
+      </div>` : ''}
       <div class="panel">
         <div class="panel-head"><h3>${rows.length} holiday${rows.length === 1 ? '' : 's'}</h3></div>
         ${rows.length ? `
