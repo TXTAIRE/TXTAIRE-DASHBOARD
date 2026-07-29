@@ -85,7 +85,7 @@ function withholdingTax(gross) {
 }
 
 const PAY_CYCLES = {
-  '10-20': { label: 'Admins — 10th & 20th', cutoffLabels: ['10th', '20th'] },
+  '10-20': { label: 'Admins — 5th & 20th', cutoffLabels: ['5th', '20th'] },
   '15-30': { label: 'Technicians — 15th & 30th/31st', cutoffLabels: ['15th', 'end of month'] },
 };
 
@@ -109,29 +109,30 @@ function payCutoffs(payCycle, year, month) {
       { key: 'B', label: `16 – ${last} (paid the ${ordinal(last)})`, from: `${y}-${pad2(m)}-16`, to: `${y}-${pad2(m)}-${pad2(last)}`, payDate: `${y}-${pad2(m)}-${pad2(last)}` },
     ];
   }
-  // '10-20': cutoffs run 26 (previous month) – 10, and 11 – 25, so every calendar day
-  // is covered exactly once across the year (the tail, 26–end of THIS month, belongs to
-  // next month's "A" cutoff). Labor Code compliance: paid twice a month, each period ≤16
-  // days (A is at most 6 prior-month days + 10 = 16; B is a fixed 15), with paydays
-  // landing exactly on the 10th and 20th as required — unlike a plain 1–10/11–20 split,
-  // which would leave days 21–end of month uncovered by any payroll cutoff at all.
+  // '10-20' key kept as-is for backward compatibility with existing employees.payCycle
+  // values already stored in the database — only the actual cutoff/payday dates changed.
+  // Cutoffs run 21 (previous month) – 5, and 6 – 20, so every calendar day is covered
+  // exactly once across the year (the tail, 21–end of THIS month, belongs to next month's
+  // "A" cutoff). Labor Code compliance: paid twice a month, each period ≤16 days (A is at
+  // most 11 prior-month days + 5 = 16; B is a fixed 15), with paydays landing exactly on
+  // the 5th and 20th as required.
   let prevMonth = m - 1, prevYear = y;
   if (prevMonth < 1) { prevMonth = 12; prevYear -= 1; }
   return [
-    { key: 'A', label: `26 (prev. mo.) – 10 (paid the 10th)`, from: `${prevYear}-${pad2(prevMonth)}-26`, to: `${y}-${pad2(m)}-10`, payDate: `${y}-${pad2(m)}-10` },
-    { key: 'B', label: `11 – 25 (paid the 20th)`, from: `${y}-${pad2(m)}-11`, to: `${y}-${pad2(m)}-25`, payDate: `${y}-${pad2(m)}-20` },
+    { key: 'A', label: `21 (prev. mo.) – 5 (paid the 5th)`, from: `${prevYear}-${pad2(prevMonth)}-21`, to: `${y}-${pad2(m)}-05`, payDate: `${y}-${pad2(m)}-05` },
+    { key: 'B', label: `6 – 20 (paid the 20th)`, from: `${y}-${pad2(m)}-06`, to: `${y}-${pad2(m)}-20`, payDate: `${y}-${pad2(m)}-20` },
   ];
 }
 
 // Which cutoff (and, for the 10-20 cycle, potentially which month) "today" falls into —
-// used to pick a sensible default view. Days 26+ of a month belong to NEXT month's "A"
+// used to pick a sensible default view. Days 21+ of a month belong to NEXT month's "A"
 // cutoff under the 10-20 scheme (see payCutoffs above), so the month can roll forward.
 function defaultCutoffPosition(payCycle, year, month, day) {
   if (payCycle === '15-30') {
     return { year, month, half: day <= 15 ? 'A' : 'B' };
   }
-  if (day <= 10) return { year, month, half: 'A' };
-  if (day <= 25) return { year, month, half: 'B' };
+  if (day <= 5) return { year, month, half: 'A' };
+  if (day <= 20) return { year, month, half: 'B' };
   let m = month + 1, y = year;
   if (m > 12) { m = 1; y += 1; }
   return { year: y, month: m, half: 'A' };

@@ -206,7 +206,7 @@ window.Views.staff = (function () {
           <div class="field"><label>Email</label><input type="email" name="email" value="${escapeHtml(e.email)}" /></div>
           <div class="field"><label>Pay cycle</label>
             <select name="payCycle">
-              <option value="10-20" ${e.payCycle === '10-20' ? 'selected' : ''}>10th &amp; 20th (Admins)</option>
+              <option value="10-20" ${e.payCycle === '10-20' ? 'selected' : ''}>5th &amp; 20th (Admins)</option>
               <option value="15-30" ${e.payCycle === '15-30' ? 'selected' : ''}>15th &amp; 30th/31st (Technicians)</option>
             </select>
           </div>
