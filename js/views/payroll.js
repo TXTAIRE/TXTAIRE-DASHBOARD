@@ -119,7 +119,7 @@ window.Views.payroll = (function () {
       </div>
 
       <div class="page-sub" style="margin-bottom:10px;">${monthLabel} · ${selected.label} · payday ${fmtDate(selected.payDate)} · ${rows.length} staff on this schedule</div>
-      <div class="page-sub" style="margin-bottom:10px;">📌 Recommended: finalize these numbers by <strong>${fmtDate(addDays(selected.to, -2))}</strong> — 2 days before this cutoff closes on ${fmtDate(selected.to)} — so payroll is ready in time for payday.</div>
+      ${group === '10-20' ? `<div class="page-sub" style="margin-bottom:10px;">📌 Only attendance through <strong>${fmtDate(addDays(selected.to, -2))}</strong> counts toward this cutoff's pay — the last 2 days (${fmtDate(addDays(selected.to, -1))}–${fmtDate(selected.to)}) are automatically paid with the <em>next</em> cutoff instead, so payroll is ready in time for payday.</div>` : ''}
 
       <div class="kpi-row">
         <div class="kpi-card"><div class="kpi-label">Total Gross</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(totalGross)}</div><div class="kpi-sub">incl. ${fmtMoney(totalCola)} COLA, ${fmtMoney(totalHousing)} housing allowance,${fmtMoney(totalNsd)} NSD, ${fmtMoney(totalOt)} OT, ${fmtMoney(totalHoliday)} holiday</div></div>

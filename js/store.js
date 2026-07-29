@@ -219,19 +219,29 @@ function computeDayPay(dailyRateEq, rec, holiday) {
 // Payroll tab and the Employee Self-Service "My Payroll" page so both always show
 // exactly the same numbers. Reads attendance/holidays/deductions/overrides straight
 // from the Store, so it stays live as records change.
+//
+// Admin (payCycle '10-20') pay only ever counts attendance through 2 days before the
+// cutoff's nominal end date — the last 2 days of every Admin cutoff fold into the NEXT
+// cutoff's computation instead (nothing is lost, just paid one cycle later), so HR has
+// time to actually finalize/process payroll before payday. `from`/`to` stay the nominal,
+// displayed cutoff dates everywhere else (e.g. payroll overrides stay keyed on the
+// displayed cutoff) — only the attendance/holiday/workday/deduction lookups shift.
 function computeRow(emp, from, to) {
-  const allRecords = Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id);
+  const payFrom = emp.payCycle === '10-20' ? addDays(from, -2) : from;
+  const payTo = emp.payCycle === '10-20' ? addDays(to, -2) : to;
+
+  const allRecords = Store.attendanceInRange(payFrom, payTo).filter(a => a.employeeId === emp.id);
   const presentRecords = allRecords.filter(a => a.status === 'Present' || a.status === 'Late');
   const attendanceDays = presentRecords.length;
   const override = Store.getPayrollOverride(emp.id, from);
   const daysPresent = override && override.daysPresent != null ? Number(override.daysPresent) : attendanceDays;
   const isOverridden = !!(override && override.daysPresent != null);
 
-  const holidays = Store.holidaysInRange(from, to);
+  const holidays = Store.holidaysInRange(payFrom, payTo);
   const holidayByDate = {};
   holidays.forEach(h => { holidayByDate[h.date] = h; });
 
-  const workDays = workDaysInRange(from, to);
+  const workDays = workDaysInRange(payFrom, payTo);
   const holidayWorkDayCount = holidays.filter(h => new Date(h.date + 'T00:00:00').getDay() !== 0).length;
   const ordinaryWorkDays = Math.max(0, workDays - holidayWorkDayCount);
   const presentOnOrdinaryDays = presentRecords.filter(r => !holidayByDate[r.date]).length;
@@ -283,7 +293,7 @@ function computeRow(emp, from, to) {
   const gross = basePay + colaPay + housingPay + nsdPay + otPay + holidayPay;
   const tax = withholdingTax(gross);
 
-  const manualDed = Store.deductionsInRange(from, to).filter(d => d.employeeId === emp.id).reduce((s, d) => s + Number(d.amount), 0);
+  const manualDed = Store.deductionsInRange(payFrom, payTo).filter(d => d.employeeId === emp.id).reduce((s, d) => s + Number(d.amount), 0);
   const attendanceDed = emp.payType === 'Monthly' && ordinaryWorkDays > 0 ? (emp.rate / ordinaryWorkDays) * daysAbsent : 0;
   const dedTotal = manualDed + attendanceDed + lateUndertimeDed;
   const net = gross - tax - dedTotal;
