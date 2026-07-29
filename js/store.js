@@ -84,6 +84,33 @@ function withholdingTax(gross) {
   return 200833.33 + 0.35 * (g - 666667);
 }
 
+// Annually-fixed Philippine holidays only — keyed by "MM-DD" so they match regardless of
+// year. Deliberately excludes movable/proclaimed holidays (Maundy Thursday, Good Friday,
+// Black Saturday, Chinese New Year, National Heroes Day) since those shift every year and
+// are only certain once Malacañang issues the actual proclamation (see the Holidays table
+// comment in supabase/schema.sql) — guessing those would risk a wrong date silently
+// granting or denying holiday pay.
+const FIXED_PH_HOLIDAYS = {
+  '01-01': { name: "New Year's Day", type: 'Regular' },
+  '04-09': { name: 'Araw ng Kagitingan', type: 'Regular' },
+  '05-01': { name: 'Labor Day', type: 'Regular' },
+  '06-12': { name: 'Independence Day', type: 'Regular' },
+  '11-30': { name: 'Bonifacio Day', type: 'Regular' },
+  '12-25': { name: 'Christmas Day', type: 'Regular' },
+  '12-30': { name: 'Rizal Day', type: 'Regular' },
+  '02-25': { name: 'EDSA People Power Anniversary', type: 'Special' },
+  '08-21': { name: 'Ninoy Aquino Day', type: 'Special' },
+  '11-01': { name: "All Saints' Day", type: 'Special' },
+  '12-08': { name: 'Feast of the Immaculate Conception', type: 'Special' },
+  '12-24': { name: 'Christmas Eve', type: 'Special' },
+  '12-31': { name: "New Year's Eve", type: 'Special' },
+};
+
+function detectFixedPhHoliday(isoDate) {
+  if (!isoDate) return null;
+  return FIXED_PH_HOLIDAYS[isoDate.slice(5)] || null;
+}
+
 const PAY_CYCLES = {
   '10-20': { label: 'Admins — 5th & 20th', cutoffLabels: ['5th', '20th'] },
   '15-30': { label: 'Technicians — 15th & 30th', cutoffLabels: ['15th', '30th'] },

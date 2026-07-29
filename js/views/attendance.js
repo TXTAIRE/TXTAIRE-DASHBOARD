@@ -352,17 +352,36 @@ window.Views.attendance = (function () {
     return { timeIn: '09:00', timeOut: '18:00', hours: 8 };
   }
 
+  // Shared-table holiday (HR-curated, authoritative) takes priority; falls back to the
+  // fixed-date PH holiday reference (js/store.js FIXED_PH_HOLIDAYS) when this date isn't
+  // on the Holidays list yet.
+  function holidayContext(date) {
+    const sharedHoliday = Store.holidaysInRange(date, date)[0] || null;
+    const fixedHoliday = detectFixedPhHoliday(date);
+    return { sharedHoliday, fixedHoliday, effective: sharedHoliday || fixedHoliday };
+  }
+
+  function holidayHintHtml(date, ctx) {
+    if (ctx.sharedHoliday) return `${escapeHtml(ctx.sharedHoliday.name)} is on the Holidays list for this date.`;
+    if (ctx.fixedHoliday) {
+      return `🎌 ${escapeHtml(ctx.fixedHoliday.name)} — a recognized Philippine ${ctx.fixedHoliday.type} holiday for this date, auto-detected. Not yet on your Holidays list.
+        <button type="button" class="link-btn" data-add-holiday data-date="${date}" data-name="${escapeHtml(ctx.fixedHoliday.name)}" data-type="${ctx.fixedHoliday.type}">+ Add to Holidays list</button>`;
+    }
+    return '';
+  }
+
   function openAttendanceModal(main, empId, recId) {
     const rec = recId ? Store.listAttendance().find(a => a.id === recId) : null;
     const r = rec || Object.assign({ employeeId: empId || '', date: selectedDate, status: 'Present' }, defaultShiftFor(empId));
-    const holiday = Store.holidaysInRange(r.date, r.date)[0] || null;
+    const holidayCtx = holidayContext(r.date);
+    const holiday = holidayCtx.effective;
 
     openModal(`
       <h2>${rec ? 'Edit attendance' : 'Log attendance'}</h2>
       <form id="att-form">
         <div class="modal-grid">
           <div class="field full"><label>Employee</label><select name="employeeId" id="att-employee">${employeeOptions(r.employeeId)}</select></div>
-          <div class="field"><label>Date</label><input type="date" name="date" value="${r.date}" /></div>
+          <div class="field"><label>Date</label><input type="date" name="date" id="att-date" value="${r.date}" /></div>
           <div class="field"><label>Status</label>
             <select name="status">${['Present', 'Late', 'Absent', 'On Leave'].map(s => `<option ${s === r.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
           </div>
@@ -381,12 +400,13 @@ window.Views.attendance = (function () {
               ${r.otStatus === 'Requested' ? '<span class="badge badge-yellow" style="margin-left:4px;">Pending request</span>' : ''}
             </label>
           </div>
-          <div class="field full"><label>Holiday${holiday ? ` — ${escapeHtml(holiday.name)} is on the Holidays list for this date` : ''}</label>
-            <select name="holidayType">
+          <div class="field full"><label>Holiday</label>
+            <select name="holidayType" id="att-holiday-type">
               <option value="">None</option>
               <option value="Regular" ${r.holidayType === 'Regular' || (!r.holidayType && holiday && holiday.type === 'Regular') ? 'selected' : ''}>Regular Holiday</option>
               <option value="Special" ${r.holidayType === 'Special' || (!r.holidayType && holiday && holiday.type === 'Special') ? 'selected' : ''}>Special (Non-working) Holiday</option>
             </select>
+            <div id="holiday-hint" class="page-sub" style="margin-top:6px;">${holidayHintHtml(r.date, holidayCtx)}</div>
             ${r.holidayStatus === 'Requested' ? '<div class="badge badge-yellow" style="margin-top:6px;">Pending request</div>' : ''}
           </div>
         </div>
@@ -404,6 +424,22 @@ window.Views.attendance = (function () {
           qs('#att-time-out', bd).value = shift.timeOut;
         });
       }
+      qs('#att-date', bd).addEventListener('change', (ev) => {
+        const ctx = holidayContext(ev.target.value);
+        qs('#holiday-hint', bd).innerHTML = holidayHintHtml(ev.target.value, ctx);
+        // Only fill in a suggestion if nothing was already picked — never override an
+        // admin's own explicit choice just because the date changed.
+        const selectEl = qs('#att-holiday-type', bd);
+        if (!selectEl.value && ctx.effective) selectEl.value = ctx.effective.type;
+      });
+      qs('#holiday-hint', bd).addEventListener('click', async (ev) => {
+        const btn = ev.target.closest('[data-add-holiday]');
+        if (!btn) return;
+        await Store.addHoliday({ date: btn.dataset.date, name: btn.dataset.name, type: btn.dataset.type });
+        toast(`✔ Added ${btn.dataset.name} to the Holidays list.`);
+        const ctx = holidayContext(btn.dataset.date);
+        qs('#holiday-hint', bd).innerHTML = holidayHintHtml(btn.dataset.date, ctx);
+      });
       qs('#att-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
