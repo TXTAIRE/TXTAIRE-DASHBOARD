@@ -65,7 +65,13 @@ window.Views.attendance = (function () {
     `;
   }
 
+  function countPendingRequests() {
+    return Store.listAttendance().reduce((n, r) =>
+      n + (r.nsdStatus === 'Requested' ? 1 : 0) + (r.otStatus === 'Requested' ? 1 : 0) + (r.holidayStatus === 'Requested' ? 1 : 0), 0);
+  }
+
   function renderView(main) {
+    const pendingCount = countPendingRequests();
     main.innerHTML = `
       <div class="crumb">HR</div>
       <div class="page-head">
@@ -79,6 +85,7 @@ window.Views.attendance = (function () {
       <div class="tabs">
         <div class="tab ${activeTab === 'daily' ? 'active' : ''}" data-tab="daily">Daily</div>
         <div class="tab ${activeTab === 'calendar' ? 'active' : ''}" data-tab="calendar">Calendar</div>
+        <div class="tab ${activeTab === 'requests' ? 'active' : ''}" data-tab="requests">Requests${pendingCount ? ` <span class="badge badge-yellow">${pendingCount}</span>` : ''}</div>
       </div>
 
       <div id="tab-body"></div>
@@ -89,7 +96,69 @@ window.Views.attendance = (function () {
     if (btnLog) btnLog.addEventListener('click', () => openAttendanceModal(main, null, null));
 
     if (activeTab === 'daily') renderDailyTab(qs('#tab-body', main), main);
-    else renderCalendarTab(qs('#tab-body', main), main);
+    else if (activeTab === 'calendar') renderCalendarTab(qs('#tab-body', main), main);
+    else renderRequestsTab(qs('#tab-body', main), main);
+  }
+
+  // NSD/OT/Holiday pay employees requested from My Portal, awaiting HR approval — nothing
+  // here counts toward payroll until approved (js/store.js computeDayPay checks for
+  // 'Approved' specifically). "If approved" previews the exact amount using the same
+  // shared pay math the Payroll tab uses, so there's no separate calculation to keep in sync.
+  function renderRequestsTab(body, main) {
+    const empById = {};
+    Store.listEmployees().forEach(e => { empById[e.id] = e; });
+    const holidayByDate = {};
+    Store.listHolidays().forEach(h => { holidayByDate[h.date] = h; });
+
+    const pending = Store.listAttendance()
+      .filter(r => r.nsdStatus === 'Requested' || r.otStatus === 'Requested' || r.holidayStatus === 'Requested')
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    body.innerHTML = `
+      <div class="page-sub" style="margin-bottom:10px;">Night Shift Differential, Overtime, and Holiday pay only count toward payroll once approved here.</div>
+      <div class="panel">
+        ${pending.length ? `
+        <table>
+          <thead><tr><th>Employee</th><th>Date</th><th>Type</th><th class="num">If approved</th><th></th></tr></thead>
+          <tbody>
+            ${pending.map(r => {
+              const emp = empById[r.employeeId];
+              if (!emp) return '';
+              const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (emp.rate / (workDaysInRange(r.date, r.date) || 1));
+              const holiday = holidayByDate[r.date];
+              const previewPay = computeDayPay(dailyRateEq, Object.assign({}, r, { nsdStatus: 'Approved', otStatus: 'Approved', holidayStatus: 'Approved' }), holiday);
+              const rows = [];
+              if (r.nsdStatus === 'Requested') rows.push({ kind: 'nsd', label: 'Night Shift Diff.', amount: fmtMoney(previewPay.nsdPay) });
+              if (r.otStatus === 'Requested') rows.push({ kind: 'ot', label: 'Overtime', amount: fmtMoney(previewPay.otPay) });
+              if (r.holidayStatus === 'Requested' && holiday) rows.push({ kind: 'holiday', label: `Holiday Pay (${escapeHtml(holiday.name)})`, amount: fmtMoney(previewPay.holidayPay) });
+              return rows.map(row => `
+                <tr>
+                  <td class="name">${escapeHtml(emp.name)}</td>
+                  <td class="dim">${fmtDate(r.date)}</td>
+                  <td>${row.label}</td>
+                  <td class="num">${row.amount}</td>
+                  <td style="white-space:nowrap;">
+                    <button class="btn btn-primary btn-sm" data-approve="${row.kind}" data-rec-id="${r.id}">Approve</button>
+                    <button class="btn btn-ghost btn-sm" data-reject="${row.kind}" data-rec-id="${r.id}">Reject</button>
+                  </td>
+                </tr>
+              `).join('');
+            }).join('')}
+          </tbody>
+        </table>` : '<div class="empty">No pending NSD/OT/Holiday requests.</div>'}
+      </div>
+    `;
+
+    qsa('[data-approve]', body).forEach(b => b.addEventListener('click', async () => {
+      await Store.updateAttendance(b.dataset.recId, { [b.dataset.approve + 'Status']: 'Approved' });
+      toast('✔ Approved');
+      renderView(main);
+    }));
+    qsa('[data-reject]', body).forEach(b => b.addEventListener('click', async () => {
+      await Store.updateAttendance(b.dataset.recId, { [b.dataset.reject + 'Status']: 'Rejected' });
+      toast('Rejected');
+      renderView(main);
+    }));
   }
 
   function renderDailyTab(body, main) {
@@ -286,6 +355,7 @@ window.Views.attendance = (function () {
   function openAttendanceModal(main, empId, recId) {
     const rec = recId ? Store.listAttendance().find(a => a.id === recId) : null;
     const r = rec || Object.assign({ employeeId: empId || '', date: selectedDate, status: 'Present' }, defaultShiftFor(empId));
+    const holiday = Store.holidaysInRange(r.date, r.date)[0] || null;
 
     openModal(`
       <h2>${rec ? 'Edit attendance' : 'Log attendance'}</h2>
@@ -299,6 +369,26 @@ window.Views.attendance = (function () {
           <div class="field"><label>Time in</label><input type="time" name="timeIn" id="att-time-in" value="${r.timeIn}" /></div>
           <div class="field"><label>Time out</label><input type="time" name="timeOut" id="att-time-out" value="${r.timeOut}" /></div>
           <div class="field"><label>Hours</label><input type="number" step="0.1" name="hours" value="${r.hours}" /></div>
+          <div class="field"><label>Night Shift Diff.</label>
+            <label style="display:flex; align-items:center; gap:6px; font-weight:400; padding-top:8px;">
+              <input type="checkbox" name="nsdApproved" ${r.nsdStatus === 'Approved' ? 'checked' : ''} style="width:auto;" /> Approved
+              ${r.nsdStatus === 'Requested' ? '<span class="badge badge-yellow" style="margin-left:4px;">Pending request</span>' : ''}
+            </label>
+          </div>
+          <div class="field"><label>Overtime</label>
+            <label style="display:flex; align-items:center; gap:6px; font-weight:400; padding-top:8px;">
+              <input type="checkbox" name="otApproved" ${r.otStatus === 'Approved' ? 'checked' : ''} style="width:auto;" /> Approved
+              ${r.otStatus === 'Requested' ? '<span class="badge badge-yellow" style="margin-left:4px;">Pending request</span>' : ''}
+            </label>
+          </div>
+          <div class="field full"><label>Holiday${holiday ? ` — ${escapeHtml(holiday.name)} is on the Holidays list for this date` : ''}</label>
+            <select name="holidayType">
+              <option value="">None</option>
+              <option value="Regular" ${r.holidayType === 'Regular' || (!r.holidayType && holiday && holiday.type === 'Regular') ? 'selected' : ''}>Regular Holiday</option>
+              <option value="Special" ${r.holidayType === 'Special' || (!r.holidayType && holiday && holiday.type === 'Special') ? 'selected' : ''}>Special (Non-working) Holiday</option>
+            </select>
+            ${r.holidayStatus === 'Requested' ? '<div class="badge badge-yellow" style="margin-top:6px;">Pending request</div>' : ''}
+          </div>
         </div>
         <div class="modal-actions">
           ${rec ? '<button type="button" class="btn btn-danger" id="btn-del-att">Delete</button>' : ''}
@@ -317,6 +407,7 @@ window.Views.attendance = (function () {
       qs('#att-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
+        const holidayType = fd.get('holidayType') || null;
         const patch = {
           employeeId: fd.get('employeeId'),
           date: fd.get('date'),
@@ -324,6 +415,13 @@ window.Views.attendance = (function () {
           timeIn: fd.get('timeIn'),
           timeOut: fd.get('timeOut'),
           hours: Number(fd.get('hours')) || 0,
+          // Checking a box always approves it; leaving it unchecked never clobbers a
+          // pending employee request (still visible/actionable in the Requests tab) —
+          // it only ever clears an already-Approved flag back to undecided.
+          nsdStatus: fd.get('nsdApproved') === 'on' ? 'Approved' : (r.nsdStatus === 'Requested' ? r.nsdStatus : null),
+          otStatus: fd.get('otApproved') === 'on' ? 'Approved' : (r.otStatus === 'Requested' ? r.otStatus : null),
+          holidayType,
+          holidayStatus: holidayType ? 'Approved' : (r.holidayStatus === 'Requested' ? r.holidayStatus : null),
         };
         if (rec) { await Store.updateAttendance(rec.id, patch); toast('Attendance updated.'); }
         else { await Store.addAttendance(patch); toast('Attendance logged.'); }

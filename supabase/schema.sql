@@ -103,6 +103,19 @@ create table attendance (
   hours numeric(4,2) default 0,
   "timeInPhotoPath" text,   -- storage.objects path in the private "attendance-photos" bucket
   "timeOutPhotoPath" text,  -- (self-clock-in/out photo proof), null for HR-entered records
+  -- Employee requests NSD/OT/Holiday-premium pay for this day; null | 'Requested' |
+  -- 'Approved' | 'Rejected'. Only 'Approved' counts toward pay (js/store.js computeDayPay) —
+  -- a trigger below stops employees from setting anything other than null/'Requested'
+  -- themselves, so only HR can actually approve.
+  "nsdStatus" text,
+  "otStatus" text,
+  "holidayStatus" text,
+  -- Optional per-record override: 'Regular' | 'Special' | null. Lets HR grant the holiday
+  -- premium for this specific employee's day even when the date isn't on the shared
+  -- Holidays list; falls back to that list's type when this is null (js/store.js
+  -- computeDayPay). Doesn't affect the absent-but-still-paid rule, which only ever looks
+  -- at the real shared-list holiday.
+  "holidayType" text,
   created_at timestamptz not null default now()
 );
 
@@ -301,6 +314,15 @@ begin
     then
       raise exception 'Employees may only clear/replace photo fields on past attendance records';
     end if;
+  end if;
+  -- Employees can request NSD/OT/Holiday pay (or cancel their own pending request back to
+  -- null), but only HR can move a request to Approved/Rejected — enforced here rather than
+  -- trusted to app code, since this is the actual pay-approval boundary.
+  if (new."nsdStatus" is distinct from old."nsdStatus" and new."nsdStatus" is not null and new."nsdStatus" != 'Requested')
+    or (new."otStatus" is distinct from old."otStatus" and new."otStatus" is not null and new."otStatus" != 'Requested')
+    or (new."holidayStatus" is distinct from old."holidayStatus" and new."holidayStatus" is not null and new."holidayStatus" != 'Requested')
+  then
+    raise exception 'Employees may only request NSD/OT/Holiday pay, not approve or reject it';
   end if;
   return new;
 end;
@@ -658,6 +680,15 @@ begin
       raise exception 'Employees may only clear/replace photo fields on past attendance records';
     end if;
   end if;
+  -- Employees can request NSD/OT/Holiday pay (or cancel their own pending request back to
+  -- null), but only HR can move a request to Approved/Rejected — enforced here rather than
+  -- trusted to app code, since this is the actual pay-approval boundary.
+  if (new."nsdStatus" is distinct from old."nsdStatus" and new."nsdStatus" is not null and new."nsdStatus" != 'Requested')
+    or (new."otStatus" is distinct from old."otStatus" and new."otStatus" is not null and new."otStatus" != 'Requested')
+    or (new."holidayStatus" is distinct from old."holidayStatus" and new."holidayStatus" is not null and new."holidayStatus" != 'Requested')
+  then
+    raise exception 'Employees may only request NSD/OT/Holiday pay, not approve or reject it';
+  end if;
   return new;
 end;
 $$;
@@ -666,3 +697,26 @@ drop trigger if exists trg_employee_attendance_update on attendance;
 create trigger trg_employee_attendance_update
   before update on attendance
   for each row execute function enforce_employee_attendance_update();
+
+-- =================================================================
+-- NSD/OT/Holiday pay request-and-approve workflow — incremental migration. Run once
+-- against a database that already has the migrations above applied. Safe to re-run.
+-- Employees request from My Portal; only HR approving in the dashboard makes it count
+-- toward pay (js/store.js computeDayPay checks for 'Approved' specifically).
+--
+-- Backfill: existing records keep computing exactly the same pay as before this change —
+-- 'Approved' is set wherever the OLD automatic logic would have applied (hours > 8 for
+-- OT), and unconditionally for NSD/Holiday since those are just gates in front of the same
+-- underlying hour-based math, which already correctly evaluates to zero pay on days that
+-- don't actually qualify. New records going forward start at null (not yet requested).
+-- =================================================================
+
+alter table attendance add column if not exists "nsdStatus" text;
+alter table attendance add column if not exists "otStatus" text;
+alter table attendance add column if not exists "holidayStatus" text;
+
+update attendance set "otStatus" = 'Approved' where hours::numeric > 8 and "otStatus" is null;
+update attendance set "nsdStatus" = 'Approved' where "nsdStatus" is null;
+update attendance set "holidayStatus" = 'Approved' where "holidayStatus" is null;
+
+alter table attendance add column if not exists "holidayType" text;

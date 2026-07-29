@@ -36,7 +36,7 @@ function openModal(innerHtml, onMount) {
   bd.innerHTML = '<div class="modal-wrap"><div class="modal">' +
     '<button class="modal-close" data-close-modal>&times;</button>' + innerHtml + '</div></div>';
   document.body.appendChild(bd);
-  qs('[data-close-modal]', bd).addEventListener('click', closeModal);
+  qsa('[data-close-modal]', bd).forEach(el => el.addEventListener('click', closeModal));
   if (onMount) onMount(bd);
   return bd;
 }

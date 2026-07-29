@@ -40,7 +40,7 @@ function openEssModal(innerHtml, onMount) {
   bd.innerHTML = '<div class="modal-wrap"><div class="modal">' +
     '<button class="modal-close" data-close-modal>&times;</button>' + innerHtml + '</div></div>';
   document.body.appendChild(bd);
-  qs('[data-close-modal]', bd).addEventListener('click', closeEssModal);
+  qsa('[data-close-modal]', bd).forEach(el => el.addEventListener('click', closeEssModal));
   if (onMount) onMount(bd);
   return bd;
 }

@@ -179,22 +179,35 @@ function nightOverlapHours(timeIn, timeOut) {
 // regular hours worked up to 8); an unworked REGULAR holiday still pays a full day ("no
 // work, no pay" does not apply to regular holidays); an unworked special day pays nothing
 // extra.
+// NSD/OT/Holiday-premium pay only count once HR has approved that specific day's request
+// (rec.otStatus/nsdStatus/holidayStatus === 'Approved') — a Requested-but-not-yet-approved
+// day pays neither. The one exception, required by Philippine labor law: an employee who
+// was ABSENT on a declared Regular Holiday is still owed their full daily rate regardless
+// of any request/approval, since there's no attendance record for them to request against.
 function computeDayPay(dailyRateEq, rec, holiday) {
   const hourlyRate = dailyRateEq / 8;
   const hrs = rec ? (Number(rec.hours) || 0) : 0;
-  const otHrs = rec ? Math.max(0, hrs - 8) : 0;
-  const otMultiplier = holiday ? (holiday.type === 'Regular' ? 2.6 : 1.69) : 1.25;
+
+  // A record can carry its own holidayType, overriding/standing in for the shared
+  // Holidays list entry for that date — lets HR grant the holiday premium for a specific
+  // employee's day even when that date isn't on the company-wide list. The absent-but-
+  // still-paid rule below stays tied to the real shared-list holiday only, since there's
+  // no per-record override possible for a day nobody clocked in for.
+  const effectiveType = (rec && rec.holidayType) ? rec.holidayType : (holiday ? holiday.type : null);
+
+  const otHrs = (rec && rec.otStatus === 'Approved') ? Math.max(0, hrs - 8) : 0;
+  const otMultiplier = effectiveType ? (effectiveType === 'Regular' ? 2.6 : 1.69) : 1.25;
   const otPay = otHrs * hourlyRate * otMultiplier;
-  const nsdHrs = rec ? nightOverlapHours(rec.timeIn, rec.timeOut) : 0;
+  const nsdHrs = (rec && rec.nsdStatus === 'Approved') ? nightOverlapHours(rec.timeIn, rec.timeOut) : 0;
   const nsdPay = nsdHrs * hourlyRate * 0.10;
 
   let holidayPay = 0;
-  if (holiday) {
-    if (rec) {
+  if (effectiveType) {
+    if (rec && rec.holidayStatus === 'Approved') {
       const regHrs = Math.min(hrs, 8);
-      const mult = holiday.type === 'Regular' ? 2.0 : 1.3;
+      const mult = effectiveType === 'Regular' ? 2.0 : 1.3;
       holidayPay = dailyRateEq * (mult - 1) * (regHrs / 8);
-    } else if (holiday.type === 'Regular') {
+    } else if (!rec && holiday && holiday.type === 'Regular') {
       holidayPay = dailyRateEq;
     }
   }

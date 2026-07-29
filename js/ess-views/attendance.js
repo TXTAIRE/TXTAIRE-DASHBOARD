@@ -12,10 +12,25 @@ window.EssViews.attendance = (function () {
     return { from: addDays(today, -6), to: today }; // week
   }
 
+  // NSD/OT/Holiday pay only ever count once HR approves the request (js/store.js
+  // computeDayPay checks for 'Approved') — this renders that row's current state:
+  // a Request button, a Pending badge with Cancel, a Rejected badge with Request-again,
+  // or the approved value once HR has signed off.
+  function requestRow(recId, statusVal, label, valueWhenApproved, kind) {
+    let action;
+    if (statusVal === 'Approved') action = `<strong>${escapeHtml(valueWhenApproved)}</strong> <span class="badge badge-green">Approved</span>`;
+    else if (statusVal === 'Requested') action = `<span class="badge badge-yellow">Pending approval</span> <button type="button" class="link-btn" data-cancel-request="${kind}" data-rec-id="${recId}">Cancel</button>`;
+    else if (statusVal === 'Rejected') action = `<span class="badge badge-red">Rejected</span> <button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Request again</button>`;
+    else action = `<button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Request</button>`;
+    return `<div class="ess-row"><span class="label">${label}</span><span class="value">${action}</span></div>`;
+  }
+
   function dayCard(emp, date, rec, holiday) {
     const dow = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (emp.rate / (workDaysInRange(date, date) || 1));
-    const pay = computeDayPay(dailyRateEq, rec, holiday);
+    const pay = rec ? computeDayPay(dailyRateEq, rec, holiday) : null;
+    const nsdRawHrs = rec ? nightOverlapHours(rec.timeIn, rec.timeOut) : 0;
+    const otRawHrs = rec ? Math.max(0, Number(rec.hours) - 8) : 0;
     return `
       <div class="ess-card">
         <div class="ess-card-label">${dow}</div>
@@ -24,8 +39,9 @@ window.EssViews.attendance = (function () {
         <div class="ess-row"><span class="label">Time Out</span><span class="value">${rec.timeOut ? to12Hour(rec.timeOut) : '—'} ${rec.timeOutPhotoPath ? `<button class="link-btn" data-view-photo="${rec.timeOutPhotoPath}" title="View photo">📷</button>` : ''}</span></div>
         <div class="ess-row"><span class="label">Hours</span><span class="value">${rec.hours}</span></div>
         <div class="ess-row"><span class="label">Status</span><span class="value">${escapeHtml(rec.status)}</span></div>
-        ${pay.nsdHrs ? `<div class="ess-row"><span class="label">Night Shift Diff.</span><span class="value">${pay.nsdHrs.toFixed(2)} hr</span></div>` : ''}
-        ${pay.otHrs ? `<div class="ess-row"><span class="label">Overtime</span><span class="value">${pay.otHrs.toFixed(2)} hr</span></div>` : ''}
+        ${nsdRawHrs > 0 ? requestRow(rec.id, rec.nsdStatus, 'Night Shift Diff.', pay.nsdHrs.toFixed(2) + ' hr', 'nsd') : ''}
+        ${otRawHrs > 0 ? requestRow(rec.id, rec.otStatus, 'Overtime', pay.otHrs.toFixed(2) + ' hr', 'ot') : ''}
+        ${holiday ? requestRow(rec.id, rec.holidayStatus, `Holiday Pay (${escapeHtml(holiday.name)})`, fmtMoney(pay.holidayPay), 'holiday') : ''}
         ${Number(rec.hours) < 8 ? `<div class="ess-row"><span class="label">Undertime</span><span class="value">${(8 - Number(rec.hours)).toFixed(2)} hr</span></div>` : ''}
         ` : `<div class="ess-sub">Not logged${holiday ? ' · ' + escapeHtml(holiday.name) : ''}</div>`}
       </div>
@@ -93,6 +109,18 @@ window.EssViews.attendance = (function () {
     if (deleteRedoBtn) deleteRedoBtn.addEventListener('click', () => deleteAndRedoToday(main, emp, todayRec));
     qsa('[data-view-photo]', main).forEach(b => b.addEventListener('click', () => viewPhoto(b.dataset.viewPhoto)));
     qs('#btn-photo-gallery', main).addEventListener('click', () => openPhotoGallery(main, emp));
+    qsa('[data-request]', main).forEach(b => b.addEventListener('click', async () => {
+      const field = b.dataset.request + 'Status';
+      await Store.updateAttendance(b.dataset.recId, { [field]: 'Requested' });
+      toast('✔ Requested — waiting on HR approval.');
+      render(main, emp);
+    }));
+    qsa('[data-cancel-request]', main).forEach(b => b.addEventListener('click', async () => {
+      const field = b.dataset.cancelRequest + 'Status';
+      await Store.updateAttendance(b.dataset.recId, { [field]: null });
+      toast('Request cancelled.');
+      render(main, emp);
+    }));
   }
 
   // Every Time In / Time Out photo the employee has ever taken, newest first, with a
