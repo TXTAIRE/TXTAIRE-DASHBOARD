@@ -85,8 +85,8 @@ function withholdingTax(gross) {
 }
 
 const PAY_CYCLES = {
-  '10-20': { label: 'Admins — 10th & 20th', cutoffLabels: ['10th', '20th'] },
-  '15-30': { label: 'Technicians — 15th & 30th/31st', cutoffLabels: ['15th', 'end of month'] },
+  '10-20': { label: 'Admins — 5th & 20th', cutoffLabels: ['5th', '20th'] },
+  '15-30': { label: 'Technicians — 15th & 30th', cutoffLabels: ['15th', '30th'] },
 };
 
 function pad2(n) { return String(n).padStart(2, '0'); }
@@ -103,35 +103,44 @@ function ordinal(n) {
 function payCutoffs(payCycle, year, month) {
   const y = year, m = month;
   const last = daysInMonth(y, m);
-  if (payCycle === '15-30') {
-    return [
-      { key: 'A', label: `1 – 15 (paid the 15th)`, from: `${y}-${pad2(m)}-01`, to: `${y}-${pad2(m)}-15`, payDate: `${y}-${pad2(m)}-15` },
-      { key: 'B', label: `16 – ${last} (paid the ${ordinal(last)})`, from: `${y}-${pad2(m)}-16`, to: `${y}-${pad2(m)}-${pad2(last)}`, payDate: `${y}-${pad2(m)}-${pad2(last)}` },
-    ];
-  }
-  // '10-20': cutoffs run 26 (previous month) – 10, and 11 – 25, so every calendar day
-  // is covered exactly once across the year (the tail, 26–end of THIS month, belongs to
-  // next month's "A" cutoff). Labor Code compliance: paid twice a month, each period ≤16
-  // days (A is at most 6 prior-month days + 10 = 16; B is a fixed 15), with paydays
-  // landing exactly on the 10th and 20th as required — unlike a plain 1–10/11–20 split,
-  // which would leave days 21–end of month uncovered by any payroll cutoff at all.
   let prevMonth = m - 1, prevYear = y;
   if (prevMonth < 1) { prevMonth = 12; prevYear -= 1; }
+
+  if (payCycle === '15-30') {
+    // Technicians: cutoffs end the 10th and 25th, paid 5 days later on the 15th and 30th
+    // (or the last day of the month, for the rare month without a 30th) — so every
+    // calendar day is covered exactly once (the tail, 26–end of THIS month, belongs to
+    // next month's "A" cutoff), each period ≤16 days per the Labor Code (A is at most 6
+    // prior-month days + 10 = 16; B is a fixed 15).
+    const paydayB = Math.min(30, last);
+    return [
+      { key: 'A', label: `26 (prev. mo.) – 10 (paid the 15th)`, from: `${prevYear}-${pad2(prevMonth)}-26`, to: `${y}-${pad2(m)}-10`, payDate: `${y}-${pad2(m)}-15` },
+      { key: 'B', label: `11 – 25 (paid the ${ordinal(paydayB)})`, from: `${y}-${pad2(m)}-11`, to: `${y}-${pad2(m)}-25`, payDate: `${y}-${pad2(m)}-${pad2(paydayB)}` },
+    ];
+  }
+  // Admins: cutoffs end the 3rd and 18th, paid 2 days later on the 5th and 20th — every
+  // calendar day is covered exactly once (the tail, 19–end of THIS month, belongs to next
+  // month's "A" cutoff), each period ≤16 days per the Labor Code (A is at most 13
+  // prior-month days + 3 = 16; B is a fixed 15).
   return [
-    { key: 'A', label: `26 (prev. mo.) – 10 (paid the 10th)`, from: `${prevYear}-${pad2(prevMonth)}-26`, to: `${y}-${pad2(m)}-10`, payDate: `${y}-${pad2(m)}-10` },
-    { key: 'B', label: `11 – 25 (paid the 20th)`, from: `${y}-${pad2(m)}-11`, to: `${y}-${pad2(m)}-25`, payDate: `${y}-${pad2(m)}-20` },
+    { key: 'A', label: `19 (prev. mo.) – 3 (paid the 5th)`, from: `${prevYear}-${pad2(prevMonth)}-19`, to: `${y}-${pad2(m)}-03`, payDate: `${y}-${pad2(m)}-05` },
+    { key: 'B', label: `4 – 18 (paid the 20th)`, from: `${y}-${pad2(m)}-04`, to: `${y}-${pad2(m)}-18`, payDate: `${y}-${pad2(m)}-20` },
   ];
 }
 
-// Which cutoff (and, for the 10-20 cycle, potentially which month) "today" falls into —
-// used to pick a sensible default view. Days 26+ of a month belong to NEXT month's "A"
-// cutoff under the 10-20 scheme (see payCutoffs above), so the month can roll forward.
+// Which cutoff (and potentially which month) "today" falls into — used to pick a
+// sensible default view. Days past each cycle's "B" cutoff belong to NEXT month's "A"
+// cutoff (see payCutoffs above), so the month can roll forward.
 function defaultCutoffPosition(payCycle, year, month, day) {
   if (payCycle === '15-30') {
-    return { year, month, half: day <= 15 ? 'A' : 'B' };
+    if (day <= 10) return { year, month, half: 'A' };
+    if (day <= 25) return { year, month, half: 'B' };
+    let m = month + 1, y = year;
+    if (m > 12) { m = 1; y += 1; }
+    return { year: y, month: m, half: 'A' };
   }
-  if (day <= 10) return { year, month, half: 'A' };
-  if (day <= 25) return { year, month, half: 'B' };
+  if (day <= 3) return { year, month, half: 'A' };
+  if (day <= 18) return { year, month, half: 'B' };
   let m = month + 1, y = year;
   if (m > 12) { m = 1; y += 1; }
   return { year: y, month: m, half: 'A' };
@@ -218,30 +227,23 @@ function computeDayPay(dailyRateEq, rec, holiday) {
 // Full payroll computation for one employee over one cutoff — shared by the admin
 // Payroll tab and the Employee Self-Service "My Payroll" page so both always show
 // exactly the same numbers. Reads attendance/holidays/deductions/overrides straight
-// from the Store, so it stays live as records change.
-//
-// Admin (payCycle '10-20') pay only ever counts attendance through 2 days before the
-// cutoff's nominal end date — the last 2 days of every Admin cutoff fold into the NEXT
-// cutoff's computation instead (nothing is lost, just paid one cycle later), so HR has
-// time to actually finalize/process payroll before payday. `from`/`to` stay the nominal,
-// displayed cutoff dates everywhere else (e.g. payroll overrides stay keyed on the
-// displayed cutoff) — only the attendance/holiday/workday/deduction lookups shift.
+// from the Store, so it stays live as records change. The gap between a cutoff's last
+// counted day (`to`) and its actual payDate (see payCutoffs) is what gives HR processing
+// time before payday — already baked into the cutoff span itself, so this just uses
+// `from`/`to` directly with no additional shift.
 function computeRow(emp, from, to) {
-  const payFrom = emp.payCycle === '10-20' ? addDays(from, -2) : from;
-  const payTo = emp.payCycle === '10-20' ? addDays(to, -2) : to;
-
-  const allRecords = Store.attendanceInRange(payFrom, payTo).filter(a => a.employeeId === emp.id);
+  const allRecords = Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id);
   const presentRecords = allRecords.filter(a => a.status === 'Present' || a.status === 'Late');
   const attendanceDays = presentRecords.length;
   const override = Store.getPayrollOverride(emp.id, from);
   const daysPresent = override && override.daysPresent != null ? Number(override.daysPresent) : attendanceDays;
   const isOverridden = !!(override && override.daysPresent != null);
 
-  const holidays = Store.holidaysInRange(payFrom, payTo);
+  const holidays = Store.holidaysInRange(from, to);
   const holidayByDate = {};
   holidays.forEach(h => { holidayByDate[h.date] = h; });
 
-  const workDays = workDaysInRange(payFrom, payTo);
+  const workDays = workDaysInRange(from, to);
   const holidayWorkDayCount = holidays.filter(h => new Date(h.date + 'T00:00:00').getDay() !== 0).length;
   const ordinaryWorkDays = Math.max(0, workDays - holidayWorkDayCount);
   const presentOnOrdinaryDays = presentRecords.filter(r => !holidayByDate[r.date]).length;
@@ -293,7 +295,7 @@ function computeRow(emp, from, to) {
   const gross = basePay + colaPay + housingPay + nsdPay + otPay + holidayPay;
   const tax = withholdingTax(gross);
 
-  const manualDed = Store.deductionsInRange(payFrom, payTo).filter(d => d.employeeId === emp.id).reduce((s, d) => s + Number(d.amount), 0);
+  const manualDed = Store.deductionsInRange(from, to).filter(d => d.employeeId === emp.id).reduce((s, d) => s + Number(d.amount), 0);
   const attendanceDed = emp.payType === 'Monthly' && ordinaryWorkDays > 0 ? (emp.rate / ordinaryWorkDays) * daysAbsent : 0;
   const dedTotal = manualDed + attendanceDed + lateUndertimeDed;
   const net = gross - tax - dedTotal;

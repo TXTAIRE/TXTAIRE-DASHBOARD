@@ -45,7 +45,7 @@ window.Views.payroll = (function () {
       <div class="page-head">
         <div>
           <h1 class="page-title">Payroll</h1>
-          <div class="page-sub">Admins (Admin &amp; Office Staff) are paid every 10th &amp; 20th; Technicians (Field Personnel) every 15th &amp; the last day of the month. Both schedules pay twice a month with no cutoff exceeding 16 days, per the Labor Code of the Philippines. Gross pay = base pay + COLA + housing allowance + night shift differential + overtime + holiday pay; net pay = gross pay − withholding tax − deductions.</div>
+          <div class="page-sub">Admins (Admin &amp; Office Staff) are paid every 5th &amp; 20th; Technicians (Field Personnel) every 15th &amp; 30th. Both schedules pay twice a month with no cutoff exceeding 16 days, per the Labor Code of the Philippines. Gross pay = base pay + COLA + housing allowance + night shift differential + overtime + holiday pay; net pay = gross pay − withholding tax − deductions.</div>
         </div>
         ${activeTab === 'deductions' ? '<button class="btn btn-primary" id="btn-new-deduction">+ New deduction</button>' : ''}
         ${activeTab === 'holidays' ? '<button class="btn btn-primary" id="btn-new-holiday">+ Add holiday</button>' : ''}
@@ -119,7 +119,6 @@ window.Views.payroll = (function () {
       </div>
 
       <div class="page-sub" style="margin-bottom:10px;">${monthLabel} · ${selected.label} · payday ${fmtDate(selected.payDate)} · ${rows.length} staff on this schedule</div>
-      ${group === '10-20' ? `<div class="page-sub" style="margin-bottom:10px;">📌 Only attendance through <strong>${fmtDate(addDays(selected.to, -2))}</strong> counts toward this cutoff's pay — the last 2 days (${fmtDate(addDays(selected.to, -1))}–${fmtDate(selected.to)}) are automatically paid with the <em>next</em> cutoff instead, so payroll is ready in time for payday.</div>` : ''}
 
       <div class="kpi-row">
         <div class="kpi-card"><div class="kpi-label">Total Gross</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(totalGross)}</div><div class="kpi-sub">incl. ${fmtMoney(totalCola)} COLA, ${fmtMoney(totalHousing)} housing allowance,${fmtMoney(totalNsd)} NSD, ${fmtMoney(totalOt)} OT, ${fmtMoney(totalHoliday)} holiday</div></div>
