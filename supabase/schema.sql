@@ -272,12 +272,44 @@ create policy "employee reads own attendance" on attendance
 -- record that a redo happened even though the original data itself is gone.
 create policy "employee clocks in for today" on attendance
   for insert to authenticated with check ("employeeId" = my_employee_id() and date = current_date);
-create policy "employee clocks out for today" on attendance
-  for update to authenticated
-  using ("employeeId" = my_employee_id() and date = current_date)
-  with check ("employeeId" = my_employee_id() and date = current_date);
 create policy "employee deletes own attendance for today" on attendance
   for delete to authenticated using ("employeeId" = my_employee_id() and date = current_date);
+
+-- Broader than a plain "today only" policy: employees can UPDATE any of their own rows
+-- (not just today's), because the Photo Gallery lets them delete a photo from any past
+-- day, which clears that row's photo path field. The trigger below is what actually keeps
+-- past days safe — it still blocks changing timeIn/timeOut/hours/status on any row that
+-- isn't today's, so this wider policy alone doesn't reopen editing past attendance times.
+create policy "employee updates own attendance" on attendance
+  for update to authenticated
+  using ("employeeId" = my_employee_id())
+  with check ("employeeId" = my_employee_id());
+
+create or replace function enforce_employee_attendance_update() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if is_admin() then
+    return new;
+  end if;
+  if old.date < current_date then
+    if new.date is distinct from old.date
+      or new."employeeId" is distinct from old."employeeId"
+      or new."timeIn" is distinct from old."timeIn"
+      or new."timeOut" is distinct from old."timeOut"
+      or new.hours is distinct from old.hours
+      or new.status is distinct from old.status
+    then
+      raise exception 'Employees may only clear/replace photo fields on past attendance records';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_employee_attendance_update on attendance;
+create trigger trg_employee_attendance_update
+  before update on attendance
+  for each row execute function enforce_employee_attendance_update();
 
 create policy "admin full access" on deductions
   for all to authenticated using (is_admin()) with check (is_admin());
@@ -592,3 +624,45 @@ drop policy if exists "employee deletes own attendance photos" on storage.object
 create policy "employee deletes own attendance photos" on storage.objects
   for delete to authenticated
   using (bucket_id = 'attendance-photos' and (storage.foldername(name))[1] = my_employee_id());
+
+-- =================================================================
+-- Photo Gallery — incremental migration. Run once against a database that already has the
+-- migrations above applied. Safe to re-run. Lets an employee delete an attendance photo
+-- from ANY day, past or present (the old "today only" UPDATE policy is replaced with a
+-- wider one) — but a trigger still blocks changing the actual timeIn/timeOut/hours/status
+-- on any row that isn't today's, so this only ever lets a past row's photo be cleared, not
+-- its recorded time rewritten.
+-- =================================================================
+
+drop policy if exists "employee clocks out for today" on attendance;
+drop policy if exists "employee updates own attendance" on attendance;
+create policy "employee updates own attendance" on attendance
+  for update to authenticated
+  using ("employeeId" = my_employee_id())
+  with check ("employeeId" = my_employee_id());
+
+create or replace function enforce_employee_attendance_update() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if is_admin() then
+    return new;
+  end if;
+  if old.date < current_date then
+    if new.date is distinct from old.date
+      or new."employeeId" is distinct from old."employeeId"
+      or new."timeIn" is distinct from old."timeIn"
+      or new."timeOut" is distinct from old."timeOut"
+      or new.hours is distinct from old.hours
+      or new.status is distinct from old.status
+    then
+      raise exception 'Employees may only clear/replace photo fields on past attendance records';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_employee_attendance_update on attendance;
+create trigger trg_employee_attendance_update
+  before update on attendance
+  for each row execute function enforce_employee_attendance_update();

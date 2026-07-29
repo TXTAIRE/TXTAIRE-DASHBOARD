@@ -73,6 +73,7 @@ window.EssViews.attendance = (function () {
       ${todayRec && todayRec.timeOut ? `<div class="ess-sub" style="text-align:center; margin-bottom:14px;">✔ Done for today</div>` : ''}
 
       ${todayRec ? `<button class="btn btn-ghost btn-sm" id="btn-delete-redo" style="width:100%; justify-content:center; margin-bottom:6px;">Delete &amp; Redo Today's Attendance</button>` : ''}
+      <button class="btn btn-ghost btn-sm" id="btn-photo-gallery" style="width:100%; justify-content:center; margin-bottom:6px;">📷 Photo Gallery</button>
       <button class="btn btn-ghost btn-sm" id="btn-report-concern" style="width:100%; justify-content:center; margin-bottom:6px;">Report Attendance Concern</button>
 
       <div class="ess-section-title">History</div>
@@ -91,6 +92,65 @@ window.EssViews.attendance = (function () {
     const deleteRedoBtn = qs('#btn-delete-redo', main);
     if (deleteRedoBtn) deleteRedoBtn.addEventListener('click', () => deleteAndRedoToday(main, emp, todayRec));
     qsa('[data-view-photo]', main).forEach(b => b.addEventListener('click', () => viewPhoto(b.dataset.viewPhoto)));
+    qs('#btn-photo-gallery', main).addEventListener('click', () => openPhotoGallery(main, emp));
+  }
+
+  // Every Time In / Time Out photo the employee has ever taken, newest first, with a
+  // delete option on each — including past days. Deleting only clears that one photo
+  // field (via the trigger-enforced RLS policy); the attendance row's actual date/time/
+  // hours/status can never change through this path, only which photo (if any) backs it.
+  function openPhotoGallery(main, emp) {
+    function tiles() {
+      const all = Store.listAttendance().filter(r => r.employeeId === emp.id).sort((a, b) => b.date.localeCompare(a.date));
+      const out = [];
+      all.forEach(rec => {
+        if (rec.timeInPhotoPath) out.push({ rec, kind: 'in', path: rec.timeInPhotoPath, label: 'Time In' });
+        if (rec.timeOutPhotoPath) out.push({ rec, kind: 'out', path: rec.timeOutPhotoPath, label: 'Time Out' });
+      });
+      return out;
+    }
+
+    function gridHtml() {
+      const t = tiles();
+      if (!t.length) return '<div class="ess-empty" style="grid-column:1/-1;">No photos yet.</div>';
+      return t.map(x => `
+        <div class="gallery-tile" data-path="${escapeHtml(x.path)}" data-rec-id="${x.rec.id}" data-kind="${x.kind}"
+          style="border:1px solid var(--border-soft); border-radius:8px; padding:6px; text-align:center; font-size:11px;">
+          <div data-view-tile style="cursor:pointer; padding:18px 0; background:var(--bg-elevated); border-radius:6px; font-size:22px;">📷</div>
+          <div style="margin-top:6px; font-weight:600;">${x.label}</div>
+          <div style="color:var(--text-faint);">${fmtDate(x.rec.date)}</div>
+          <button type="button" class="btn btn-danger btn-sm" data-delete-tile style="width:100%; margin-top:6px; justify-content:center;">🗑 Delete</button>
+        </div>
+      `).join('');
+    }
+
+    openEssModal(`
+      <h2>Photo Gallery</h2>
+      <div class="modal-sub">All your Time In / Time Out photos. Tap a photo to view it, or Delete to remove it — including past days.</div>
+      <div id="gallery-grid" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; max-height:55vh; overflow-y:auto; margin-top:12px;">
+        ${gridHtml()}
+      </div>
+    `, (bd) => wireGallery(bd));
+
+    function wireGallery(bd) {
+      qsa('[data-view-tile]', bd).forEach((el) => {
+        el.addEventListener('click', () => viewPhoto(el.closest('.gallery-tile').dataset.path));
+      });
+      qsa('[data-delete-tile]', bd).forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Delete this photo? This cannot be undone.')) return;
+          const tile = btn.closest('.gallery-tile');
+          const { path, recId, kind } = tile.dataset;
+          btn.disabled = true;
+          btn.textContent = 'Deleting…';
+          await Store.deleteAttendancePhoto(path);
+          await Store.updateAttendance(recId, kind === 'in' ? { timeInPhotoPath: null } : { timeOutPhotoPath: null });
+          toast('✔ Photo deleted');
+          tile.remove();
+          render(main, emp);
+        });
+      });
+    }
   }
 
   async function deleteAndRedoToday(main, emp, rec) {
