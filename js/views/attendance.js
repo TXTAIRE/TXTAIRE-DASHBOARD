@@ -210,7 +210,7 @@ window.Views.attendance = (function () {
           </div>
         </div>
       </div>
-      <div class="page-sub" style="margin-bottom:10px;">${monthLabel} · ${selected.label} · payday ${fmtDate(selected.payDate)} · click any cell to log or edit that day</div>
+      <div class="page-sub" style="margin-bottom:10px;">${monthLabel} · ${selected.label} · payday ${fmtDate(selected.payDate)} · click an empty cell to instantly log a shift, or a logged cell to fine-tune it</div>
 
       <div class="panel">
         ${employees.length ? `
@@ -253,13 +253,23 @@ window.Views.attendance = (function () {
     });
     qs('#cal-btn-prev-month', body).addEventListener('click', () => { shiftCalMonth(-1); renderCalendarTab(body, main); });
     qs('#cal-btn-next-month', body).addEventListener('click', () => { shiftCalMonth(1); renderCalendarTab(body, main); });
-    qsa('.cal-cell', body).forEach(cell => cell.addEventListener('click', (ev) => {
+    qsa('.cal-cell', body).forEach(cell => cell.addEventListener('click', async (ev) => {
       const photoEl = ev.target.closest('[data-view-photo]');
       if (photoEl) { viewPhoto(photoEl.dataset.viewPhoto); return; }
       const empId = cell.dataset.emp, date = cell.dataset.date;
       const rec = Store.listAttendance().find(a => a.employeeId === empId && a.date === date);
+      if (!rec) {
+        // One-click quick log: an empty cell instantly gets a default shift, no form —
+        // NSD/OT/holiday badges compute automatically from it just like any other record.
+        // Click the now-logged cell again to fine-tune exact times or delete it.
+        cell.style.opacity = '0.5';
+        await Store.addAttendance({ employeeId: empId, date, status: 'Present', ...defaultShiftFor(empId) });
+        toast('✔ Logged a default shift — click it again to fine-tune the times.');
+        renderCalendarTab(body, main);
+        return;
+      }
       selectedDate = date;
-      openAttendanceModal(main, empId, rec ? rec.id : null);
+      openAttendanceModal(main, empId, rec.id);
     }));
   }
 
