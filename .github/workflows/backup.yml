@@ -1,0 +1,32 @@
+name: Automatic Supabase Backup
+
+# Runs every day with no action needed from anyone, plus can be triggered manually. The
+# free Supabase tier has no built-in automatic backups/point-in-time recovery — this is
+# the practical stand-in until/unless the project moves to a paid tier with real
+# server-side backups. Needs a repo secret: SUPABASE_SERVICE_ROLE_KEY (Supabase Dashboard
+# → Settings → API → "service_role" key — NOT the anon key). That key bypasses RLS, so it
+# must only ever live here as a GitHub secret, never in any client-side file.
+on:
+  schedule:
+    - cron: '0 18 * * *' # 18:00 UTC = 2:00 AM Philippine time, daily
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Export every table
+        env:
+          SUPABASE_URL: https://fmgqqrmsxleyeiadnhyd.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          chmod +x scripts/backup-supabase.sh
+          ./scripts/backup-supabase.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: supabase-backup-${{ github.run_id }}
+          path: backup-*/
+          retention-days: 90
