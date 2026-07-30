@@ -46,8 +46,12 @@
 }
 
 .ess-cam-wrap {
-  position: relative; width: 100%; aspect-ratio: 3 / 4; border-radius: 12px;
-  overflow: hidden; background: #000; margin-bottom: 14px;
+  /* aspect-ratio starts as a portrait fallback for the instant before the camera stream
+     loads, then gets overwritten inline (js/ess-views/attendance.js fitCamWrapToStream)
+     to match that device's actual camera — portrait selfie cam on a phone, landscape
+     webcam on a laptop/desktop — so the frame is never force-cropped either way. */
+  position: relative; width: 100%; aspect-ratio: 3 / 4; max-height: 70vh; margin: 0 auto 14px auto;
+  border-radius: 12px; overflow: hidden; background: #000;
 }
 .ess-cam-wrap video, .ess-cam-wrap img {
   width: 100%; height: 100%; object-fit: cover; display: block;

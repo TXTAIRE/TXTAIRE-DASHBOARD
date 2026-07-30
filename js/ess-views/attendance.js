@@ -111,6 +111,7 @@ window.EssViews.attendance = (function () {
       navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false }).then((s) => {
         stream = s;
         video.srcObject = stream;
+        fitCamWrapToStream(bdEl, video);
         captureBtn.disabled = false;
         captureBtn.textContent = 'Capture';
       }).catch(() => {
@@ -460,6 +461,24 @@ window.EssViews.attendance = (function () {
 
   function stopStream(stream) {
     if (stream) stream.getTracks().forEach(t => t.stop());
+  }
+
+  // Matches the on-screen camera box to the actual camera's native aspect ratio, instead
+  // of a fixed portrait crop -- a phone's front camera is naturally portrait-ish, while a
+  // laptop/desktop webcam is landscape, so hardcoding one ratio cropped whichever device
+  // didn't match it. Since the box now always matches the real stream, the captured photo
+  // (and its overlay, sized off the same canvas.width/height) always shows the full frame
+  // with no forced crop on any device.
+  function fitCamWrapToStream(bdEl, video) {
+    const wrap = qs('.ess-cam-wrap', bdEl);
+    if (!wrap) return;
+    const apply = () => {
+      if (video.videoWidth && video.videoHeight) {
+        wrap.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+      }
+    };
+    if (video.videoWidth) apply();
+    else video.addEventListener('loadedmetadata', apply, { once: true });
   }
 
   function hoursBetween(timeIn, timeOut) {
@@ -821,6 +840,7 @@ window.EssViews.attendance = (function () {
       navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false }).then((s) => {
         stream = s;
         video.srcObject = stream;
+        fitCamWrapToStream(bdEl, video);
         captureBtn.disabled = false;
         captureBtn.textContent = 'Capture';
       }).catch(() => {
