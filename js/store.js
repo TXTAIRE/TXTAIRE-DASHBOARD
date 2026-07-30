@@ -562,6 +562,32 @@ const Store = (function () {
     if (error) console.error('Failed to delete attendance photo', error);
   }
 
+  // Same pattern as the attendance photo helpers above, but for the private "bank-qr"
+  // bucket (My Portal profile — bank account QR code for payroll disbursement).
+  async function uploadBankQr(employeeId, blob) {
+    const ext = (blob.type && blob.type.includes('png')) ? 'png' : 'jpg';
+    const path = `${employeeId}/${genId('qr')}.${ext}`;
+    const { error } = await sb.storage.from('bank-qr').upload(path, blob, { contentType: blob.type || 'image/jpeg' });
+    if (error) {
+      toast('QR upload failed: ' + error.message);
+      throw error;
+    }
+    return path;
+  }
+
+  async function getSignedBankQrUrl(path) {
+    if (!path) return null;
+    const { data, error } = await sb.storage.from('bank-qr').createSignedUrl(path, 3600);
+    if (error) { console.error('Failed to sign bank QR URL', error); return null; }
+    return data.signedUrl;
+  }
+
+  async function deleteBankQrPhoto(path) {
+    if (!path) return;
+    const { error } = await sb.storage.from('bank-qr').remove([path]);
+    if (error) console.error('Failed to delete bank QR photo', error);
+  }
+
   // ---- Probation / Regularization ----
   function listProbations() { return state.probationRecords.slice(); }
   function getProbation(id) { return state.probationRecords.find(p => p.id === id); }
@@ -662,6 +688,7 @@ const Store = (function () {
     listComplaints, getComplaint, addComplaint, updateComplaint, deleteComplaint,
     listAttendance, attendanceForDate, attendanceInRange, addAttendance, updateAttendance, deleteAttendance,
     uploadAttendancePhoto, getSignedPhotoUrl, deleteAttendancePhoto,
+    uploadBankQr, getSignedBankQrUrl, deleteBankQrPhoto,
     listDeductions, deductionsInRange, addDeduction, deleteDeduction,
     listProbations, getProbation, getProbationByEmployee, addProbation, updateProbation, deleteProbation,
     getPayrollOverride, setPayrollOverride,

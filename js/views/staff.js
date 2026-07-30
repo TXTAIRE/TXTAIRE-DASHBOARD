@@ -105,6 +105,11 @@ window.Views.staff = (function () {
         Payday: ${PAY_CYCLES[e.payCycle] ? PAY_CYCLES[e.payCycle].cutoffLabels.join(' & ') : '—'}
       </div>
       ${e.notes ? `<div class="section-title">Notes</div><div class="page-sub">${escapeHtml(e.notes)}</div>` : ''}
+      <div class="section-title">Bank Details <span class="dim" style="font-weight:400;">(payroll disbursement — visible only to HR/admins and this employee)</span></div>
+      <div class="page-sub">
+        Account number: ${e.bankAccountNumber ? `<strong>${escapeHtml(e.bankAccountNumber)}</strong>` : '<span class="dim">not set</span>'}
+      </div>
+      ${e.bankQrPath ? `<button class="btn btn-ghost btn-sm" id="btn-view-bank-qr" style="margin-top:6px;">View QR code</button>` : ''}
       <div class="section-title">Employee Self-Service</div>
       <div class="page-sub">
         Employee ID: ${e.employeeCode ? `<strong>${escapeHtml(e.employeeCode)}</strong>` : '<span class="dim">not assigned</span>'}<br/>
@@ -127,6 +132,14 @@ window.Views.staff = (function () {
       </div>
     `, (dr) => {
       qs('#drawer-edit', dr).addEventListener('click', () => { closeDrawer(); openEmployeeModal(main, id); });
+      const viewQrBtn = qs('#btn-view-bank-qr', dr);
+      if (viewQrBtn) viewQrBtn.addEventListener('click', () => {
+        const win = window.open('', '_blank');
+        Store.getSignedBankQrUrl(e.bankQrPath).then((url) => {
+          if (url && win) win.location.href = url;
+          else if (win) win.close();
+        });
+      });
       const grantBtn = qs('#btn-grant-ess', dr);
       if (grantBtn) grantBtn.addEventListener('click', () => openGrantEssAccess(main, e));
       const revokeBtn = qs('#btn-revoke-ess', dr);
@@ -182,7 +195,7 @@ window.Views.staff = (function () {
 
   function openEmployeeModal(main, id) {
     const editing = id ? Store.getEmployee(id) : null;
-    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, housingAllowance: 0, nightShiftDifferential: false, payCycle: '10-20', notes: '' };
+    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, housingAllowance: 0, nightShiftDifferential: false, payCycle: '10-20', notes: '', bankAccountNumber: '' };
 
     openModal(`
       <h2>${editing ? 'Edit employee' : 'Add employee'}</h2>
@@ -223,6 +236,7 @@ window.Views.staff = (function () {
               Typically works night shift
             </label>
           </div>
+          <div class="field full"><label>Bank Account Number <span class="dim">(payroll — visible only to HR/admins and this employee)</span></label><input name="bankAccountNumber" value="${escapeHtml(e.bankAccountNumber || '')}" placeholder="e.g. GCash / bank account number" /></div>
           <div class="field full"><label>Notes</label><textarea name="notes" rows="2">${escapeHtml(e.notes || '')}</textarea></div>
         </div>
         <div class="modal-actions">
@@ -252,6 +266,7 @@ window.Views.staff = (function () {
           fixedAllowance: Number(fd.get('fixedAllowance')) || 0,
           housingAllowance: Number(fd.get('housingAllowance')) || 0,
           nightShiftDifferential: fd.get('nightShiftDifferential') === 'on',
+          bankAccountNumber: fd.get('bankAccountNumber').trim(),
           notes: fd.get('notes').trim(),
         };
         if (editing) {

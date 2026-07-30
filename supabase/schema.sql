@@ -34,6 +34,10 @@ create table employees (
   "employeeCode" text unique,                  -- Employee Self-Service login ID = real company Employee Number, e.g. 'TXT015'
   "authUserId" uuid references auth.users(id), -- set once ESS portal access is granted (js/views/staff.js
                                                 -- "Grant portal access"); null = no portal login yet.
+  "bankAccountNumber" text,                    -- editable by the employee themselves (My Portal) or HR;
+  "bankQrPath" text,                           -- storage.objects path in the private "bank-qr" bucket.
+                                                -- Only ever readable by that one employee (RLS: id = my_employee_id())
+                                                -- or an admin -- never by any other employee.
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -273,6 +277,48 @@ create policy "admin full access" on employees
   for all to authenticated using (is_admin()) with check (is_admin());
 create policy "employee reads own row" on employees
   for select to authenticated using (id = my_employee_id());
+-- Employees may update their own row (My Portal "Edit Profile"), but the trigger below
+-- restricts this to contact info and bank details only -- HR-controlled fields (pay,
+-- category, status, employeeCode, authUserId, etc.) can never be changed this way.
+create policy "employee updates own contact and bank info" on employees
+  for update to authenticated
+  using (id = my_employee_id())
+  with check (id = my_employee_id());
+
+create or replace function enforce_employee_profile_update() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if is_admin() then
+    return new;
+  end if;
+  if new.id is distinct from old.id
+    or new.name is distinct from old.name
+    or new.category is distinct from old.category
+    or new.position is distinct from old.position
+    or new.status is distinct from old.status
+    or new."employmentStatus" is distinct from old."employmentStatus"
+    or new."dateHired" is distinct from old."dateHired"
+    or new."payType" is distinct from old."payType"
+    or new.rate is distinct from old.rate
+    or new."allowancePerDay" is distinct from old."allowancePerDay"
+    or new."fixedAllowance" is distinct from old."fixedAllowance"
+    or new."housingAllowance" is distinct from old."housingAllowance"
+    or new."nightShiftDifferential" is distinct from old."nightShiftDifferential"
+    or new."payCycle" is distinct from old."payCycle"
+    or new.notes is distinct from old.notes
+    or new."employeeCode" is distinct from old."employeeCode"
+    or new."authUserId" is distinct from old."authUserId"
+  then
+    raise exception 'Employees may only update their own contact info and bank details';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_employee_profile_update on employees;
+create trigger trg_employee_profile_update
+  before update on employees
+  for each row execute function enforce_employee_profile_update();
 
 create policy "admin full access" on attendance
   for all to authenticated using (is_admin()) with check (is_admin());
@@ -388,6 +434,30 @@ create policy "admin full access to attendance photos" on storage.objects
   for all to authenticated
   using (bucket_id = 'attendance-photos' and is_admin())
   with check (bucket_id = 'attendance-photos' and is_admin());
+
+-- =================================================================
+-- Storage — private bucket for each employee's bank QR code (GCash/Maya/bank app QR,
+-- so HR can pay them without manually re-typing account numbers). Same
+-- "<employeeId>/<filename>" convention as attendance-photos; only that one employee and
+-- admins can ever read it.
+-- =================================================================
+insert into storage.buckets (id, name, public)
+values ('bank-qr', 'bank-qr', false)
+on conflict (id) do nothing;
+
+create policy "employee uploads own bank qr" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'bank-qr' and (storage.foldername(name))[1] = my_employee_id());
+create policy "employee reads own bank qr" on storage.objects
+  for select to authenticated
+  using (bucket_id = 'bank-qr' and (storage.foldername(name))[1] = my_employee_id());
+create policy "employee deletes own bank qr" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'bank-qr' and (storage.foldername(name))[1] = my_employee_id());
+create policy "admin full access to bank qr" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'bank-qr' and is_admin())
+  with check (bucket_id = 'bank-qr' and is_admin());
 
 -- =================================================================
 -- Realtime — publish every table so the app's subscriptions receive changes
@@ -720,3 +790,78 @@ update attendance set "nsdStatus" = 'Approved' where "nsdStatus" is null;
 update attendance set "holidayStatus" = 'Approved' where "holidayStatus" is null;
 
 alter table attendance add column if not exists "holidayType" text;
+
+-- =================================================================
+-- Editable My Portal profile + bank details for payroll — incremental migration. Run
+-- once against a database that already has the migrations above applied. Safe to re-run.
+-- Employees can now update their own phone/email and bank account number/QR code from
+-- My Portal; HR-controlled fields (pay, category, status, employeeCode, authUserId, etc.)
+-- stay locked to admins via the trigger below. Bank details are visible only to that one
+-- employee and to admins -- nobody else can ever read another employee's row at all.
+-- =================================================================
+
+alter table employees add column if not exists "bankAccountNumber" text;
+alter table employees add column if not exists "bankQrPath" text;
+
+drop policy if exists "employee updates own contact and bank info" on employees;
+create policy "employee updates own contact and bank info" on employees
+  for update to authenticated
+  using (id = my_employee_id())
+  with check (id = my_employee_id());
+
+create or replace function enforce_employee_profile_update() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if is_admin() then
+    return new;
+  end if;
+  if new.id is distinct from old.id
+    or new.name is distinct from old.name
+    or new.category is distinct from old.category
+    or new.position is distinct from old.position
+    or new.status is distinct from old.status
+    or new."employmentStatus" is distinct from old."employmentStatus"
+    or new."dateHired" is distinct from old."dateHired"
+    or new."payType" is distinct from old."payType"
+    or new.rate is distinct from old.rate
+    or new."allowancePerDay" is distinct from old."allowancePerDay"
+    or new."fixedAllowance" is distinct from old."fixedAllowance"
+    or new."housingAllowance" is distinct from old."housingAllowance"
+    or new."nightShiftDifferential" is distinct from old."nightShiftDifferential"
+    or new."payCycle" is distinct from old."payCycle"
+    or new.notes is distinct from old.notes
+    or new."employeeCode" is distinct from old."employeeCode"
+    or new."authUserId" is distinct from old."authUserId"
+  then
+    raise exception 'Employees may only update their own contact info and bank details';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_employee_profile_update on employees;
+create trigger trg_employee_profile_update
+  before update on employees
+  for each row execute function enforce_employee_profile_update();
+
+insert into storage.buckets (id, name, public)
+values ('bank-qr', 'bank-qr', false)
+on conflict (id) do nothing;
+
+drop policy if exists "employee uploads own bank qr" on storage.objects;
+create policy "employee uploads own bank qr" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'bank-qr' and (storage.foldername(name))[1] = my_employee_id());
+drop policy if exists "employee reads own bank qr" on storage.objects;
+create policy "employee reads own bank qr" on storage.objects
+  for select to authenticated
+  using (bucket_id = 'bank-qr' and (storage.foldername(name))[1] = my_employee_id());
+drop policy if exists "employee deletes own bank qr" on storage.objects;
+create policy "employee deletes own bank qr" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'bank-qr' and (storage.foldername(name))[1] = my_employee_id());
+drop policy if exists "admin full access to bank qr" on storage.objects;
+create policy "admin full access to bank qr" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'bank-qr' and is_admin())
+  with check (bucket_id = 'bank-qr' and is_admin());
