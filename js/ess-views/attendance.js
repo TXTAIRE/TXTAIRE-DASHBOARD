@@ -13,15 +13,18 @@ window.EssViews.attendance = (function () {
   }
 
   // NSD/OT/Holiday pay only ever count once HR approves the request (js/store.js
-  // computeDayPay checks for 'Approved') — this renders that row's current state:
-  // a Request button, a Pending badge with Cancel, a Rejected badge with Request-again,
-  // or the approved value once HR has signed off.
-  function requestRow(recId, statusVal, label, valueWhenApproved, kind) {
+  // computeDayPay checks for 'Approved') — this renders that row's current state: a
+  // Request button (only when the day is actually eligible — real night-shift hours,
+  // real overtime hours, or an actual holiday), a Pending badge with Cancel, a Rejected
+  // badge with Request-again, the approved value once HR has signed off, or a plain "—"
+  // when the day was never eligible in the first place (nothing to request).
+  function requestRow(recId, statusVal, label, valueWhenApproved, kind, eligible) {
     let action;
     if (statusVal === 'Approved') action = `<strong>${escapeHtml(valueWhenApproved)}</strong> <span class="badge badge-green">Approved</span>`;
     else if (statusVal === 'Requested') action = `<span class="badge badge-yellow">Pending approval</span> <button type="button" class="link-btn" data-cancel-request="${kind}" data-rec-id="${recId}">Cancel</button>`;
     else if (statusVal === 'Rejected') action = `<span class="badge badge-red">Rejected</span> <button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Request again</button>`;
-    else action = `<button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Request</button>`;
+    else if (eligible) action = `<button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Request</button>`;
+    else action = `<span class="dim">—</span>`;
     return `<div class="ess-row"><span class="label">${label}</span><span class="value">${action}</span></div>`;
   }
 
@@ -31,6 +34,7 @@ window.EssViews.attendance = (function () {
     const pay = rec ? computeDayPay(dailyRateEq, rec, holiday) : null;
     const nsdRawHrs = rec ? nightOverlapHours(rec.timeIn, rec.timeOut) : 0;
     const otRawHrs = rec ? Math.max(0, Number(rec.hours) - 8) : 0;
+    const holidayLabel = holiday ? `Holiday Pay — ${escapeHtml(holiday.name)} (${escapeHtml(holiday.type)} Holiday)` : 'Holiday Pay';
     return `
       <div class="ess-card">
         <div class="ess-card-label">${dow}</div>
@@ -39,9 +43,9 @@ window.EssViews.attendance = (function () {
         <div class="ess-row"><span class="label">Time Out</span><span class="value">${rec.timeOut ? to12Hour(rec.timeOut) : '—'} ${rec.timeOutPhotoPath ? `<button class="link-btn" data-view-photo="${rec.timeOutPhotoPath}" title="View photo">📷</button>` : ''}</span></div>
         <div class="ess-row"><span class="label">Hours</span><span class="value">${rec.hours}</span></div>
         <div class="ess-row"><span class="label">Status</span><span class="value">${escapeHtml(rec.status)}</span></div>
-        ${nsdRawHrs > 0 ? requestRow(rec.id, rec.nsdStatus, 'Night Shift Diff.', pay.nsdHrs.toFixed(2) + ' hr', 'nsd') : ''}
-        ${otRawHrs > 0 ? requestRow(rec.id, rec.otStatus, 'Overtime', pay.otHrs.toFixed(2) + ' hr', 'ot') : ''}
-        ${holiday ? requestRow(rec.id, rec.holidayStatus, `Holiday Pay (${escapeHtml(holiday.name)})`, fmtMoney(pay.holidayPay), 'holiday') : ''}
+        ${requestRow(rec.id, rec.nsdStatus, 'Night Shift Diff.', pay.nsdHrs.toFixed(2) + ' hr', 'nsd', nsdRawHrs > 0)}
+        ${requestRow(rec.id, rec.otStatus, 'Overtime', pay.otHrs.toFixed(2) + ' hr', 'ot', otRawHrs > 0)}
+        ${requestRow(rec.id, rec.holidayStatus, holidayLabel, fmtMoney(pay.holidayPay), 'holiday', !!holiday)}
         ${Number(rec.hours) < 8 ? `<div class="ess-row"><span class="label">Undertime</span><span class="value">${(8 - Number(rec.hours)).toFixed(2)} hr</span></div>` : ''}
         ` : `<div class="ess-sub">Not logged${holiday ? ' · ' + escapeHtml(holiday.name) : ''}</div>`}
       </div>
