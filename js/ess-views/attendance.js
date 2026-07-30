@@ -527,7 +527,7 @@ window.EssViews.attendance = (function () {
   // Draws the same info a physical time clock would stamp — logo, time, date, location,
   // name, company, verification code — directly onto the captured frame. Original design
   // (our own brand, wordmark and layout), not copied from any third-party product.
-  function drawOverlay(ctx, w, h, emp, locationText) {
+  function drawOverlay(ctx, w, h, emp, locationInfo) {
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     const hh = now.getHours();
@@ -590,11 +590,19 @@ window.EssViews.attendance = (function () {
     ctx.fillText(dowStr, dateX, y);
 
     y += w * 0.05;
-    if (locationText) {
+    if (locationInfo && locationInfo.text) {
       ctx.font = `500 ${Math.round(w * 0.028)}px Arial`;
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(locationText, px, y);
+      ctx.fillText(locationInfo.text, px, y);
       y += w * 0.05;
+    }
+    // Exact GPS coordinates — the actual proof of location, always shown whenever a fix
+    // was obtained even if reverse geocoding (the readable city/region above) failed.
+    if (locationInfo && locationInfo.coordsText) {
+      ctx.font = `500 ${Math.round(w * 0.022)}px Arial`;
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.fillText(`GPS: ${locationInfo.coordsText}`, px, y);
+      y += w * 0.04;
     }
 
     y += w * 0.015;
@@ -631,22 +639,34 @@ window.EssViews.attendance = (function () {
     ctx.restore();
   }
 
+  function formatCoords(latitude, longitude, accuracy) {
+    const lat = Math.abs(latitude).toFixed(5) + '° ' + (latitude >= 0 ? 'N' : 'S');
+    const lon = Math.abs(longitude).toFixed(5) + '° ' + (longitude >= 0 ? 'E' : 'W');
+    const acc = accuracy ? ` (±${Math.round(accuracy)}m)` : '';
+    return `${lat}, ${lon}${acc}`;
+  }
+
+  // Returns { text, coordsText } — text is a human-readable city/region (reverse-geocoded,
+  // best-effort), coordsText is the exact GPS coordinates straight from the device, always
+  // included whenever a location fix is available even if reverse geocoding fails or is
+  // slow, since the coordinates are the actual proof of location.
   function bestEffortLocation() {
     return new Promise((resolve) => {
-      if (!navigator.geolocation) return resolve('');
-      const timer = setTimeout(() => resolve(''), 6000);
+      if (!navigator.geolocation) return resolve({ text: '', coordsText: '' });
+      const timer = setTimeout(() => resolve({ text: '', coordsText: '' }), 6000);
       navigator.geolocation.getCurrentPosition(async (pos) => {
         clearTimeout(timer);
+        const { latitude, longitude, accuracy } = pos.coords;
+        const coordsText = formatCoords(latitude, longitude, accuracy);
         try {
-          const { latitude, longitude } = pos.coords;
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=12`);
           const data = await res.json();
           const a = data.address || {};
           const city = a.city || a.town || a.municipality || a.village || '';
           const region = a.state || a.region || '';
-          resolve([city, region].filter(Boolean).join(', ') || data.display_name || '');
-        } catch (e) { resolve(''); }
-      }, () => { clearTimeout(timer); resolve(''); }, { timeout: 6000 });
+          resolve({ text: [city, region].filter(Boolean).join(', ') || data.display_name || '', coordsText });
+        } catch (e) { resolve({ text: '', coordsText }); }
+      }, () => { clearTimeout(timer); resolve({ text: '', coordsText: '' }); }, { timeout: 6000, enableHighAccuracy: true });
     });
   }
 
