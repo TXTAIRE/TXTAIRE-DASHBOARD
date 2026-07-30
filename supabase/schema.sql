@@ -796,24 +796,23 @@ create trigger trg_employee_attendance_update
 
 -- =================================================================
 -- NSD/OT/Holiday pay request-and-approve workflow — incremental migration. Run once
--- against a database that already has the migrations above applied. Safe to re-run.
+-- against a database that already has the migrations above applied.
 -- Employees request from My Portal; only HR approving in the dashboard makes it count
 -- toward pay (js/store.js computeDayPay checks for 'Approved' specifically).
 --
--- Backfill: existing records keep computing exactly the same pay as before this change —
--- 'Approved' is set wherever the OLD automatic logic would have applied (hours > 8 for
--- OT), and unconditionally for NSD/Holiday since those are just gates in front of the same
--- underlying hour-based math, which already correctly evaluates to zero pay on days that
--- don't actually qualify. New records going forward start at null (not yet requested).
+-- IMPORTANT — the column adds below are safe to re-run, but the one-time backfill that
+-- used to live here is NOT, and has been removed. It back-approved every existing record
+-- with hours > 8 the day this feature was introduced (a one-time, already-applied data
+-- migration, not an ongoing rule) — re-running it would silently auto-approve OT/NSD/
+-- Holiday pay for ANY current record with a null status, including a Late employee's
+-- day whose Time Out just happens to push hours past 8 and that HR has never actually
+-- reviewed. OT/NSD/Holiday pay must always go through an explicit HR approval
+-- (js/views/attendance.js's Requests tab or the Edit Attendance modal) — never automatic.
 -- =================================================================
 
 alter table attendance add column if not exists "nsdStatus" text;
 alter table attendance add column if not exists "otStatus" text;
 alter table attendance add column if not exists "holidayStatus" text;
-
-update attendance set "otStatus" = 'Approved' where hours::numeric > 8 and "otStatus" is null;
-update attendance set "nsdStatus" = 'Approved' where "nsdStatus" is null;
-update attendance set "holidayStatus" = 'Approved' where "holidayStatus" is null;
 
 alter table attendance add column if not exists "holidayType" text;
 
