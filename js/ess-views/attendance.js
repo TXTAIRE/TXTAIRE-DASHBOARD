@@ -39,8 +39,8 @@ window.EssViews.attendance = (function () {
       <div class="ess-card">
         <div class="ess-card-label">${dow}</div>
         ${rec ? `
-        <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(rec.timeIn)} ✅ ${rec.timeInPhotoPath ? `<button class="link-btn" data-view-photo="${rec.timeInPhotoPath}" title="View photo">📷</button>` : ''}</span></div>
-        <div class="ess-row"><span class="label">Time Out</span><span class="value">${rec.timeOut ? to12Hour(rec.timeOut) : '—'} ${rec.timeOutPhotoPath ? `<button class="link-btn" data-view-photo="${rec.timeOutPhotoPath}" title="View photo">📷</button>` : ''}</span></div>
+        <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(rec.timeIn)} ✅ <button class="link-btn" data-manage-photo="in" data-rec-id="${rec.id}" title="Edit or delete photo">⋯</button></span></div>
+        <div class="ess-row"><span class="label">Time Out</span><span class="value">${rec.timeOut ? to12Hour(rec.timeOut) : '—'} ${rec.timeOut ? `<button class="link-btn" data-manage-photo="out" data-rec-id="${rec.id}" title="Edit or delete photo">⋯</button>` : ''}</span></div>
         <div class="ess-row"><span class="label">Hours</span><span class="value">${rec.hours}</span></div>
         <div class="ess-row"><span class="label">Status</span><span class="value">${escapeHtml(rec.status)}</span></div>
         ${requestRow(rec.id, rec.nsdStatus, 'Night Shift Diff.', pay.nsdHrs.toFixed(2) + ' hr', 'nsd', nsdRawHrs > 0)}
@@ -50,6 +50,136 @@ window.EssViews.attendance = (function () {
         ` : `<div class="ess-sub">Not logged${holiday ? ' · ' + escapeHtml(holiday.name) : ''}</div>`}
       </div>
     `;
+  }
+
+  // One action button per Time In/Out entry — view, replace, or delete the photo attached
+  // to it, on any day including past ones. Never touches the recorded time/hours/status;
+  // the trigger-enforced RLS policy only ever lets this path change the photo field.
+  function openPhotoActions(main, emp, rec, kind) {
+    const path = kind === 'in' ? rec.timeInPhotoPath : rec.timeOutPhotoPath;
+    const label = kind === 'in' ? 'Time In' : 'Time Out';
+    openEssModal(`
+      <h2>${label} Photo</h2>
+      <div class="modal-sub">${fmtDate(rec.date)}</div>
+      <div class="modal-actions" style="flex-direction:column; gap:8px; align-items:stretch;">
+        ${path ? `<button type="button" class="btn btn-ghost" id="act-view" style="width:100%; justify-content:center;">📷 View Photo</button>` : ''}
+        <button type="button" class="btn btn-ghost" id="act-replace" style="width:100%; justify-content:center;">🔄 ${path ? 'Replace Photo' : 'Add Photo'}</button>
+        ${path ? `<button type="button" class="btn btn-danger" id="act-delete" style="width:100%; justify-content:center;">🗑 Delete Photo</button>` : ''}
+        <button type="button" class="btn btn-ghost" data-close-modal style="width:100%; justify-content:center;">Cancel</button>
+      </div>
+    `, (bd) => {
+      const viewBtn = qs('#act-view', bd);
+      if (viewBtn) viewBtn.addEventListener('click', () => viewPhoto(path));
+      qs('#act-replace', bd).addEventListener('click', () => { closeEssModal(); openReplaceCapture(main, emp, rec, kind); });
+      const deleteBtn = qs('#act-delete', bd);
+      if (deleteBtn) deleteBtn.addEventListener('click', async () => {
+        if (!confirm('Delete this photo? This cannot be undone.')) return;
+        await Store.deleteAttendancePhoto(path);
+        await Store.updateAttendance(rec.id, kind === 'in' ? { timeInPhotoPath: null } : { timeOutPhotoPath: null });
+        toast('✔ Photo deleted.');
+        closeEssModal();
+        render(main, emp);
+      });
+    });
+  }
+
+  // Re-uses the same camera/overlay pipeline as clock-in/out, but only ever writes the
+  // photo path field on an existing record — the date/time/hours/status never change,
+  // which is what lets this run safely on past-day records too.
+  function openReplaceCapture(main, emp, rec, kind) {
+    let stream = null;
+    openEssModal(`
+      <h2>${kind === 'in' ? 'Time In' : 'Time Out'} Photo</h2>
+      <div class="modal-sub">${fmtDate(rec.date)} — center your face in the frame, then capture.</div>
+      <div class="ess-cam-wrap">
+        <video id="cam-video" autoplay playsinline muted></video>
+        <canvas id="cam-canvas" style="display:none;"></canvas>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-capture" disabled>Starting camera…</button>
+      </div>
+    `, (bdEl) => {
+      qs('[data-close-modal]', bdEl).addEventListener('click', () => stopStream(stream));
+      const video = qs('#cam-video', bdEl);
+      const canvas = qs('#cam-canvas', bdEl);
+      const captureBtn = qs('#btn-capture', bdEl);
+      const locPromise = bestEffortLocation();
+
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false }).then((s) => {
+        stream = s;
+        video.srcObject = stream;
+        captureBtn.disabled = false;
+        captureBtn.textContent = 'Capture';
+      }).catch(() => {
+        captureBtn.textContent = 'Camera unavailable';
+        toast('Could not access the camera — check your browser/device permissions.');
+      });
+
+      captureBtn.addEventListener('click', async () => {
+        if (!stream) return;
+        const locationText = await locPromise;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        drawOverlay(ctx, canvas.width, canvas.height, emp, locationText);
+        showReplacePreview(bdEl, canvas, main, emp, rec, kind, stream, locationText);
+      });
+    });
+  }
+
+  function showReplacePreview(bdEl, canvas, main, emp, rec, kind, stream, locationText) {
+    const video = qs('#cam-video', bdEl);
+    video.style.display = 'none';
+    let img = qs('#cam-preview-img', bdEl);
+    if (!img) {
+      img = document.createElement('img');
+      img.id = 'cam-preview-img';
+      qs('.ess-cam-wrap', bdEl).appendChild(img);
+    }
+    img.src = canvas.toDataURL('image/jpeg', 0.85);
+    img.style.display = 'block';
+
+    const actions = qs('.modal-actions', bdEl);
+    actions.innerHTML = `
+      <button type="button" class="btn btn-ghost" id="btn-retake">Retake</button>
+      <button type="button" class="btn btn-primary" id="btn-confirm">Save Photo</button>
+    `;
+    qs('#btn-retake', bdEl).addEventListener('click', () => {
+      img.style.display = 'none';
+      video.style.display = 'block';
+      actions.innerHTML = `<button type="button" class="btn btn-ghost" data-close-modal>Cancel</button><button type="button" class="btn btn-primary" id="btn-capture">Capture</button>`;
+      qs('[data-close-modal]', bdEl).addEventListener('click', () => stopStream(stream));
+      qs('#btn-capture', bdEl).addEventListener('click', () => {
+        const ctx = canvas.getContext('2d');
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        drawOverlay(ctx, canvas.width, canvas.height, emp, locationText);
+        showReplacePreview(bdEl, canvas, main, emp, rec, kind, stream, locationText);
+      });
+    });
+    qs('#btn-confirm', bdEl).addEventListener('click', () => {
+      const confirmBtn = qs('#btn-confirm', bdEl);
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Saving…';
+      canvas.toBlob(async (blob) => {
+        try {
+          const oldPath = kind === 'in' ? rec.timeInPhotoPath : rec.timeOutPhotoPath;
+          const path = await Store.uploadAttendancePhoto(emp.id, blob, kind);
+          await Store.updateAttendance(rec.id, kind === 'in' ? { timeInPhotoPath: path } : { timeOutPhotoPath: path });
+          if (oldPath) await Store.deleteAttendancePhoto(oldPath);
+          stopStream(stream);
+          closeEssModal();
+          toast('✔ Photo saved.');
+          render(main, emp);
+        } catch (e) {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = 'Save Photo';
+          toast('Could not save photo — check your connection and try again.');
+        }
+      }, 'image/jpeg', 0.85);
+    });
   }
 
   // Opens a self-clock-in/out photo. Opens the tab synchronously (on the click itself) so
@@ -82,8 +212,8 @@ window.EssViews.attendance = (function () {
       <div class="ess-section-title" style="margin-top:0;">Today's Attendance</div>
       <div class="ess-card">
         ${todayRec ? `
-        <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(todayRec.timeIn)} ✅ ${todayRec.timeInPhotoPath ? `<button class="link-btn" data-view-photo="${todayRec.timeInPhotoPath}" title="View photo">📷</button>` : ''}</span></div>
-        <div class="ess-row"><span class="label">Time Out</span><span class="value">${todayRec.timeOut ? to12Hour(todayRec.timeOut) + ' ✅' : '—'} ${todayRec.timeOutPhotoPath ? `<button class="link-btn" data-view-photo="${todayRec.timeOutPhotoPath}" title="View photo">📷</button>` : ''}</span></div>
+        <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(todayRec.timeIn)} ✅ <button class="link-btn" data-manage-photo="in" data-rec-id="${todayRec.id}" title="Edit or delete photo">⋯</button></span></div>
+        <div class="ess-row"><span class="label">Time Out</span><span class="value">${todayRec.timeOut ? to12Hour(todayRec.timeOut) + ' ✅' : '—'} ${todayRec.timeOut ? `<button class="link-btn" data-manage-photo="out" data-rec-id="${todayRec.id}" title="Edit or delete photo">⋯</button>` : ''}</span></div>
         <div class="ess-row"><span class="label">Status</span><span class="value">${escapeHtml(todayRec.status)}</span></div>
         ` : `<div class="ess-sub">No attendance logged yet for today.</div>`}
       </div>
@@ -111,7 +241,6 @@ window.EssViews.attendance = (function () {
     if (clockOutBtn) clockOutBtn.addEventListener('click', () => openCameraCapture(main, emp, 'out'));
     const deleteRedoBtn = qs('#btn-delete-redo', main);
     if (deleteRedoBtn) deleteRedoBtn.addEventListener('click', () => deleteAndRedoToday(main, emp, todayRec));
-    qsa('[data-view-photo]', main).forEach(b => b.addEventListener('click', () => viewPhoto(b.dataset.viewPhoto)));
     qs('#btn-photo-gallery', main).addEventListener('click', () => openPhotoGallery(main, emp));
     qsa('[data-request]', main).forEach(b => b.addEventListener('click', async () => {
       const field = b.dataset.request + 'Status';
@@ -124,6 +253,11 @@ window.EssViews.attendance = (function () {
       await Store.updateAttendance(b.dataset.recId, { [field]: null });
       toast('Request cancelled.');
       render(main, emp);
+    }));
+    qsa('[data-manage-photo]', main).forEach(b => b.addEventListener('click', () => {
+      const recId = b.dataset.recId;
+      const rec = recId === (todayRec && todayRec.id) ? todayRec : records.find(r => r.id === recId);
+      if (rec) openPhotoActions(main, emp, rec, b.dataset.managePhoto);
     }));
 
     updateOfflineBanner(main, emp);
@@ -153,8 +287,8 @@ window.EssViews.attendance = (function () {
         <div class="gallery-tile" data-path="${escapeHtml(x.path)}" data-rec-id="${x.rec.id}" data-kind="${x.kind}"
           style="border:1px solid var(--border-soft); border-radius:8px; padding:6px; text-align:center; font-size:11px;">
           <div data-view-tile style="cursor:pointer; padding:18px 0; background:var(--bg-elevated); border-radius:6px; font-size:22px;">📷</div>
-          <div style="margin-top:6px; font-weight:600;">${x.label}</div>
-          <div style="color:var(--text-faint);">${fmtDate(x.rec.date)}</div>
+          <div style="margin-top:6px; font-weight:700; font-size:13px;">${fmtDate(x.rec.date)}</div>
+          <div style="color:var(--text-faint);">${x.label}</div>
           <button type="button" class="btn btn-danger btn-sm" data-delete-tile style="width:100%; margin-top:6px; justify-content:center;">🗑 Delete</button>
         </div>
       `).join('');
