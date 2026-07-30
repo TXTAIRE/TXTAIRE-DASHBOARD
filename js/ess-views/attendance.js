@@ -33,7 +33,6 @@ window.EssViews.attendance = (function () {
     const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (emp.rate / (workDaysInRange(date, date) || 1));
     const pay = rec ? computeDayPay(dailyRateEq, rec, holiday) : null;
     const nsdRawHrs = rec ? nightOverlapHours(rec.timeIn, rec.timeOut) : 0;
-    const otRawHrs = rec ? Math.max(0, Number(rec.hours) - 8) : 0;
     const holidayLabel = holiday ? `Holiday Pay — ${escapeHtml(holiday.name)} (${escapeHtml(holiday.type)} Holiday)` : 'Holiday Pay';
     return `
       <div class="ess-card">
@@ -47,7 +46,7 @@ window.EssViews.attendance = (function () {
         <div class="ess-row"><span class="label">Hours</span><span class="value">${rec.hours}</span></div>
         <div class="ess-row"><span class="label">Status</span><span class="value">${escapeHtml(rec.status)}</span></div>
         ${requestRow(rec.id, rec.nsdStatus, 'Night Shift Diff.', pay.nsdHrs.toFixed(2) + ' hr', 'nsd', nsdRawHrs > 0)}
-        ${requestRow(rec.id, rec.otStatus, 'Overtime', pay.otHrs.toFixed(2) + ' hr', 'ot', otRawHrs > 0)}
+        ${requestRow(rec.id, rec.otStatus, 'Overtime', pay.otHrs.toFixed(2) + ' hr', 'ot', true)}
         ${requestRow(rec.id, rec.holidayStatus, holidayLabel, fmtMoney(pay.holidayPay), 'holiday', !!holiday)}
         ${Number(rec.hours) < 8 ? `<div class="ess-row"><span class="label">Undertime</span><span class="value">${(8 - Number(rec.hours)).toFixed(2)} hr</span></div>` : ''}
         ` : `<div class="ess-sub">Not logged${holiday ? ' · ' + escapeHtml(holiday.name) : ''}</div>`}
@@ -249,8 +248,14 @@ window.EssViews.attendance = (function () {
     if (deleteRedoBtn) deleteRedoBtn.addEventListener('click', () => deleteAndRedoToday(main, emp, todayRec));
     qs('#btn-photo-gallery', main).addEventListener('click', () => openPhotoGallery(main, emp));
     qsa('[data-request]', main).forEach(b => b.addEventListener('click', async () => {
-      const field = b.dataset.request + 'Status';
-      await Store.updateAttendance(b.dataset.recId, { [field]: 'Requested' });
+      const kind = b.dataset.request;
+      const recId = b.dataset.recId;
+      if (kind === 'ot') {
+        const rec = recId === (todayRec && todayRec.id) ? todayRec : records.find(r => r.id === recId);
+        if (rec) openOtRequestModal(main, emp, rec);
+        return;
+      }
+      await Store.updateAttendance(recId, { [kind + 'Status']: 'Requested' });
       toast('✔ Requested — waiting on HR approval.');
       render(main, emp);
     }));
@@ -332,6 +337,55 @@ window.EssViews.attendance = (function () {
         });
       });
     }
+  }
+
+  // Requesting OT asks for the exact time the employee actually finished, including the
+  // overtime worked — not just a status flip. That updates the day's real Time Out/Hours,
+  // so once HR approves, the dashboard's OT hours (hours - 8) are already correct with no
+  // manual calculation needed on HR's end.
+  function openOtRequestModal(main, emp, rec) {
+    openEssModal(`
+      <h2>Request Overtime</h2>
+      <div class="modal-sub">${fmtDate(rec.date)} — enter the exact time you finished, including the overtime. HR will review and approve before it counts toward pay.</div>
+      <form id="ot-request-form">
+        <div class="modal-grid">
+          <div class="field"><label>Time In</label><input type="time" value="${escapeHtml(rec.timeIn || '')}" disabled /></div>
+          <div class="field"><label>Actual Time Out</label><input type="time" name="timeOut" id="ot-time-out" required value="${escapeHtml(rec.timeOut || '')}" /></div>
+        </div>
+        <div id="ot-preview" class="modal-sub"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Submit Request</button>
+        </div>
+      </form>
+    `, (bd) => {
+      const timeOutInput = qs('#ot-time-out', bd);
+      const preview = qs('#ot-preview', bd);
+      function updatePreview() {
+        if (!rec.timeIn || !timeOutInput.value) { preview.textContent = ''; return; }
+        const hrs = hoursBetween(rec.timeIn, timeOutInput.value);
+        const ot = Math.max(0, hrs - 8);
+        preview.textContent = ot > 0
+          ? `Total hours: ${hrs.toFixed(2)} — overtime: ${ot.toFixed(2)} hr`
+          : `Total hours: ${hrs.toFixed(2)} — that doesn't add up to any overtime yet.`;
+      }
+      timeOutInput.addEventListener('input', updatePreview);
+      updatePreview();
+
+      qs('#ot-request-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const newTimeOut = timeOutInput.value;
+        const newHours = hoursBetween(rec.timeIn, newTimeOut);
+        if (newHours <= 8) {
+          toast('That time doesn\'t add up to any overtime — adjust it or cancel.');
+          return;
+        }
+        await Store.updateAttendance(rec.id, { timeOut: newTimeOut, hours: newHours, otStatus: 'Requested' });
+        toast('✔ Overtime requested — waiting on HR approval.');
+        closeEssModal();
+        render(main, emp);
+      });
+    });
   }
 
   const ATTENDANCE_STATUS_OPTIONS = ['Present', 'Late', 'Absent', 'On Leave'];
