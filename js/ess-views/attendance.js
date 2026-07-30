@@ -37,7 +37,10 @@ window.EssViews.attendance = (function () {
     const holidayLabel = holiday ? `Holiday Pay — ${escapeHtml(holiday.name)} (${escapeHtml(holiday.type)} Holiday)` : 'Holiday Pay';
     return `
       <div class="ess-card">
-        <div class="ess-card-label">${dow}</div>
+        <div class="ess-card-label" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>${dow}</span>
+          ${rec ? `<button type="button" class="link-btn" data-edit-day="${rec.id}" title="Edit or delete this day's attendance">✏️ Edit</button>` : ''}
+        </div>
         ${rec ? `
         <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(rec.timeIn)} ✅ <button class="link-btn" data-manage-photo="in" data-rec-id="${rec.id}" title="Edit or delete photo">⋯</button></span></div>
         <div class="ess-row"><span class="label">Time Out</span><span class="value">${rec.timeOut ? to12Hour(rec.timeOut) : '—'} ${rec.timeOut ? `<button class="link-btn" data-manage-photo="out" data-rec-id="${rec.id}" title="Edit or delete photo">⋯</button>` : ''}</span></div>
@@ -209,7 +212,10 @@ window.EssViews.attendance = (function () {
     while (d >= from) { days.push(d); d = addDays(d, -1); }
 
     main.innerHTML = `
-      <div class="ess-section-title" style="margin-top:0;">Today's Attendance</div>
+      <div class="ess-section-title" style="margin-top:0; display:flex; justify-content:space-between; align-items:center;">
+        <span>Today's Attendance</span>
+        ${todayRec ? `<button type="button" class="link-btn" data-edit-day="${todayRec.id}" title="Edit or delete today's attendance">✏️ Edit</button>` : ''}
+      </div>
       <div class="ess-card">
         ${todayRec ? `
         <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(todayRec.timeIn)} ✅ <button class="link-btn" data-manage-photo="in" data-rec-id="${todayRec.id}" title="Edit or delete photo">⋯</button></span></div>
@@ -258,6 +264,11 @@ window.EssViews.attendance = (function () {
       const recId = b.dataset.recId;
       const rec = recId === (todayRec && todayRec.id) ? todayRec : records.find(r => r.id === recId);
       if (rec) openPhotoActions(main, emp, rec, b.dataset.managePhoto);
+    }));
+    qsa('[data-edit-day]', main).forEach(b => b.addEventListener('click', () => {
+      const recId = b.dataset.editDay;
+      const rec = recId === (todayRec && todayRec.id) ? todayRec : records.find(r => r.id === recId);
+      if (rec) openEditDayModal(main, emp, rec);
     }));
 
     updateOfflineBanner(main, emp);
@@ -321,6 +332,65 @@ window.EssViews.attendance = (function () {
         });
       });
     }
+  }
+
+  const ATTENDANCE_STATUS_OPTIONS = ['Present', 'Late', 'Absent', 'On Leave'];
+
+  // Lets an employee correct their own Time In/Out/status directly, or delete the whole
+  // record, on ANY day including past ones -- product decision to let them fix a mistake
+  // without waiting on HR. Which day it is and whose record it is can never change (the
+  // trigger-enforced RLS policy blocks that), and every change still lands in HR's audit
+  // log via js/store.js's updateRow/deleteRow.
+  function openEditDayModal(main, emp, rec) {
+    openEssModal(`
+      <h2>Edit Attendance</h2>
+      <div class="modal-sub">${fmtDate(rec.date)} — changes save immediately and are recorded in HR's audit log.</div>
+      <form id="edit-day-form">
+        <div class="modal-grid">
+          <div class="field"><label>Time In</label><input type="time" name="timeIn" value="${escapeHtml(rec.timeIn || '')}" required /></div>
+          <div class="field"><label>Time Out</label><input type="time" name="timeOut" value="${escapeHtml(rec.timeOut || '')}" /></div>
+          <div class="field full"><label>Status</label>
+            <select name="status">${ATTENDANCE_STATUS_OPTIONS.map(s => `<option ${s === rec.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
+          </div>
+        </div>
+        <div class="modal-actions" style="justify-content:space-between;">
+          <button type="button" class="btn btn-danger" id="btn-delete-day">Delete</button>
+          <div style="display:flex; gap:8px;">
+            <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#edit-day-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const timeIn = fd.get('timeIn');
+        const timeOut = fd.get('timeOut') || null;
+        const status = fd.get('status');
+        const submitBtn = qs('button[type="submit"]', bd);
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saving…';
+        await Store.updateAttendance(rec.id, {
+          timeIn, timeOut, status,
+          hours: timeOut ? hoursBetween(timeIn, timeOut) : 0,
+        });
+        toast('✔ Attendance updated.');
+        closeEssModal();
+        render(main, emp);
+      });
+      qs('#btn-delete-day', bd).addEventListener('click', async () => {
+        if (!confirm(`Delete your attendance record for ${fmtDate(rec.date)}? This cannot be undone.`)) return;
+        await Promise.all([
+          rec.timeInPhotoPath ? Store.deleteAttendancePhoto(rec.timeInPhotoPath) : null,
+          rec.timeOutPhotoPath ? Store.deleteAttendancePhoto(rec.timeOutPhotoPath) : null,
+        ]);
+        await Store.deleteAttendance(rec.id);
+        toast('✔ Attendance record deleted.');
+        closeEssModal();
+        render(main, emp);
+      });
+    });
   }
 
   async function deleteAndRedoToday(main, emp, rec) {

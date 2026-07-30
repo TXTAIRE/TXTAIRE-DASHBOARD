@@ -324,21 +324,20 @@ create policy "admin full access" on attendance
   for all to authenticated using (is_admin()) with check (is_admin());
 create policy "employee reads own attendance" on attendance
   for select to authenticated using ("employeeId" = my_employee_id());
--- Self clock-in/out: an employee may create today's own attendance row (Time In),
--- later update that same row (Time Out), or delete it outright to redo it from
--- scratch — never a past/future date, never anyone else's row. Deletes are still
--- captured in auditLog (employees have no access to that table), so HR retains a
--- record that a redo happened even though the original data itself is gone.
+-- Self clock-in/out: an employee may create today's own attendance row (Time In).
+-- Employees may also edit (Time In/Out, status) or delete their own attendance record on
+-- ANY day, past included -- explicit product decision so they can correct a mistake
+-- without waiting on HR. Deletes/updates are still captured in auditLog (employees have
+-- no access to that table themselves), so HR retains a full record of what changed even
+-- though the live data doesn't show the original values anymore.
 create policy "employee clocks in for today" on attendance
   for insert to authenticated with check ("employeeId" = my_employee_id() and date = current_date);
-create policy "employee deletes own attendance for today" on attendance
-  for delete to authenticated using ("employeeId" = my_employee_id() and date = current_date);
+create policy "employee deletes own attendance" on attendance
+  for delete to authenticated using ("employeeId" = my_employee_id());
 
--- Broader than a plain "today only" policy: employees can UPDATE any of their own rows
--- (not just today's), because the Photo Gallery lets them delete a photo from any past
--- day, which clears that row's photo path field. The trigger below is what actually keeps
--- past days safe — it still blocks changing timeIn/timeOut/hours/status on any row that
--- isn't today's, so this wider policy alone doesn't reopen editing past attendance times.
+-- The trigger below still blocks changing which day or whose record this is (date,
+-- employeeId) -- that boundary never loosens -- but timeIn/timeOut/hours/status can now
+-- be edited by the employee themselves on any of their own rows, any day.
 create policy "employee updates own attendance" on attendance
   for update to authenticated
   using ("employeeId" = my_employee_id())
@@ -350,16 +349,13 @@ begin
   if is_admin() then
     return new;
   end if;
-  if old.date < current_date then
-    if new.date is distinct from old.date
-      or new."employeeId" is distinct from old."employeeId"
-      or new."timeIn" is distinct from old."timeIn"
-      or new."timeOut" is distinct from old."timeOut"
-      or new.hours is distinct from old.hours
-      or new.status is distinct from old.status
-    then
-      raise exception 'Employees may only clear/replace photo fields on past attendance records';
-    end if;
+  -- Which day this is and whose record it is never change through this path, on any day
+  -- (past or present). Everything else about the record (timeIn/timeOut/hours/status,
+  -- photo fields) the employee may edit themselves, any day, per product decision.
+  if new.date is distinct from old.date
+    or new."employeeId" is distinct from old."employeeId"
+  then
+    raise exception 'Employees may not change the date or owner of an attendance record';
   end if;
   -- Employees can request NSD/OT/Holiday pay (or cancel their own pending request back to
   -- null), but only HR can move a request to Approved/Rejected — enforced here rather than
@@ -865,3 +861,46 @@ create policy "admin full access to bank qr" on storage.objects
   for all to authenticated
   using (bucket_id = 'bank-qr' and is_admin())
   with check (bucket_id = 'bank-qr' and is_admin());
+
+-- =================================================================
+-- Let employees edit and delete their own attendance record (Time In/Out, status) on ANY
+-- day, past included -- incremental migration. Run once against a database that already
+-- has the migrations above applied. Safe to re-run. Product decision: no HR approval step
+-- for this -- it's meant to work like the existing "Delete & Redo Today's Attendance"
+-- already did, just extended to every day and to editing in place instead of only
+-- delete-then-reclock. Every change still lands in auditLog (via js/store.js's
+-- updateRow/deleteRow), so HR can review after the fact even though the live row no
+-- longer shows the original values. Which day it is and whose record it is still can
+-- never change -- only the recorded time/status/photos on an employee's own row can.
+-- =================================================================
+
+drop policy if exists "employee deletes own attendance for today" on attendance;
+drop policy if exists "employee deletes own attendance" on attendance;
+create policy "employee deletes own attendance" on attendance
+  for delete to authenticated using ("employeeId" = my_employee_id());
+
+create or replace function enforce_employee_attendance_update() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if is_admin() then
+    return new;
+  end if;
+  if new.date is distinct from old.date
+    or new."employeeId" is distinct from old."employeeId"
+  then
+    raise exception 'Employees may not change the date or owner of an attendance record';
+  end if;
+  if (new."nsdStatus" is distinct from old."nsdStatus" and new."nsdStatus" is not null and new."nsdStatus" != 'Requested')
+    or (new."otStatus" is distinct from old."otStatus" and new."otStatus" is not null and new."otStatus" != 'Requested')
+    or (new."holidayStatus" is distinct from old."holidayStatus" and new."holidayStatus" is not null and new."holidayStatus" != 'Requested')
+  then
+    raise exception 'Employees may only request NSD/OT/Holiday pay, not approve or reject it';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_employee_attendance_update on attendance;
+create trigger trg_employee_attendance_update
+  before update on attendance
+  for each row execute function enforce_employee_attendance_update();
