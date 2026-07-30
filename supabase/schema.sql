@@ -114,6 +114,16 @@ create table attendance (
   "nsdStatus" text,
   "otStatus" text,
   "holidayStatus" text,
+  -- Who approved each one and when — stamped automatically by a trigger the instant a
+  -- status column actually transitions to 'Approved' (and cleared if it's ever un-approved),
+  -- so there's always a clear audit trail distinguishing a genuine HR approval from any
+  -- other value. Never set directly by application code.
+  "otApprovedBy" text,
+  "otApprovedAt" timestamptz,
+  "nsdApprovedBy" text,
+  "nsdApprovedAt" timestamptz,
+  "holidayApprovedBy" text,
+  "holidayApprovedAt" timestamptz,
   -- Optional per-record override: 'Regular' | 'Special' | null. Lets HR grant the holiday
   -- premium for this specific employee's day even when the date isn't on the shared
   -- Holidays list; falls back to that list's type when this is null (js/store.js
@@ -390,6 +400,58 @@ drop trigger if exists trg_employee_attendance_update on attendance;
 create trigger trg_employee_attendance_update
   before update on attendance
   for each row execute function enforce_employee_attendance_update();
+
+-- Stamps who approved OT/NSD/Holiday pay and when, the instant a status column actually
+-- transitions to 'Approved' -- and clears the stamp if it's ever un-approved, so a stale
+-- name/date never lingers next to a status that isn't Approved anymore. Runs regardless
+-- of which code path made the change, so it can't be bypassed or forgotten by app code.
+-- auth.jwt()->>'email' reads straight from the current request's JWT, no auth.users
+-- lookup needed. Since enforce_employee_attendance_update (above) already blocks an
+-- employee from ever setting these columns to 'Approved' themselves, the "newly
+-- approved" branch here only ever fires for an actual HR/admin action.
+create or replace function stamp_attendance_approvals() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  actor text := auth.jwt() ->> 'email';
+  -- OLD isn't assigned at all for an INSERT (referencing it directly would error), so
+  -- these CASE expressions -- which short-circuit -- stand in for "no previous value" on
+  -- insert without ever touching OLD in that case.
+  old_ot text := (case when TG_OP = 'INSERT' then null else old."otStatus" end);
+  old_nsd text := (case when TG_OP = 'INSERT' then null else old."nsdStatus" end);
+  old_holiday text := (case when TG_OP = 'INSERT' then null else old."holidayStatus" end);
+begin
+  if new."otStatus" = 'Approved' and (old_ot is distinct from 'Approved') then
+    new."otApprovedBy" := actor;
+    new."otApprovedAt" := now();
+  elsif new."otStatus" is distinct from 'Approved' then
+    new."otApprovedBy" := null;
+    new."otApprovedAt" := null;
+  end if;
+
+  if new."nsdStatus" = 'Approved' and (old_nsd is distinct from 'Approved') then
+    new."nsdApprovedBy" := actor;
+    new."nsdApprovedAt" := now();
+  elsif new."nsdStatus" is distinct from 'Approved' then
+    new."nsdApprovedBy" := null;
+    new."nsdApprovedAt" := null;
+  end if;
+
+  if new."holidayStatus" = 'Approved' and (old_holiday is distinct from 'Approved') then
+    new."holidayApprovedBy" := actor;
+    new."holidayApprovedAt" := now();
+  elsif new."holidayStatus" is distinct from 'Approved' then
+    new."holidayApprovedBy" := null;
+    new."holidayApprovedAt" := null;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_stamp_attendance_approvals on attendance;
+create trigger trg_stamp_attendance_approvals
+  before insert or update on attendance
+  for each row execute function stamp_attendance_approvals();
 
 create policy "admin full access" on deductions
   for all to authenticated using (is_admin()) with check (is_admin());
@@ -966,3 +1028,60 @@ insert into "payCutoffSettings" ("payCycle", "cutoffAEndDay", "paydayADay", "cut
   ('10-20', 3, 5, 18, 20),
   ('15-30', 10, 15, 25, 30)
 on conflict ("payCycle") do nothing;
+
+-- =================================================================
+-- Audit trail for OT/NSD/Holiday approvals -- incremental migration. Run once against a
+-- database that already has the migrations above applied. Safe to re-run. Adds who
+-- approved each one and when, stamped automatically by a trigger the instant a status
+-- column transitions to 'Approved' (and cleared if ever un-approved) -- this is what lets
+-- HR tell a genuine approval apart from anything else, addressing the gap the old
+-- unguarded backfill line left (see the NSD/OT/Holiday migration block above).
+-- =================================================================
+
+alter table attendance add column if not exists "otApprovedBy" text;
+alter table attendance add column if not exists "otApprovedAt" timestamptz;
+alter table attendance add column if not exists "nsdApprovedBy" text;
+alter table attendance add column if not exists "nsdApprovedAt" timestamptz;
+alter table attendance add column if not exists "holidayApprovedBy" text;
+alter table attendance add column if not exists "holidayApprovedAt" timestamptz;
+
+create or replace function stamp_attendance_approvals() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  actor text := auth.jwt() ->> 'email';
+  old_ot text := (case when TG_OP = 'INSERT' then null else old."otStatus" end);
+  old_nsd text := (case when TG_OP = 'INSERT' then null else old."nsdStatus" end);
+  old_holiday text := (case when TG_OP = 'INSERT' then null else old."holidayStatus" end);
+begin
+  if new."otStatus" = 'Approved' and (old_ot is distinct from 'Approved') then
+    new."otApprovedBy" := actor;
+    new."otApprovedAt" := now();
+  elsif new."otStatus" is distinct from 'Approved' then
+    new."otApprovedBy" := null;
+    new."otApprovedAt" := null;
+  end if;
+
+  if new."nsdStatus" = 'Approved' and (old_nsd is distinct from 'Approved') then
+    new."nsdApprovedBy" := actor;
+    new."nsdApprovedAt" := now();
+  elsif new."nsdStatus" is distinct from 'Approved' then
+    new."nsdApprovedBy" := null;
+    new."nsdApprovedAt" := null;
+  end if;
+
+  if new."holidayStatus" = 'Approved' and (old_holiday is distinct from 'Approved') then
+    new."holidayApprovedBy" := actor;
+    new."holidayApprovedAt" := now();
+  elsif new."holidayStatus" is distinct from 'Approved' then
+    new."holidayApprovedBy" := null;
+    new."holidayApprovedAt" := null;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_stamp_attendance_approvals on attendance;
+create trigger trg_stamp_attendance_approvals
+  before insert or update on attendance
+  for each row execute function stamp_attendance_approvals();

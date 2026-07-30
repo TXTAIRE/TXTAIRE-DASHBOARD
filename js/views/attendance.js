@@ -423,6 +423,17 @@ window.Views.attendance = (function () {
     return { timeIn: '09:00', timeOut: '18:00', hours: 8 };
   }
 
+  // Who approved this OT/NSD/Holiday pay and when -- stamped automatically by a database
+  // trigger the instant the status actually transitions to 'Approved' (see
+  // stamp_attendance_approvals in supabase/schema.sql), never set by this app code
+  // directly. Only shown once actually Approved, since that's the only state the stamp
+  // is guaranteed to correspond to.
+  function approvalStampHtml(status, approvedBy, approvedAt) {
+    if (status !== 'Approved' || !approvedBy) return '';
+    const when = approvedAt ? new Date(approvedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+    return `<div class="page-sub" style="margin-top:2px; font-size:11px;">Approved by ${escapeHtml(approvedBy)}${when ? ' on ' + when : ''}</div>`;
+  }
+
   // Shared-table holiday (HR-curated, authoritative) takes priority; falls back to the
   // fixed-date PH holiday reference (js/store.js FIXED_PH_HOLIDAYS) when this date isn't
   // on the Holidays list yet.
@@ -464,12 +475,14 @@ window.Views.attendance = (function () {
               <input type="checkbox" name="nsdApproved" ${r.nsdStatus === 'Approved' ? 'checked' : ''} style="width:auto;" /> Approved
               ${r.nsdStatus === 'Requested' ? '<span class="badge badge-yellow" style="margin-left:4px;">Pending request</span>' : ''}
             </label>
+            ${approvalStampHtml(r.nsdStatus, r.nsdApprovedBy, r.nsdApprovedAt)}
           </div>
           <div class="field"><label>Overtime</label>
             <label style="display:flex; align-items:center; gap:6px; font-weight:400; padding-top:8px;">
               <input type="checkbox" name="otApproved" ${r.otStatus === 'Approved' ? 'checked' : ''} style="width:auto;" /> Approved
               ${r.otStatus === 'Requested' ? '<span class="badge badge-yellow" style="margin-left:4px;">Pending request</span>' : ''}
             </label>
+            ${approvalStampHtml(r.otStatus, r.otApprovedBy, r.otApprovedAt)}
           </div>
           <div class="field full"><label>Holiday</label>
             <select name="holidayType" id="att-holiday-type">
@@ -479,6 +492,7 @@ window.Views.attendance = (function () {
             </select>
             <div id="holiday-hint" class="page-sub" style="margin-top:6px;">${holidayHintHtml(r.date, holidayCtx)}</div>
             ${r.holidayStatus === 'Requested' ? '<div class="badge badge-yellow" style="margin-top:6px;">Pending request</div>' : ''}
+            ${approvalStampHtml(r.holidayStatus, r.holidayApprovedBy, r.holidayApprovedAt)}
           </div>
         </div>
         <div class="modal-actions">
