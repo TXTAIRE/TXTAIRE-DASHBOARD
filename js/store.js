@@ -111,10 +111,28 @@ function detectFixedPhHoliday(isoDate) {
   return FIXED_PH_HOLIDAYS[isoDate.slice(5)] || null;
 }
 
-const PAY_CYCLES = {
-  '10-20': { label: 'Admins — 5th & 20th', cutoffLabels: ['5th', '20th'] },
-  '15-30': { label: 'Technicians — 15th & 30th', cutoffLabels: ['15th', '30th'] },
+const PAY_GROUP_NAMES = { '10-20': 'Admins', '15-30': 'Technicians' };
+
+// Falls back to these only if the "payCutoffSettings" table has no row yet for a pay
+// group (e.g. right after the migration, before it's been seeded) -- once a row exists,
+// Store.getPayCutoffSetting() is the actual source of truth, editable from Attendance →
+// Calendar → "Edit Cutoff Days".
+const DEFAULT_CUTOFF_SETTINGS = {
+  '10-20': { cutoffAEndDay: 3, paydayADay: 5, cutoffBEndDay: 18, paydayBDay: 20 },
+  '15-30': { cutoffAEndDay: 10, paydayADay: 15, cutoffBEndDay: 25, paydayBDay: 30 },
 };
+
+function cutoffSettingFor(payCycle) {
+  return Store.getPayCutoffSetting(payCycle) || DEFAULT_CUTOFF_SETTINGS[payCycle] || DEFAULT_CUTOFF_SETTINGS['10-20'];
+}
+
+// "5th & 20th" style payday label for a pay group -- computed live from the editable
+// settings instead of a hardcoded string, so it never goes stale after HR edits the
+// cutoff days.
+function paydayLabel(payCycle) {
+  const s = cutoffSettingFor(payCycle);
+  return `${ordinal(s.paydayADay)} & ${ordinal(s.paydayBDay)}`;
+}
 
 function pad2(n) { return String(n).padStart(2, '0'); }
 
@@ -127,47 +145,64 @@ function ordinal(n) {
   return n + (rem10 === 1 ? 'st' : rem10 === 2 ? 'nd' : rem10 === 3 ? 'rd' : 'th');
 }
 
+// Cutoff A always runs from the day after the PREVIOUS month's cutoff B end through this
+// month's cutoffAEndDay; cutoff B always runs from the day after cutoffAEndDay through
+// cutoffBEndDay -- so every day of the month falls in exactly one cutoff, with no gap or
+// overlap, purely from those two end-day numbers (both editable, see
+// Store.updatePayCutoffSetting). Payday for either half is capped to the last day of the
+// month, for the rare month that doesn't reach that day (e.g. a 30th-of-the-month payday
+// in February).
 function payCutoffs(payCycle, year, month) {
   const y = year, m = month;
   const last = daysInMonth(y, m);
   let prevMonth = m - 1, prevYear = y;
   if (prevMonth < 1) { prevMonth = 12; prevYear -= 1; }
+  const prevLast = daysInMonth(prevYear, prevMonth);
 
-  if (payCycle === '15-30') {
-    // Technicians: cutoffs end the 10th and 25th, paid 5 days later on the 15th and 30th
-    // (or the last day of the month, for the rare month without a 30th) — so every
-    // calendar day is covered exactly once (the tail, 26–end of THIS month, belongs to
-    // next month's "A" cutoff), each period ≤16 days per the Labor Code (A is at most 6
-    // prior-month days + 10 = 16; B is a fixed 15).
-    const paydayB = Math.min(30, last);
-    return [
-      { key: 'A', label: `26 (prev. mo.) – 10 (paid the 15th)`, from: `${prevYear}-${pad2(prevMonth)}-26`, to: `${y}-${pad2(m)}-10`, payDate: `${y}-${pad2(m)}-15` },
-      { key: 'B', label: `11 – 25 (paid the ${ordinal(paydayB)})`, from: `${y}-${pad2(m)}-11`, to: `${y}-${pad2(m)}-25`, payDate: `${y}-${pad2(m)}-${pad2(paydayB)}` },
-    ];
-  }
-  // Admins: cutoffs end the 3rd and 18th, paid 2 days later on the 5th and 20th — every
-  // calendar day is covered exactly once (the tail, 19–end of THIS month, belongs to next
-  // month's "A" cutoff), each period ≤16 days per the Labor Code (A is at most 13
-  // prior-month days + 3 = 16; B is a fixed 15).
+  const s = cutoffSettingFor(payCycle);
+  const cutoffAEndDay = Math.min(s.cutoffAEndDay, last);
+  const cutoffBEndDay = Math.min(s.cutoffBEndDay, last);
+  const prevCutoffBEndDay = Math.min(s.cutoffBEndDay, prevLast);
+  const cutoffAStartDay = prevCutoffBEndDay + 1;
+  const cutoffBStartDay = cutoffAEndDay + 1;
+  const paydayA = Math.min(s.paydayADay, last);
+  const paydayB = Math.min(s.paydayBDay, last);
+
   return [
-    { key: 'A', label: `19 (prev. mo.) – 3 (paid the 5th)`, from: `${prevYear}-${pad2(prevMonth)}-19`, to: `${y}-${pad2(m)}-03`, payDate: `${y}-${pad2(m)}-05` },
-    { key: 'B', label: `4 – 18 (paid the 20th)`, from: `${y}-${pad2(m)}-04`, to: `${y}-${pad2(m)}-18`, payDate: `${y}-${pad2(m)}-20` },
+    {
+      key: 'A',
+      label: `${ordinal(cutoffAStartDay)} (prev. mo.) – ${ordinal(cutoffAEndDay)} (paid the ${ordinal(paydayA)})`,
+      from: `${prevYear}-${pad2(prevMonth)}-${pad2(cutoffAStartDay)}`,
+      to: `${y}-${pad2(m)}-${pad2(cutoffAEndDay)}`,
+      payDate: `${y}-${pad2(m)}-${pad2(paydayA)}`,
+    },
+    {
+      key: 'B',
+      label: `${ordinal(cutoffBStartDay)} – ${ordinal(cutoffBEndDay)} (paid the ${ordinal(paydayB)})`,
+      from: `${y}-${pad2(m)}-${pad2(cutoffBStartDay)}`,
+      to: `${y}-${pad2(m)}-${pad2(cutoffBEndDay)}`,
+      payDate: `${y}-${pad2(m)}-${pad2(paydayB)}`,
+    },
   ];
+}
+
+// Worst-case span (in days) of each cutoff half, used only to warn HR in the "Edit
+// Cutoff Days" form if a change would push either half over the Labor Code's 16-day
+// maximum. Cutoff A's span depends on the previous month's length, so this checks the
+// worst case (a 31-day previous month) rather than a specific month.
+function cutoffSpans(cutoffAEndDay, cutoffBEndDay) {
+  const spanA = (31 - cutoffBEndDay) + cutoffAEndDay;
+  const spanB = cutoffBEndDay - cutoffAEndDay;
+  return { spanA, spanB };
 }
 
 // Which cutoff (and potentially which month) "today" falls into — used to pick a
 // sensible default view. Days past each cycle's "B" cutoff belong to NEXT month's "A"
 // cutoff (see payCutoffs above), so the month can roll forward.
 function defaultCutoffPosition(payCycle, year, month, day) {
-  if (payCycle === '15-30') {
-    if (day <= 10) return { year, month, half: 'A' };
-    if (day <= 25) return { year, month, half: 'B' };
-    let m = month + 1, y = year;
-    if (m > 12) { m = 1; y += 1; }
-    return { year: y, month: m, half: 'A' };
-  }
-  if (day <= 3) return { year, month, half: 'A' };
-  if (day <= 18) return { year, month, half: 'B' };
+  const s = cutoffSettingFor(payCycle);
+  if (day <= s.cutoffAEndDay) return { year, month, half: 'A' };
+  if (day <= s.cutoffBEndDay) return { year, month, half: 'B' };
   let m = month + 1, y = year;
   if (m > 12) { m = 1; y += 1; }
   return { year: y, month: m, half: 'A' };
@@ -346,6 +381,7 @@ const Store = (function () {
     probationRecords: 'probationRecords',
     payrollOverrides: 'payrollOverrides',
     holidays: 'holidays',
+    payCutoffSettings: 'payCutoffSettings',
     leaveRequests: 'leaveRequests',
     attendanceCorrections: 'attendanceCorrections',
     auditLog: 'auditLog',
@@ -354,6 +390,7 @@ const Store = (function () {
   const state = {
     employees: [], candidates: [], disciplinaryCases: [], complaints: [],
     attendance: [], deductions: [], probationRecords: [], payrollOverrides: [], holidays: [],
+    payCutoffSettings: [],
     leaveRequests: [], attendanceCorrections: [], auditLog: [],
   };
 
@@ -644,6 +681,22 @@ const Store = (function () {
     await deleteRow('holidays', id);
   }
 
+  // ---- Pay cutoff settings (editable cutoff-day boundaries per pay group) ----
+  // Keyed by payCycle rather than a generated id, so this uses its own upsert instead of
+  // the generic insertRow/updateRow helpers (which assume an "id" primary key column).
+  function listPayCutoffSettings() { return state.payCutoffSettings.slice(); }
+  function getPayCutoffSetting(payCycle) { return state.payCutoffSettings.find(s => s.payCycle === payCycle); }
+  async function updatePayCutoffSetting(payCycle, patch) {
+    const row = Object.assign({ payCycle }, patch);
+    const { error } = await sb.from(TABLES.payCutoffSettings).upsert(sanitize(row), { onConflict: 'payCycle' });
+    if (error) {
+      toast('Save failed: ' + error.message);
+      throw error;
+    }
+    await refetch('payCutoffSettings');
+    logAudit('payCutoffSettings.update', TABLES.payCutoffSettings, payCycle, patch);
+  }
+
   // ---- Leave Requests (Employee Self-Service) ----
   function listLeaveRequests() { return state.leaveRequests.slice(); }
   function getLeaveRequest(id) { return state.leaveRequests.find(r => r.id === id); }
@@ -693,6 +746,7 @@ const Store = (function () {
     listProbations, getProbation, getProbationByEmployee, addProbation, updateProbation, deleteProbation,
     getPayrollOverride, setPayrollOverride,
     listHolidays, getHoliday, holidaysInRange, addHoliday, updateHoliday, deleteHoliday,
+    listPayCutoffSettings, getPayCutoffSetting, updatePayCutoffSetting,
     listLeaveRequests, getLeaveRequest, leaveRequestsForEmployee, addLeaveRequest, reviewLeaveRequest,
     listAttendanceCorrections, getAttendanceCorrection, attendanceCorrectionsForEmployee, addAttendanceCorrection, reviewAttendanceCorrection,
     listAuditLog,

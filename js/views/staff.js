@@ -65,7 +65,7 @@ window.Views.staff = (function () {
                 <td>${employmentStatusBadge(e.employmentStatus)}</td>
                 <td class="dim">${e.payType === 'Daily' ? fmtMoney(e.rate) + '/day' : fmtMoney(e.rate) + '/cutoff'}</td>
                 <td class="dim">${(e.allowancePerDay || e.fixedAllowance) ? [e.allowancePerDay ? fmtMoney(e.allowancePerDay) + '/day' : null, e.fixedAllowance ? fmtMoney(e.fixedAllowance) + '/cutoff' : null].filter(Boolean).join(' + ') : '—'}</td>
-                <td class="dim">${PAY_CYCLES[e.payCycle] ? PAY_CYCLES[e.payCycle].cutoffLabels.join(' & ') : '—'}</td>
+                <td class="dim">${e.payCycle ? paydayLabel(e.payCycle) : '—'}</td>
                 <td><button class="link-btn" data-edit="${e.id}">Edit →</button></td>
               </tr>
             `).join('')}
@@ -108,7 +108,7 @@ window.Views.staff = (function () {
         ${e.allowancePerDay ? 'COLA: ' + fmtMoney(e.allowancePerDay) + ' / day<br/>' : ''}
         ${e.fixedAllowance ? 'Fixed COLA: ' + fmtMoney(e.fixedAllowance) + ' / cutoff<br/>' : ''}
         ${e.housingAllowance ? 'Housing Allowance: ' + fmtMoney(e.housingAllowance) + ' / cutoff<br/>' : ''}
-        Payday: ${PAY_CYCLES[e.payCycle] ? PAY_CYCLES[e.payCycle].cutoffLabels.join(' & ') : '—'}
+        Payday: ${e.payCycle ? paydayLabel(e.payCycle) : '—'}
       </div>
       ${e.notes ? `<div class="section-title">Notes</div><div class="page-sub">${escapeHtml(e.notes)}</div>` : ''}
       <div class="section-title">Bank Details <span class="dim" style="font-weight:400;">(payroll disbursement — visible only to HR/admins and this employee)</span></div>
@@ -224,8 +224,8 @@ window.Views.staff = (function () {
           <div class="field"><label>Email</label><input type="email" name="email" value="${escapeHtml(e.email)}" /></div>
           <div class="field"><label>Pay cycle</label>
             <select name="payCycle">
-              <option value="10-20" ${e.payCycle === '10-20' ? 'selected' : ''}>5th &amp; 20th (Admins)</option>
-              <option value="15-30" ${e.payCycle === '15-30' ? 'selected' : ''}>15th &amp; 30th (Technicians)</option>
+              <option value="10-20" ${e.payCycle === '10-20' ? 'selected' : ''}>Admins (${paydayLabel('10-20')})</option>
+              <option value="15-30" ${e.payCycle === '15-30' ? 'selected' : ''}>Technicians (${paydayLabel('15-30')})</option>
             </select>
           </div>
           <div class="field"><label>Pay type</label>

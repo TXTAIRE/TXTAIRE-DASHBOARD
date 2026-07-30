@@ -176,6 +176,21 @@ create table holidays (
   type text not null default 'Regular'         -- 'Regular' | 'Special Non-Working'
 );
 
+-- ---------- payCutoffSettings ----------
+-- Editable cutoff-day boundaries per pay group, replacing what used to be hardcoded in
+-- js/store.js's payCutoffs(). Both halves are defined purely by where each one ENDS --
+-- cutoff A runs from the day after cutoff B's previous end through cutoffAEndDay, and
+-- cutoff B runs from the day after cutoffAEndDay through cutoffBEndDay -- so every day of
+-- the month always falls in exactly one cutoff, with no gap, by construction.
+create table "payCutoffSettings" (
+  "payCycle" text primary key,        -- '10-20' | '15-30'
+  "cutoffAEndDay" int not null,
+  "paydayADay" int not null,
+  "cutoffBEndDay" int not null,
+  "paydayBDay" int not null,
+  updated_at timestamptz not null default now()
+);
+
 -- ---------- leaveRequests (Employee Self-Service) ----------
 create table "leaveRequests" (
   id text primary key,
@@ -256,6 +271,7 @@ alter table deductions enable row level security;
 alter table "probationRecords" enable row level security;
 alter table "payrollOverrides" enable row level security;
 alter table holidays enable row level security;
+alter table "payCutoffSettings" enable row level security;
 alter table "leaveRequests" enable row level security;
 alter table "attendanceCorrections" enable row level security;
 alter table "auditLog" enable row level security;
@@ -392,6 +408,13 @@ create policy "admin full access" on holidays
 create policy "employee reads holidays" on holidays
   for select to authenticated using (true);
 
+-- Cutoff-day settings: same as holidays -- not sensitive, needed by every employee's My
+-- Payroll page to show the right cutoff/payday, only admins can edit.
+create policy "admin full access" on "payCutoffSettings"
+  for all to authenticated using (is_admin()) with check (is_admin());
+create policy "employee reads pay cutoff settings" on "payCutoffSettings"
+  for select to authenticated using (true);
+
 -- Leave requests / attendance corrections: admins manage everything (review, approve,
 -- reject); employees can submit their own and read their own history, but never edit or
 -- delete an existing request (only HR changes status/reviewNotes).
@@ -461,7 +484,14 @@ create policy "admin full access to bank qr" on storage.objects
 alter publication supabase_realtime add table
   employees, candidates, "disciplinaryCases", complaints,
   attendance, deductions, "probationRecords", "payrollOverrides", holidays,
-  "leaveRequests", "attendanceCorrections", "auditLog";
+  "payCutoffSettings", "leaveRequests", "attendanceCorrections", "auditLog";
+
+-- Seed the two pay groups' cutoff-day settings with the values that used to be hardcoded,
+-- so behavior is unchanged until HR actually edits them from the Calendar tab.
+insert into "payCutoffSettings" ("payCycle", "cutoffAEndDay", "paydayADay", "cutoffBEndDay", "paydayBDay") values
+  ('10-20', 3, 5, 18, 20),
+  ('15-30', 10, 15, 25, 30)
+on conflict ("payCycle") do nothing;
 
 -- =================================================================
 -- Incremental migration — if you already ran this schema before the "holidays"
@@ -904,3 +934,36 @@ drop trigger if exists trg_employee_attendance_update on attendance;
 create trigger trg_employee_attendance_update
   before update on attendance
   for each row execute function enforce_employee_attendance_update();
+
+-- =================================================================
+-- Editable payroll cutoff-day settings -- incremental migration. Run once against a
+-- database that already has the migrations above applied. Safe to re-run. Replaces the
+-- hardcoded cutoff days in js/store.js's payCutoffs() with a per-pay-group settings row
+-- HR can edit from Attendance -> Calendar -> "Edit Cutoff Days". Seeded with the values
+-- that were previously hardcoded, so nothing changes until HR actually edits them.
+-- =================================================================
+
+create table if not exists "payCutoffSettings" (
+  "payCycle" text primary key,
+  "cutoffAEndDay" int not null,
+  "paydayADay" int not null,
+  "cutoffBEndDay" int not null,
+  "paydayBDay" int not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table "payCutoffSettings" enable row level security;
+
+drop policy if exists "admin full access" on "payCutoffSettings";
+create policy "admin full access" on "payCutoffSettings"
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "employee reads pay cutoff settings" on "payCutoffSettings";
+create policy "employee reads pay cutoff settings" on "payCutoffSettings"
+  for select to authenticated using (true);
+
+alter publication supabase_realtime add table "payCutoffSettings";
+
+insert into "payCutoffSettings" ("payCycle", "cutoffAEndDay", "paydayADay", "cutoffBEndDay", "paydayBDay") values
+  ('10-20', 3, 5, 18, 20),
+  ('15-30', 10, 15, 25, 30)
+on conflict ("payCycle") do nothing;

@@ -5,16 +5,11 @@ window.Views.attendance = (function () {
 
   const calToday = new Date(todayISO() + 'T00:00:00');
   let calGroup = '10-20';
-  let calPos = defaultCutoffPosition(calGroup, calToday.getFullYear(), calToday.getMonth() + 1, calToday.getDate());
-  let calYear = calPos.year;
-  let calMonth = calPos.month;
-  let calHalf = calPos.half;
+  let calYear = calToday.getFullYear();
+  let calMonth = calToday.getMonth() + 1;
 
   function setCalGroup(g) {
     calGroup = g;
-    const t = new Date(todayISO() + 'T00:00:00');
-    const p = defaultCutoffPosition(calGroup, t.getFullYear(), t.getMonth() + 1, t.getDate());
-    calYear = p.year; calMonth = p.month; calHalf = p.half;
   }
   function shiftCalMonth(delta) {
     let m = calMonth + delta, y = calYear;
@@ -243,20 +238,33 @@ window.Views.attendance = (function () {
     `;
   }
 
+  // Which payroll cutoff (of the two whose END falls in the displayed month) a given day
+  // belongs to — used only to tint/group day columns for readability. Days after cutoff
+  // B's end belong to a cutoff that ENDS next month, so they get no Net Pay column here;
+  // they'll show up as the "A" tail when the admin navigates to next month instead.
+  function cutoffClassFor(date, cutoffs) {
+    if (date <= cutoffs[0].to) return 'cal-cutoff-a';
+    if (date <= cutoffs[1].to) return 'cal-cutoff-b';
+    return 'cal-cutoff-next';
+  }
+
   function renderCalendarTab(body, main) {
     const cutoffs = payCutoffs(calGroup, calYear, calMonth);
-    const selected = cutoffs.find(c => c.key === calHalf) || cutoffs[0];
     const monthValue = `${calYear}-${pad2(calMonth)}`;
     const monthLabel = new Date(calYear, calMonth - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const last = daysInMonth(calYear, calMonth);
+    const monthFrom = `${calYear}-${pad2(calMonth)}-01`;
+    const monthTo = `${calYear}-${pad2(calMonth)}-${pad2(last)}`;
 
     const employees = Store.listEmployees().filter(e => e.payCycle === calGroup && e.status !== 'Terminated').sort((a, b) => a.name.localeCompare(b.name));
-    const holidays = Store.holidaysInRange(selected.from, selected.to);
+    const holidays = Store.holidaysInRange(monthFrom, monthTo);
     const holidayByDate = {};
     holidays.forEach(h => { holidayByDate[h.date] = h; });
 
     const days = [];
-    let d = selected.from;
-    while (d <= selected.to) { days.push(d); d = addDays(d, 1); }
+    for (let day = 1; day <= last; day++) days.push(`${calYear}-${pad2(calMonth)}-${pad2(day)}`);
+    const cutoffBStart = days.find(date => date > cutoffs[0].to);
+    const nextCutoffStart = days.find(date => date > cutoffs[1].to);
 
     body.innerHTML = `
       <div class="filters">
@@ -267,21 +275,18 @@ window.Views.attendance = (function () {
             <button data-val="15-30" class="${calGroup === '15-30' ? 'active' : ''}">Technicians</button>
           </div>
         </div>
+        <button class="btn btn-ghost btn-sm" id="cal-btn-edit-cutoff" style="align-self:flex-end;">✏️ Edit Cutoff Days</button>
       </div>
       <div class="filters">
         <button class="btn btn-ghost btn-sm" id="cal-btn-prev-month">← Prev month</button>
         <div class="field"><label>Month</label><input type="month" id="cal-month-input" value="${monthValue}" /></div>
         <button class="btn btn-ghost btn-sm" id="cal-btn-next-month">Next month →</button>
-        <div class="field">
-          <label>Cutoff</label>
-          <div class="seg" id="cal-seg-cutoff">
-            ${cutoffs.map(c => `<button data-val="${c.key}" class="${calHalf === c.key ? 'active' : ''}">${c.label}</button>`).join('')}
-          </div>
-        </div>
       </div>
-      <div class="page-sub" style="margin-bottom:10px;">${monthLabel} · ${selected.label} · payday ${fmtDate(selected.payDate)} · click an empty cell to instantly log a shift, or a logged cell to fine-tune it</div>
+      <div class="page-sub" style="margin-bottom:10px;">
+        ${monthLabel} · Cutoff A: ${cutoffs[0].label} · Cutoff B: ${cutoffs[1].label} · click an empty cell to instantly log a shift, or a logged cell to fine-tune it
+      </div>
 
-      <div class="panel">
+      <div class="panel" style="overflow-x:auto;">
         ${employees.length ? `
         <table class="cal-table">
           <thead>
@@ -289,22 +294,29 @@ window.Views.attendance = (function () {
               <th class="cal-name-col">Staff</th>
               ${days.map(date => {
                 const dt = new Date(date + 'T00:00:00');
-                return `<th class="cal-day-col ${holidayByDate[date] ? 'cal-holiday-col' : ''}">${dt.toLocaleDateString('en-US', { weekday: 'short' })}<br/>${dt.getDate()}</th>`;
+                const boundary = (date === cutoffBStart || date === nextCutoffStart) ? ' cal-cutoff-start' : '';
+                return `<th class="cal-day-col ${cutoffClassFor(date, cutoffs)}${boundary} ${holidayByDate[date] ? 'cal-holiday-col' : ''}">${dt.toLocaleDateString('en-US', { weekday: 'short' })}<br/>${dt.getDate()}</th>`;
               }).join('')}
-              <th class="num cal-net-col">Net Pay</th>
+              <th class="num cal-net-col">Cutoff A Net</th>
+              <th class="num cal-net-col">Cutoff B Net</th>
             </tr>
           </thead>
           <tbody>
             ${employees.map(emp => {
-              const records = Store.attendanceInRange(selected.from, selected.to).filter(a => a.employeeId === emp.id);
+              const records = Store.attendanceInRange(monthFrom, monthTo).filter(a => a.employeeId === emp.id);
               const recByDate = {};
               records.forEach(r => { recByDate[r.date] = r; });
-              const row = computeRow(emp, selected.from, selected.to);
+              const rowA = computeRow(emp, cutoffs[0].from, cutoffs[0].to);
+              const rowB = computeRow(emp, cutoffs[1].from, cutoffs[1].to);
               return `
                 <tr>
                   <td class="cal-name-col name">${escapeHtml(emp.name)}</td>
-                  ${days.map(date => calDayCell(emp, date, recByDate[date], holidayByDate[date])).join('')}
-                  <td class="num cal-net-col" style="font-weight:700;">${fmtMoney(row.net)}</td>
+                  ${days.map(date => {
+                    const boundary = (date === cutoffBStart || date === nextCutoffStart) ? ' cal-cutoff-start' : '';
+                    return calDayCell(emp, date, recByDate[date], holidayByDate[date]).replace('class="cal-cell', `class="cal-cell ${cutoffClassFor(date, cutoffs)}${boundary}`);
+                  }).join('')}
+                  <td class="num cal-net-col" style="font-weight:700;">${fmtMoney(rowA.net)}</td>
+                  <td class="num cal-net-col" style="font-weight:700;">${fmtMoney(rowB.net)}</td>
                 </tr>
               `;
             }).join('')}
@@ -314,7 +326,7 @@ window.Views.attendance = (function () {
     `;
 
     qsa('#cal-seg-group button', body).forEach(b => b.addEventListener('click', () => { setCalGroup(b.dataset.val); renderCalendarTab(body, main); }));
-    qsa('#cal-seg-cutoff button', body).forEach(b => b.addEventListener('click', () => { calHalf = b.dataset.val; renderCalendarTab(body, main); }));
+    qs('#cal-btn-edit-cutoff', body).addEventListener('click', () => openEditCutoffModal(body, main));
     qs('#cal-month-input', body).addEventListener('change', (ev) => {
       const [y, m] = ev.target.value.split('-').map(Number);
       calYear = y; calMonth = m;
@@ -340,6 +352,65 @@ window.Views.attendance = (function () {
       selectedDate = date;
       openAttendanceModal(main, empId, rec.id);
     }));
+  }
+
+  // Lets HR change where each cutoff half ends (and its payday) for the currently
+  // selected pay group — replaces what used to be hardcoded. Warns (but doesn't block,
+  // in case of a deliberate one-off business reason) if a change would push either half
+  // over the Labor Code's 16-day maximum cutoff length.
+  function openEditCutoffModal(body, main) {
+    const s = Store.getPayCutoffSetting(calGroup) || DEFAULT_CUTOFF_SETTINGS[calGroup];
+    const groupName = calGroup === '15-30' ? 'Technicians' : 'Admins';
+
+    function warningHtml(cutoffAEndDay, cutoffBEndDay) {
+      const { spanA, spanB } = cutoffSpans(cutoffAEndDay, cutoffBEndDay);
+      const problems = [];
+      if (spanA > 16) problems.push(`Cutoff A could reach ${spanA} days`);
+      if (spanB > 16) problems.push(`Cutoff B could reach ${spanB} days`);
+      if (!problems.length) return '';
+      return `<div class="modal-sub" style="color:#b45309;">⚠ ${problems.join(' and ')} — exceeds the Labor Code's 16-day maximum in some months. You can still save, but double-check this is intended.</div>`;
+    }
+
+    openModal(`
+      <h2>Edit Cutoff Days — ${groupName}</h2>
+      <div class="modal-sub">Changes apply to every future month for this pay group and recompute Net Pay automatically.</div>
+      <form id="cutoff-form">
+        <div class="modal-grid">
+          <div class="field"><label>Cutoff A ends on day</label><input type="number" name="cutoffAEndDay" min="1" max="31" required value="${s.cutoffAEndDay}" /></div>
+          <div class="field"><label>Cutoff A payday</label><input type="number" name="paydayADay" min="1" max="31" required value="${s.paydayADay}" /></div>
+          <div class="field"><label>Cutoff B ends on day</label><input type="number" name="cutoffBEndDay" min="1" max="31" required value="${s.cutoffBEndDay}" /></div>
+          <div class="field"><label>Cutoff B payday</label><input type="number" name="paydayBDay" min="1" max="31" required value="${s.paydayBDay}" /></div>
+        </div>
+        <div id="cutoff-warning">${warningHtml(s.cutoffAEndDay, s.cutoffBEndDay)}</div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    `, (bd) => {
+      const recheck = () => {
+        const a = Number(qs('input[name="cutoffAEndDay"]', bd).value) || 0;
+        const b = Number(qs('input[name="cutoffBEndDay"]', bd).value) || 0;
+        qs('#cutoff-warning', bd).innerHTML = warningHtml(a, b);
+      };
+      qs('input[name="cutoffAEndDay"]', bd).addEventListener('input', recheck);
+      qs('input[name="cutoffBEndDay"]', bd).addEventListener('input', recheck);
+
+      qs('#cutoff-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const patch = {
+          cutoffAEndDay: Number(fd.get('cutoffAEndDay')),
+          paydayADay: Number(fd.get('paydayADay')),
+          cutoffBEndDay: Number(fd.get('cutoffBEndDay')),
+          paydayBDay: Number(fd.get('paydayBDay')),
+        };
+        await Store.updatePayCutoffSetting(calGroup, patch);
+        toast('✔ Cutoff days updated.');
+        closeModal();
+        renderCalendarTab(body, main);
+      });
+    });
   }
 
   // Employees flagged as typically working nights (Store.getEmployee(...).nightShiftDifferential)

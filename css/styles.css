@@ -474,6 +474,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .cal-name-col { position: sticky; left: 0; background: var(--bg-card); z-index: 1; min-width: 140px; text-align: left; padding: 8px 10px; }
 .cal-day-col { min-width: 64px; text-align: center; font-size: 11px; color: var(--text-faint); padding: 6px 4px; font-weight: 600; }
 .cal-holiday-col { background: rgba(29,91,224,0.06); }
+/* Full-month calendar: which payroll cutoff each day column belongs to. cal-cutoff-b gets
+   a tint so the two halves are easy to tell apart at a glance; cal-cutoff-next (days after
+   this month's cutoff B, which belong to a cutoff ending next month) is dimmed slightly. */
+.cal-cutoff-b { background: rgba(63,196,106,0.06); }
+.cal-cutoff-next { opacity: 0.55; }
+.cal-cutoff-start { border-left: 2px solid var(--accent) !important; }
 .cal-net-col { min-width: 90px; padding: 8px 10px; background: var(--bg-elevated); }
 .cal-cell { text-align: center; padding: 4px; cursor: pointer; vertical-align: middle; transition: background .1s; }
 .cal-cell:hover { background: var(--bg-hover); }

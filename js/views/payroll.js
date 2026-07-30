@@ -56,7 +56,7 @@ window.Views.payroll = (function () {
       <div class="page-head">
         <div>
           <h1 class="page-title">Payroll</h1>
-          <div class="page-sub">Admins (Admin &amp; Office Staff) are paid every 5th &amp; 20th; Technicians (Field Personnel) every 15th &amp; 30th. Both schedules pay twice a month with no cutoff exceeding 16 days, per the Labor Code of the Philippines. Gross pay = base pay + COLA + housing allowance + night shift differential + overtime + holiday pay; net pay = gross pay − withholding tax − deductions.</div>
+          <div class="page-sub">Admins (Admin &amp; Office Staff) are paid ${paydayLabel('10-20')}; Technicians (Field Personnel) are paid ${paydayLabel('15-30')}. Cutoff days are editable from Attendance → Calendar → Edit Cutoff Days. Both schedules pay twice a month; no cutoff should exceed 16 days, per the Labor Code of the Philippines. Gross pay = base pay + COLA + housing allowance + night shift differential + overtime + holiday pay; net pay = gross pay − withholding tax − deductions.</div>
         </div>
         ${activeTab === 'deductions' ? '<button class="btn btn-primary" id="btn-new-deduction">+ New deduction</button>' : ''}
         ${activeTab === 'holidays' ? '<button class="btn btn-primary" id="btn-new-holiday">+ Add holiday</button>' : ''}
