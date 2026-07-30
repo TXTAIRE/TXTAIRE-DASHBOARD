@@ -114,6 +114,11 @@ create table attendance (
   "nsdStatus" text,
   "otStatus" text,
   "holidayStatus" text,
+  -- HR-editable OT hours for this day; null means "use hours - 8" (js/store.js
+  -- computeDayPay), set means HR has explicitly overridden the number of hours that
+  -- actually count as overtime (e.g. to exclude a break, or cap it below the raw
+  -- clock-time difference). Only ever matters once otStatus is 'Approved'.
+  "otHours" numeric(5,2),
   -- Who approved each one and when — stamped automatically by a trigger the instant a
   -- status column actually transitions to 'Approved' (and cleared if it's ever un-approved),
   -- so there's always a clear audit trail distinguishing a genuine HR approval from any
@@ -1085,3 +1090,11 @@ drop trigger if exists trg_stamp_attendance_approvals on attendance;
 create trigger trg_stamp_attendance_approvals
   before insert or update on attendance
   for each row execute function stamp_attendance_approvals();
+
+-- =================================================================
+-- Editable OT hours -- incremental migration. Run once against a database that already
+-- has the migrations above applied. Safe to re-run. Lets HR override the number of hours
+-- that count as overtime for a day, instead of it always being a fixed "hours - 8".
+-- =================================================================
+
+alter table attendance add column if not exists "otHours" numeric(5,2);

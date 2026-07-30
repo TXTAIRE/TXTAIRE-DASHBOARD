@@ -482,6 +482,11 @@ window.Views.attendance = (function () {
               <input type="checkbox" name="otApproved" ${r.otStatus === 'Approved' ? 'checked' : ''} style="width:auto;" /> Approved
               ${r.otStatus === 'Requested' ? '<span class="badge badge-yellow" style="margin-left:4px;">Pending request</span>' : ''}
             </label>
+            <div style="display:flex; align-items:center; gap:6px; margin-top:6px;">
+              <label for="att-ot-hours" style="font-weight:400; margin:0; font-size:12px; color:var(--text-faint);">OT hours</label>
+              <input type="number" step="0.1" min="0" name="otHours" id="att-ot-hours" style="width:80px;"
+                value="${r.otHours != null ? r.otHours : Math.max(0, Number(r.hours) - 8).toFixed(2)}" />
+            </div>
             ${approvalStampHtml(r.otStatus, r.otApprovedBy, r.otApprovedAt)}
           </div>
           <div class="field full"><label>Holiday</label>
@@ -541,6 +546,7 @@ window.Views.attendance = (function () {
           // it only ever clears an already-Approved flag back to undecided.
           nsdStatus: fd.get('nsdApproved') === 'on' ? 'Approved' : (r.nsdStatus === 'Requested' ? r.nsdStatus : null),
           otStatus: fd.get('otApproved') === 'on' ? 'Approved' : (r.otStatus === 'Requested' ? r.otStatus : null),
+          otHours: fd.get('otHours') !== '' ? Number(fd.get('otHours')) : null,
           holidayType,
           holidayStatus: holidayType ? 'Approved' : (r.holidayStatus === 'Requested' ? r.holidayStatus : null),
         };

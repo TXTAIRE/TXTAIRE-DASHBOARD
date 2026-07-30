@@ -266,7 +266,11 @@ function computeDayPay(dailyRateEq, rec, holiday) {
   // no per-record override possible for a day nobody clocked in for.
   const effectiveType = (rec && rec.holidayType) ? rec.holidayType : (holiday ? holiday.type : null);
 
-  const otHrs = (rec && rec.otStatus === 'Approved') ? Math.max(0, hrs - 8) : 0;
+  // otHours lets HR override the raw "hours - 8" figure (e.g. to exclude a break, or cap
+  // it) — null/undefined falls back to the original derived calculation.
+  const otHrs = (rec && rec.otStatus === 'Approved')
+    ? (rec.otHours != null ? Number(rec.otHours) : Math.max(0, hrs - 8))
+    : 0;
   const otMultiplier = effectiveType ? (effectiveType === 'Regular' ? 2.6 : 1.69) : 1.25;
   const otPay = otHrs * hourlyRate * otMultiplier;
   const nsdHrs = (rec && rec.nsdStatus === 'Approved') ? nightOverlapHours(rec.timeIn, rec.timeOut) : 0;
