@@ -93,9 +93,15 @@ window.Views.staff = (function () {
         <div class="kpi-card"><div class="kpi-label">Status</div><div class="kpi-value" style="font-size:16px;">${employeeStatusDot(e.status)}</div></div>
         <div class="kpi-card"><div class="kpi-label">Employment</div><div class="kpi-value" style="font-size:16px;">${employmentStatusBadge(e.employmentStatus)}</div></div>
       </div>
-      <div class="page-sub" style="margin-top:10px;">Date hired: ${fmtDate(e.dateHired)} · Length of service: ${lengthOfService(e.dateHired)}</div>
-      <div class="section-title" style="margin-top:18px;">Contact</div>
-      <div class="page-sub">Phone: ${escapeHtml(e.phone || '—')}<br/>Email: ${escapeHtml(e.email || '—')}</div>
+      <div class="section-title" style="margin-top:18px;">Profile <span class="dim" style="font-weight:400;">(same info this employee sees on My Portal → My Profile)</span></div>
+      <div class="page-sub">
+        Employee ID: ${e.employeeCode ? `<strong>${escapeHtml(e.employeeCode)}</strong>` : '<span class="dim">not assigned</span>'}<br/>
+        Category: ${escapeHtml(e.category)}<br/>
+        Employment status: ${escapeHtml(e.employmentStatus)}<br/>
+        Date hired: ${fmtDate(e.dateHired)} · Length of service: ${lengthOfService(e.dateHired)}<br/>
+        Phone: ${escapeHtml(e.phone || '—')}<br/>
+        Email: ${escapeHtml(e.email || '—')}
+      </div>
       <div class="section-title">Pay</div>
       <div class="page-sub">
         Rate: ${e.payType === 'Daily' ? fmtMoney(e.rate) + ' / day' : fmtMoney(e.rate) + ' / cutoff'}<br/>
@@ -112,7 +118,6 @@ window.Views.staff = (function () {
       ${e.bankQrPath ? `<button class="btn btn-ghost btn-sm" id="btn-view-bank-qr" style="margin-top:6px;">View QR code</button>` : ''}
       <div class="section-title">Employee Self-Service</div>
       <div class="page-sub">
-        Employee ID: ${e.employeeCode ? `<strong>${escapeHtml(e.employeeCode)}</strong>` : '<span class="dim">not assigned</span>'}<br/>
         Portal access: ${e.authUserId ? '<span class="badge badge-green">Enabled</span>' : '<span class="badge badge-gray">Not enabled</span>'}
       </div>
       <div class="modal-actions" style="margin-top:8px; justify-content:flex-start;">
