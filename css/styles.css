@@ -244,8 +244,10 @@ html, body {
 .kpi-value { font-size: 26px; font-weight: 700; }
 .kpi-value.green { color: var(--green); }
 .kpi-value.red { color: var(--red); }
+.kpi-value.yellow { color: var(--yellow); }
 .red { color: var(--red); }
 .green { color: var(--green); }
+.yellow { color: var(--yellow); }
 .kpi-sub { font-size: 11.5px; color: var(--text-faint); margin-top: 4px; }
 
 .panel {

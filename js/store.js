@@ -402,6 +402,9 @@ const Store = (function () {
     notifications: 'notifications',
     payrollReleases: 'payrollReleases',
     appSettings: 'appSettings',
+    expenses: 'expenses',
+    bills: 'bills',
+    officeFiles: 'officeFiles',
   };
 
   const state = {
@@ -410,6 +413,7 @@ const Store = (function () {
     payCutoffSettings: [],
     leaveRequests: [], attendanceCorrections: [], auditLog: [],
     notifications: [], payrollReleases: [], appSettings: [],
+    expenses: [], bills: [], officeFiles: [],
   };
 
   let remoteChangeCallback = null;
@@ -866,6 +870,104 @@ const Store = (function () {
     logAudit('appSettings.update', TABLES.appSettings, key, { value });
   }
 
+  // ---- Expenses & Receipts (Admin/Finance, admin-only) ----
+  function listExpenses() { return state.expenses.slice(); }
+  function getExpense(id) { return state.expenses.find(e => e.id === id); }
+  function expensesInRange(from, to) { return state.expenses.filter(e => e.date >= from && e.date <= to); }
+  async function addExpense(e) {
+    e.id = genId('exp');
+    return insertRow('expenses', e);
+  }
+  async function updateExpense(id, patch) {
+    await updateRow('expenses', id, patch);
+    return getExpense(id);
+  }
+  async function deleteExpense(id) {
+    await deleteRow('expenses', id);
+  }
+  // Uploads a receipt photo/scan to the private "receipts" bucket -- manual upload only,
+  // since a browser can't drive a physical scanner directly.
+  async function uploadReceiptPhoto(blob, filename) {
+    const ext = (filename && filename.split('.').pop()) || 'jpg';
+    const path = `${genId('receipt')}.${ext}`;
+    const { error } = await sb.storage.from('receipts').upload(path, blob, { contentType: blob.type || 'application/octet-stream' });
+    if (error) { toast('Receipt upload failed: ' + error.message); throw error; }
+    return path;
+  }
+  async function getSignedReceiptUrl(path) {
+    if (!path) return null;
+    const { data, error } = await sb.storage.from('receipts').createSignedUrl(path, 3600);
+    if (error) { console.error('Failed to sign receipt URL', error); return null; }
+    return data.signedUrl;
+  }
+  async function deleteReceiptPhoto(path) {
+    if (!path) return;
+    const { error } = await sb.storage.from('receipts').remove([path]);
+    if (error) console.error('Failed to delete receipt photo', error);
+  }
+
+  // ---- Bill Reminders (Admin/Finance, admin-only) ----
+  function listBills() { return state.bills.slice(); }
+  function getBill(id) { return state.bills.find(b => b.id === id); }
+  async function addBill(b) {
+    b.id = genId('bill');
+    return insertRow('bills', b);
+  }
+  async function updateBill(id, patch) {
+    await updateRow('bills', id, patch);
+    return getBill(id);
+  }
+  async function deleteBill(id) {
+    await deleteRow('bills', id);
+  }
+  // Marks a bill Paid and, if it recurs, immediately creates the next occurrence (due date
+  // shifted a month/year forward) so the reminder list always shows the next upcoming
+  // instance without HR re-entering it every cycle.
+  async function payBill(id) {
+    const b = getBill(id);
+    if (!b) return;
+    await updateRow('bills', id, { status: 'Paid', paidDate: todayISO() });
+    if (b.recurrence === 'Monthly' || b.recurrence === 'Yearly') {
+      const d = new Date(b.dueDate + 'T00:00:00');
+      if (b.recurrence === 'Monthly') d.setMonth(d.getMonth() + 1);
+      else d.setFullYear(d.getFullYear() + 1);
+      const nextDueDate = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+      await addBill({
+        name: b.name, category: b.category, amount: b.amount,
+        dueDate: nextDueDate, recurrence: b.recurrence, notes: b.notes || '',
+      });
+    }
+  }
+
+  // ---- Office Files (Admin/Finance, admin-only) ----
+  // Manually-uploaded documents (scanned receipts, contracts, etc.) -- staff scan using the
+  // printer's own software, then upload the resulting file here.
+  function listOfficeFiles() { return state.officeFiles.slice(); }
+  async function uploadOfficeFile(file, category, uploadedBy) {
+    const ext = (file.name && file.name.split('.').pop()) || 'dat';
+    const path = `${genId('file')}.${ext}`;
+    const { error: upErr } = await sb.storage.from('office-files').upload(path, file, { contentType: file.type || 'application/octet-stream' });
+    if (upErr) { toast('File upload failed: ' + upErr.message); throw upErr; }
+    return insertRow('officeFiles', {
+      id: genId('of'), fileName: file.name, filePath: path,
+      mimeType: file.type || null, fileSize: file.size || null,
+      category: category || 'Other', uploadedBy: uploadedBy || null,
+    });
+  }
+  async function getSignedOfficeFileUrl(path) {
+    if (!path) return null;
+    const { data, error } = await sb.storage.from('office-files').createSignedUrl(path, 3600);
+    if (error) { console.error('Failed to sign office file URL', error); return null; }
+    return data.signedUrl;
+  }
+  async function deleteOfficeFile(id, path) {
+    if (path) {
+      const { error } = await sb.storage.from('office-files').remove([path]);
+      if (error) console.error('Failed to delete office file from storage', error);
+    }
+    await deleteRow('officeFiles', id);
+  }
+
   // ---- Backup: a full snapshot of every table currently loaded in memory. The free
   // Supabase tier has no automatic backups/point-in-time recovery, so this is what backs
   // the admin "Download Backup" button — a plain JSON export HR can save wherever they like.
@@ -891,6 +993,10 @@ const Store = (function () {
     createNotification, listNotificationsForEmployee, unreadNotificationCount, markNotificationRead, markAllNotificationsRead,
     getPayrollRelease, releasePayroll,
     getAppSetting, setAppSetting,
+    listExpenses, getExpense, expensesInRange, addExpense, updateExpense, deleteExpense,
+    uploadReceiptPhoto, getSignedReceiptUrl, deleteReceiptPhoto,
+    listBills, getBill, addBill, updateBill, deleteBill, payBill,
+    listOfficeFiles, uploadOfficeFile, getSignedOfficeFileUrl, deleteOfficeFile,
     exportAllData, logAudit,
   };
 })();

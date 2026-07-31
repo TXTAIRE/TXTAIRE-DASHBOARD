@@ -293,6 +293,55 @@ create table "appSettings" (
   updated_at timestamptz not null default now()
 );
 
+-- ---------- expenses ----------
+-- Admin/Finance expense & receipt log (js/views/finance.js). Admin-only -- not part of
+-- the ESS portal, no employee access at all. The receipt image (if any) is a photo/scan
+-- the admin uploads manually (a browser can't drive a physical scanner directly), stored
+-- in the private "receipts" bucket.
+create table expenses (
+  id text primary key,
+  date date not null,
+  vendor text not null,
+  category text not null,                      -- 'Rent' | 'Utilities' | 'Supplies' | 'Fuel' | 'Repairs' | 'Other'
+  amount numeric(12,2) not null default 0,
+  description text default '',
+  "receiptPath" text,                           -- storage.objects path in the private "receipts" bucket
+  "enteredBy" text,
+  created_at timestamptz not null default now()
+);
+
+-- ---------- bills ----------
+-- Recurring/one-time bill reminders (rent, utilities, etc.). Marking a recurring bill
+-- Paid automatically creates the next occurrence (js/store.js payBill), so the reminder
+-- list always has the next upcoming instance without HR re-entering it every cycle.
+create table bills (
+  id text primary key,
+  name text not null,
+  category text not null default 'Other',       -- 'Rent' | 'Utilities' | 'Other'
+  amount numeric(12,2) not null default 0,
+  "dueDate" date not null,
+  recurrence text not null default 'One-time',  -- 'One-time' | 'Monthly' | 'Yearly'
+  status text not null default 'Unpaid',        -- 'Unpaid' | 'Paid'
+  "paidDate" date,
+  notes text default '',
+  created_at timestamptz not null default now()
+);
+
+-- ---------- officeFiles ----------
+-- Manually-uploaded office documents (scanned receipts, contracts, etc. -- staff scan on
+-- the printer's own software, then upload the resulting file here). Admin-only, stored in
+-- the private "office-files" bucket.
+create table "officeFiles" (
+  id text primary key,
+  "fileName" text not null,
+  "filePath" text not null,
+  "mimeType" text,
+  "fileSize" bigint,
+  category text default 'Other',
+  "uploadedBy" text,
+  created_at timestamptz not null default now()
+);
+
 -- =================================================================
 -- RBAC helpers — every policy below is built from these two functions.
 -- An "admin" is any authenticated user whose auth.uid() is NOT linked from any employees
@@ -334,9 +383,18 @@ alter table "auditLog" enable row level security;
 alter table notifications enable row level security;
 alter table "payrollReleases" enable row level security;
 alter table "appSettings" enable row level security;
+alter table expenses enable row level security;
+alter table bills enable row level security;
+alter table "officeFiles" enable row level security;
 
 -- Admin-only tables — unchanged from before, just re-expressed via is_admin().
 create policy "admin full access" on candidates
+  for all to authenticated using (is_admin()) with check (is_admin());
+create policy "admin full access" on expenses
+  for all to authenticated using (is_admin()) with check (is_admin());
+create policy "admin full access" on bills
+  for all to authenticated using (is_admin()) with check (is_admin());
+create policy "admin full access" on "officeFiles"
   for all to authenticated using (is_admin()) with check (is_admin());
 create policy "admin full access" on "disciplinaryCases"
   for all to authenticated using (is_admin()) with check (is_admin());
@@ -688,13 +746,32 @@ create policy "admin full access to bank qr" on storage.objects
   with check (bucket_id = 'bank-qr' and is_admin());
 
 -- =================================================================
+-- Storage — private buckets for the Admin/Finance section (js/views/finance.js).
+-- Admin-only, no employee access at all -- unlike attendance-photos/bank-qr, these aren't
+-- scoped per-employee-folder since nobody but HR/admins ever touches this data.
+-- =================================================================
+insert into storage.buckets (id, name, public)
+values ('receipts', 'receipts', false), ('office-files', 'office-files', false)
+on conflict (id) do nothing;
+
+create policy "admin full access to receipts" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'receipts' and is_admin())
+  with check (bucket_id = 'receipts' and is_admin());
+create policy "admin full access to office files" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'office-files' and is_admin())
+  with check (bucket_id = 'office-files' and is_admin());
+
+-- =================================================================
 -- Realtime — publish every table so the app's subscriptions receive changes
 -- =================================================================
 alter publication supabase_realtime add table
   employees, candidates, "disciplinaryCases", complaints,
   attendance, deductions, "probationRecords", "payrollOverrides", holidays,
   "payCutoffSettings", "leaveRequests", "attendanceCorrections", "auditLog",
-  notifications, "payrollReleases", "appSettings";
+  notifications, "payrollReleases", "appSettings",
+  expenses, bills, "officeFiles";
 
 -- Seed the two pay groups' cutoff-day settings with the values that used to be hardcoded,
 -- so behavior is unchanged until HR actually edits them from the Calendar tab.
@@ -1389,3 +1466,85 @@ drop trigger if exists trg_enforce_employee_leave_request_update on "leaveReques
 create trigger trg_enforce_employee_leave_request_update
   before update on "leaveRequests"
   for each row execute function enforce_employee_leave_request_update();
+
+-- =================================================================
+-- Admin/Finance section (js/views/finance.js) -- incremental migration. Run once against
+-- a database that already has the migrations above applied. Safe to re-run.
+--
+-- expenses: expense/receipt log, admin-only. The receipt image (if any) is a photo/scan
+-- the admin uploads manually (a browser can't drive a physical scanner directly).
+--
+-- bills: recurring/one-time bill reminders (rent, utilities). Marking a recurring bill
+-- Paid auto-creates the next occurrence (js/store.js payBill).
+--
+-- officeFiles: manually-uploaded office documents (scanned receipts, contracts, etc.).
+--
+-- All three are admin-only -- no employee/ESS access at all, same as auditLog.
+-- =================================================================
+
+create table if not exists expenses (
+  id text primary key,
+  date date not null,
+  vendor text not null,
+  category text not null,
+  amount numeric(12,2) not null default 0,
+  description text default '',
+  "receiptPath" text,
+  "enteredBy" text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists bills (
+  id text primary key,
+  name text not null,
+  category text not null default 'Other',
+  amount numeric(12,2) not null default 0,
+  "dueDate" date not null,
+  recurrence text not null default 'One-time',
+  status text not null default 'Unpaid',
+  "paidDate" date,
+  notes text default '',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists "officeFiles" (
+  id text primary key,
+  "fileName" text not null,
+  "filePath" text not null,
+  "mimeType" text,
+  "fileSize" bigint,
+  category text default 'Other',
+  "uploadedBy" text,
+  created_at timestamptz not null default now()
+);
+
+alter table expenses enable row level security;
+alter table bills enable row level security;
+alter table "officeFiles" enable row level security;
+
+drop policy if exists "admin full access" on expenses;
+create policy "admin full access" on expenses
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "admin full access" on bills;
+create policy "admin full access" on bills
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "admin full access" on "officeFiles";
+create policy "admin full access" on "officeFiles"
+  for all to authenticated using (is_admin()) with check (is_admin());
+
+insert into storage.buckets (id, name, public)
+values ('receipts', 'receipts', false), ('office-files', 'office-files', false)
+on conflict (id) do nothing;
+
+drop policy if exists "admin full access to receipts" on storage.objects;
+create policy "admin full access to receipts" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'receipts' and is_admin())
+  with check (bucket_id = 'receipts' and is_admin());
+drop policy if exists "admin full access to office files" on storage.objects;
+create policy "admin full access to office files" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'office-files' and is_admin())
+  with check (bucket_id = 'office-files' and is_admin());
+
+alter publication supabase_realtime add table expenses, bills, "officeFiles";
