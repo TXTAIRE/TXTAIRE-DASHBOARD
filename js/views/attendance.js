@@ -261,6 +261,14 @@ window.Views.attendance = (function () {
     const monthFrom = `${calYear}-${pad2(calMonth)}-01`;
     const monthTo = `${calYear}-${pad2(calMonth)}-${pad2(last)}`;
 
+    // Days after cutoff B's end belong to a THIRD cutoff (this month's "next cutoff A")
+    // that won't close until next month -- without a column for it, days visibly logged
+    // in that tail (e.g. the 19th-31st) looked like they weren't counting toward anything,
+    // which read as "not automatically computing." This shows what's accrued so far.
+    let nextM = calMonth + 1, nextY = calYear;
+    if (nextM > 12) { nextM = 1; nextY += 1; }
+    const upcoming = payCutoffs(calGroup, nextY, nextM)[0];
+
     const employees = Store.listEmployees().filter(e => e.payCycle === calGroup && e.status !== 'Terminated').sort((a, b) => a.name.localeCompare(b.name));
     const holidays = Store.holidaysInRange(monthFrom, monthTo);
     const holidayByDate = {};
@@ -288,7 +296,7 @@ window.Views.attendance = (function () {
         <button class="btn btn-ghost btn-sm" id="cal-btn-next-month">Next month →</button>
       </div>
       <div class="page-sub" style="margin-bottom:10px;">
-        ${monthLabel} · Cutoff A: ${cutoffs[0].label} · Cutoff B: ${cutoffs[1].label} · click an empty cell to instantly log a shift, or a logged cell to fine-tune it
+        ${monthLabel} · Cutoff A: ${cutoffs[0].label} · Cutoff B: ${cutoffs[1].label} · click an empty cell to instantly log a shift, or a logged cell to fine-tune it. Days after the ${ordinal(new Date(cutoffs[1].to + 'T00:00:00').getDate())} belong to the next cutoff (ending ${fmtDate(upcoming.to)}) — see "Upcoming (partial)".
       </div>
 
       <div class="panel" style="overflow-x:auto;">
@@ -304,6 +312,7 @@ window.Views.attendance = (function () {
               }).join('')}
               <th class="num cal-net-col">Cutoff A Net</th>
               <th class="num cal-net-col">Cutoff B Net</th>
+              <th class="num cal-net-col">Upcoming <span class="dim" style="font-weight:400;">(partial)</span></th>
             </tr>
           </thead>
           <tbody>
@@ -313,6 +322,7 @@ window.Views.attendance = (function () {
               records.forEach(r => { recByDate[r.date] = r; });
               const rowA = computeRow(emp, cutoffs[0].from, cutoffs[0].to);
               const rowB = computeRow(emp, cutoffs[1].from, cutoffs[1].to);
+              const rowUpcoming = computeRow(emp, upcoming.from, upcoming.to);
               return `
                 <tr>
                   <td class="cal-name-col name">${escapeHtml(emp.name)}</td>
@@ -322,6 +332,7 @@ window.Views.attendance = (function () {
                   }).join('')}
                   <td class="num cal-net-col" style="font-weight:700;">${fmtMoney(rowA.net)}</td>
                   <td class="num cal-net-col" style="font-weight:700;">${fmtMoney(rowB.net)}</td>
+                  <td class="num cal-net-col" style="font-weight:700;">${fmtMoney(rowUpcoming.net)}</td>
                 </tr>
               `;
             }).join('')}

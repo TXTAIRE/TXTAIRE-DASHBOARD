@@ -359,11 +359,18 @@ function computeRow(emp, from, to) {
   });
 
   const gross = basePay + colaPay + housingPay + nsdPay + otPay + holidayPay;
-  const tax = withholdingTax(gross);
 
   const manualDed = Store.deductionsInRange(from, to).filter(d => d.employeeId === emp.id).reduce((s, d) => s + Number(d.amount), 0);
   const attendanceDed = emp.payType === 'Monthly' && ordinaryWorkDays > 0 ? (emp.rate / ordinaryWorkDays) * daysAbsent : 0;
   const dedTotal = manualDed + attendanceDed + lateUndertimeDed;
+
+  // Withholding tax applies to what was actually earned, not the theoretical full-cutoff
+  // gross before the absence deduction is subtracted -- a Monthly employee's basePay is
+  // their full flat rate regardless of attendance, with absence clawed back separately via
+  // attendanceDed. Taxing the undiminished gross meant a cutoff with zero attendance logged
+  // yet (e.g. before HR has entered it) showed a confusing negative "net": real tax charged
+  // on pay that was then fully deducted right back out.
+  const tax = withholdingTax(Math.max(0, gross - attendanceDed));
   const net = gross - tax - dedTotal;
 
   return {
