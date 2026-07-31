@@ -20,7 +20,12 @@
 <div id="ess-app" class="hidden">
   <header class="ess-header">
     <img src="assets/logo.svg" alt="TxTAIRE" class="ess-logo" />
-    <button id="ess-logout" class="link-btn">Sign out</button>
+    <div style="display:flex; align-items:center; gap:14px;">
+      <button id="ess-bell" class="ess-bell" title="Notifications" aria-label="Notifications">
+        🔔<span id="ess-bell-badge" class="ess-bell-badge hidden">0</span>
+      </button>
+      <button id="ess-logout" class="link-btn">Sign out</button>
+    </div>
   </header>
   <main id="ess-main" class="ess-main"></main>
   <nav id="ess-nav" class="ess-nav">

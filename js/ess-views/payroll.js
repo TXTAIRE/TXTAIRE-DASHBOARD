@@ -7,10 +7,14 @@ window.EssViews.payroll = (function () {
     const cutoffs = payCutoffs(emp.payCycle, pos.year, pos.month);
     const selected = cutoffs.find(c => c.key === pos.half) || cutoffs[0];
     const row = computeRow(emp, selected.from, selected.to);
+    const release = Store.getPayrollRelease(emp.payCycle, selected.from);
 
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0;">My Payroll</div>
-      <div class="ess-sub" style="margin-bottom:12px;">${selected.label} · payday ${fmtDate(selected.payDate)}</div>
+      <div class="ess-sub" style="margin-bottom:12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <span>${selected.label} · payday ${fmtDate(selected.payDate)}</span>
+        ${release ? `<span class="badge badge-green">Released ${fmtDate(release.releasedAt.slice(0, 10))}</span>` : `<span class="badge badge-yellow">Not yet released</span>`}
+      </div>
 
       <div class="ess-card" style="text-align:center;">
         <div class="ess-card-label">Net Pay</div>

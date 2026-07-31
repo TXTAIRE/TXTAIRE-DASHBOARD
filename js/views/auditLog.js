@@ -15,6 +15,7 @@ window.Views.auditLog = (function () {
 
   function renderList(main) {
     const rows = Store.listAuditLog().slice(0, 300);
+    const retentionDays = Number(Store.getAppSetting('auditLogRetentionDays', 30));
 
     main.innerHTML = `
       <div class="crumb">HR</div>
@@ -23,6 +24,16 @@ window.Views.auditLog = (function () {
           <h1 class="page-title">Audit Log</h1>
           <div class="page-sub">Read-only record of every administrative change — who, what, and when. Populated automatically; showing the most recent 300 entries.</div>
         </div>
+      </div>
+
+      <div class="filters">
+        <div class="field">
+          <label>Keep entries for</label>
+          <div class="seg" id="seg-retention">
+            ${[7, 30].map(d => `<button data-val="${d}" class="${retentionDays === d ? 'active' : ''}">${d} days</button>`).join('')}
+          </div>
+        </div>
+        <div class="page-sub" style="align-self:flex-end; margin-bottom:8px;">Entries older than this are deleted automatically the next time this page is opened.</div>
       </div>
 
       <div class="panel">
@@ -42,6 +53,18 @@ window.Views.auditLog = (function () {
         </table>` : '<div class="empty">No administrative actions logged yet.</div>'}
       </div>
     `;
+
+    qsa('#seg-retention button', main).forEach(b => b.addEventListener('click', async () => {
+      await Store.setAppSetting('auditLogRetentionDays', Number(b.dataset.val));
+      await Store.purgeOldAuditLog();
+      toast(`✔ Now keeping audit log entries for ${b.dataset.val} days.`);
+      renderList(main);
+    }));
+
+    // Opportunistic purge -- there's no server-side cron in this app, so entries older
+    // than the configured retention are cleaned up the next time someone actually opens
+    // this page, not on a strict schedule.
+    Store.purgeOldAuditLog().then((deleted) => { if (deleted) renderList(main); });
   }
 
   return { render: renderList };

@@ -101,6 +101,74 @@ function renderEssRoute() {
   setActiveEssNav(essRoute);
   const view = window.EssViews[essRoute];
   if (view && view.render) view.render(main, myEmployee);
+  updateEssBellBadge();
+}
+
+function updateEssBellBadge() {
+  if (!myEmployee) return;
+  const badge = qs('#ess-bell-badge');
+  if (!badge) return;
+  const count = Store.unreadNotificationCount(myEmployee.id);
+  badge.textContent = count > 9 ? '9+' : String(count);
+  badge.classList.toggle('hidden', count === 0);
+}
+
+// One icon per notification type, so the list is scannable at a glance without reading
+// every message in full.
+const NOTIFICATION_ICONS = {
+  ot_approved: '✅', ot_rejected: '❌', nsd_approved: '✅', nsd_rejected: '❌',
+  holiday_approved: '✅', holiday_rejected: '❌', leave_approved: '✅', leave_rejected: '❌',
+  correction_approved: '✅', correction_rejected: '❌', payroll_released: '💰',
+};
+
+function relativeTime(iso) {
+  if (!iso) return '';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function openNotificationsPanel() {
+  function render(bd) {
+    const list = Store.listNotificationsForEmployee(myEmployee.id);
+    const body = qs('#notif-list', bd);
+    body.innerHTML = list.length ? list.map(n => `
+      <div class="ess-row" data-notif-id="${n.id}" style="align-items:flex-start; cursor:pointer; ${n.readAt ? '' : 'background:var(--accent-dim);'} padding:10px; border-radius:8px; margin-bottom:4px;">
+        <span style="font-size:16px; margin-right:8px;">${NOTIFICATION_ICONS[n.type] || '🔔'}</span>
+        <span style="flex:1;">
+          <div style="font-size:13px; ${n.readAt ? '' : 'font-weight:700;'}">${escapeHtml(n.message)}</div>
+          <div class="ess-sub" style="margin-top:2px;">${relativeTime(n.created_at)}</div>
+        </span>
+      </div>
+    `).join('') : '<div class="ess-empty">No notifications yet.</div>';
+
+    qsa('[data-notif-id]', body).forEach(el => el.addEventListener('click', async () => {
+      await Store.markNotificationRead(el.dataset.notifId);
+      updateEssBellBadge();
+      render(bd);
+    }));
+  }
+
+  openEssModal(`
+    <h2>Notifications</h2>
+    <div class="modal-actions" style="justify-content:flex-end; margin:-8px 0 8px 0;">
+      <button type="button" class="link-btn" id="btn-mark-all-read">Mark all as read</button>
+    </div>
+    <div id="notif-list" style="max-height:60vh; overflow-y:auto;"></div>
+  `, (bd) => {
+    render(bd);
+    qs('#btn-mark-all-read', bd).addEventListener('click', async () => {
+      await Store.markAllNotificationsRead(myEmployee.id);
+      updateEssBellBadge();
+      render(bd);
+    });
+  });
 }
 
 // Every view re-renders by wholesale replacing main.innerHTML -- after saving a form,
@@ -150,11 +218,12 @@ async function startEss(session) {
   qs('#ess-login').classList.add('hidden');
   qs('#ess-app').classList.remove('hidden');
   qs('#ess-logout').addEventListener('click', () => sb.auth.signOut());
+  qs('#ess-bell').addEventListener('click', () => openNotificationsPanel());
   qsa('.ess-nav-btn').forEach(b => b.addEventListener('click', () => { essRoute = b.dataset.route; renderEssRoute(); }));
   preserveScrollAcrossRerenders(qs('#ess-main'));
 
   Store.onRemoteChange(() => {
-    if (qs('.modal-backdrop')) return;
+    if (qs('.modal-backdrop')) { updateEssBellBadge(); return; }
     renderEssRoute();
   });
 

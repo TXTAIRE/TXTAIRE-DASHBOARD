@@ -85,6 +85,7 @@ window.Views.payroll = (function () {
   function renderPayrollTab(body, main) {
     const cutoffs = payCutoffs(group, year, month);
     const selected = cutoffs.find(c => c.key === half) || cutoffs[0];
+    const release = Store.getPayrollRelease(group, selected.from);
     const monthValue = `${year}-${pad2(month)}`;
     const monthLabel = new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
@@ -130,7 +131,12 @@ window.Views.payroll = (function () {
         <button class="btn btn-ghost btn-sm" id="btn-reset-absences" style="align-self:flex-end;" title="Sets Absent to 0 for every staff member shown below, for this cutoff only">Reset absences to 0</button>
       </div>
 
-      <div class="page-sub" style="margin-bottom:10px;">${monthLabel} · ${selected.label} · payday ${fmtDate(selected.payDate)} · ${rows.length} staff on this schedule</div>
+      <div class="page-sub" style="margin-bottom:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <span>${monthLabel} · ${selected.label} · payday ${fmtDate(selected.payDate)} · ${rows.length} staff on this schedule</span>
+        ${release
+          ? `<span class="badge badge-green">Released ${fmtDate(release.releasedAt.slice(0, 10))}${release.releasedBy ? ' by ' + escapeHtml(release.releasedBy) : ''}</span>`
+          : `<button class="btn btn-primary btn-sm" id="btn-release-payroll" title="Notifies every staff member on this schedule that their payroll for this cutoff is out">Mark as Released</button>`}
+      </div>
 
       <div class="kpi-row">
         <div class="kpi-card"><div class="kpi-label">Total Gross</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(totalGross)}</div><div class="kpi-sub">incl. ${fmtMoney(totalCola)} COLA, ${fmtMoney(totalHousing)} housing allowance,${fmtMoney(totalNsd)} NSD, ${fmtMoney(totalOt)} OT, ${fmtMoney(totalHoliday)} holiday</div></div>
@@ -226,6 +232,13 @@ window.Views.payroll = (function () {
       if (!confirm(`Set Absent to 0 for all ${rows.length} staff shown, for ${selected.label}?`)) return;
       await Promise.all(rows.map(r => Store.setPayrollOverride(r.emp.id, selected.from, { daysAbsent: 0 })));
       toast('Absences reset to 0 for this cutoff.');
+      renderPayrollTab(body, main);
+    });
+    const btnRelease = qs('#btn-release-payroll', body);
+    if (btnRelease) btnRelease.addEventListener('click', async () => {
+      if (!confirm(`Mark ${selected.label} as released? This notifies every staff member on this schedule that their payroll is out.`)) return;
+      await Store.releasePayroll(group, selected.from, selected.to, selected.payDate, currentUserEmail());
+      toast('✔ Payroll released — staff have been notified.');
       renderPayrollTab(body, main);
     });
     qsa('#seg-group button', body).forEach(b => b.addEventListener('click', () => { setGroup(b.dataset.val); renderPayrollTab(body, main); }));

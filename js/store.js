@@ -399,6 +399,9 @@ const Store = (function () {
     leaveRequests: 'leaveRequests',
     attendanceCorrections: 'attendanceCorrections',
     auditLog: 'auditLog',
+    notifications: 'notifications',
+    payrollReleases: 'payrollReleases',
+    appSettings: 'appSettings',
   };
 
   const state = {
@@ -406,6 +409,7 @@ const Store = (function () {
     attendance: [], deductions: [], probationRecords: [], payrollOverrides: [], holidays: [],
     payCutoffSettings: [],
     leaveRequests: [], attendanceCorrections: [], auditLog: [],
+    notifications: [], payrollReleases: [], appSettings: [],
   };
 
   let remoteChangeCallback = null;
@@ -576,9 +580,31 @@ const Store = (function () {
     rec.id = genId('a');
     return insertRow('attendance', rec);
   }
+  // NSD/OT/Holiday requests all flow through this one generic update -- there's no
+  // separate "review" function for them like leave requests/corrections have -- so the
+  // employee notification is created here, centrally, by diffing the actual before/after
+  // status rather than needing every call site (the Requests tab, the Edit Attendance
+  // modal) to remember to notify.
+  const ATTENDANCE_STATUS_LABELS = { nsd: 'Night Shift Differential', ot: 'Overtime', holiday: 'Holiday' };
   async function updateAttendance(id, patch) {
+    const before = state.attendance.find(a => a.id === id);
     await updateRow('attendance', id, patch);
-    return state.attendance.find(a => a.id === id);
+    const after = state.attendance.find(a => a.id === id);
+    if (before && after) {
+      for (const kind of ['nsd', 'ot', 'holiday']) {
+        const field = kind + 'Status';
+        const newVal = patch[field];
+        if ((newVal === 'Approved' || newVal === 'Rejected') && before[field] !== newVal) {
+          await createNotification({
+            employeeId: after.employeeId,
+            type: `${kind}_${newVal.toLowerCase()}`,
+            message: `Your ${ATTENDANCE_STATUS_LABELS[kind]} pay request for ${fmtDate(after.date)} was ${newVal.toLowerCase()}.`,
+            relatedTable: 'attendance', relatedId: id,
+          });
+        }
+      }
+    }
+    return after;
   }
   async function deleteAttendance(id) {
     await deleteRow('attendance', id);
@@ -721,7 +747,16 @@ const Store = (function () {
     return insertRow('leaveRequests', r);
   }
   async function reviewLeaveRequest(id, status, reviewedBy, reviewNotes) {
+    const r = getLeaveRequest(id);
     await updateRow('leaveRequests', id, { status, reviewedBy, reviewedDate: todayISO(), reviewNotes: reviewNotes || '' });
+    if (r && (status === 'Approved' || status === 'Rejected')) {
+      await createNotification({
+        employeeId: r.employeeId,
+        type: status === 'Approved' ? 'leave_approved' : 'leave_rejected',
+        message: `Your ${r.leaveType} leave request (${fmtDate(r.startDate)} – ${fmtDate(r.endDate)}) was ${status.toLowerCase()}.`,
+        relatedTable: 'leaveRequests', relatedId: id,
+      });
+    }
     return getLeaveRequest(id);
   }
 
@@ -735,12 +770,90 @@ const Store = (function () {
     return insertRow('attendanceCorrections', c);
   }
   async function reviewAttendanceCorrection(id, status, reviewedBy, reviewNotes) {
+    const c = getAttendanceCorrection(id);
     await updateRow('attendanceCorrections', id, { status, reviewedBy, reviewedDate: todayISO(), reviewNotes: reviewNotes || '' });
+    if (c && (status === 'Approved' || status === 'Rejected')) {
+      await createNotification({
+        employeeId: c.employeeId,
+        type: status === 'Approved' ? 'correction_approved' : 'correction_rejected',
+        message: `Your attendance concern for ${fmtDate(c.date)} was ${status.toLowerCase()}.`,
+        relatedTable: 'attendanceCorrections', relatedId: id,
+      });
+    }
     return getAttendanceCorrection(id);
   }
 
   // ---- Audit Log (read-only in the app; populated automatically by insertRow/updateRow/deleteRow) ----
   function listAuditLog() { return state.auditLog.slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')); }
+
+  // Deletes any auditLog row older than the configured retention window (default 30 days
+  // if HR has never set one) -- called opportunistically whenever an admin opens the
+  // Audit Log view. There's no server-side cron in this app, so "after 7/30 days" is
+  // enforced the next time someone actually looks, not on a strict schedule.
+  async function purgeOldAuditLog() {
+    const days = Number(getAppSetting('auditLogRetentionDays', 30));
+    const cutoff = new Date(Date.now() - days * 86400000).toISOString();
+    const stale = state.auditLog.filter(a => (a.created_at || '') < cutoff);
+    if (!stale.length) return 0;
+    const { error } = await sb.from(TABLES.auditLog).delete().lt('created_at', cutoff);
+    if (error) { console.error('Failed to purge old audit log entries', error); return 0; }
+    await refetch('auditLog');
+    return stale.length;
+  }
+
+  // ---- Notifications (Employee Self-Service) ----
+  // Created automatically by the review functions above and releasePayroll below -- never
+  // called directly by any view. Employees can only read their own and mark their own read
+  // (enforced by enforce_notification_update).
+  async function createNotification({ employeeId, type, message, relatedTable, relatedId }) {
+    const row = { id: genId('note'), employeeId, type, message, relatedTable: relatedTable || null, relatedId: relatedId || null };
+    return insertRow('notifications', row);
+  }
+  function listNotificationsForEmployee(employeeId) {
+    return state.notifications.filter(n => n.employeeId === employeeId).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  }
+  function unreadNotificationCount(employeeId) {
+    return state.notifications.filter(n => n.employeeId === employeeId && !n.readAt).length;
+  }
+  async function markNotificationRead(id) {
+    await updateRow('notifications', id, { readAt: new Date().toISOString() });
+  }
+  async function markAllNotificationsRead(employeeId) {
+    const unread = state.notifications.filter(n => n.employeeId === employeeId && !n.readAt);
+    await Promise.all(unread.map(n => markNotificationRead(n.id)));
+  }
+
+  // ---- Payroll Releases (marks a pay-group cutoff as actually paid) ----
+  function getPayrollRelease(payCycle, cutoffFrom) {
+    return state.payrollReleases.find(r => r.payCycle === payCycle && r.cutoffFrom === cutoffFrom);
+  }
+  // Marks the cutoff released and notifies every employee currently on that pay group --
+  // not scoped to who was present that cutoff, since payroll release is a per-schedule
+  // event, not per-employee.
+  async function releasePayroll(payCycle, cutoffFrom, cutoffTo, payDate, releasedBy) {
+    const row = { id: genId('prel'), payCycle, cutoffFrom, cutoffTo, payDate, releasedBy: releasedBy || null };
+    await insertRow('payrollReleases', row);
+    const employees = state.employees.filter(e => e.payCycle === payCycle && e.status !== 'Terminated');
+    await Promise.all(employees.map(e => createNotification({
+      employeeId: e.id,
+      type: 'payroll_released',
+      message: `Your payroll for ${fmtDate(cutoffFrom)} – ${fmtDate(cutoffTo)} has been released, paid ${fmtDate(payDate)}.`,
+      relatedTable: 'payrollReleases', relatedId: row.id,
+    })));
+    return row;
+  }
+
+  // ---- App Settings (small generic key/value store, admin-only) ----
+  function getAppSetting(key, fallback) {
+    const row = state.appSettings.find(s => s.key === key);
+    return row ? row.value : fallback;
+  }
+  async function setAppSetting(key, value) {
+    const { error } = await sb.from(TABLES.appSettings).upsert(sanitize({ key, value }), { onConflict: 'key' });
+    if (error) { toast('Save failed: ' + error.message); throw error; }
+    await refetch('appSettings');
+    logAudit('appSettings.update', TABLES.appSettings, key, { value });
+  }
 
   // ---- Backup: a full snapshot of every table currently loaded in memory. The free
   // Supabase tier has no automatic backups/point-in-time recovery, so this is what backs
@@ -763,7 +876,10 @@ const Store = (function () {
     listPayCutoffSettings, getPayCutoffSetting, updatePayCutoffSetting,
     listLeaveRequests, getLeaveRequest, leaveRequestsForEmployee, addLeaveRequest, reviewLeaveRequest,
     listAttendanceCorrections, getAttendanceCorrection, attendanceCorrectionsForEmployee, addAttendanceCorrection, reviewAttendanceCorrection,
-    listAuditLog,
+    listAuditLog, purgeOldAuditLog,
+    createNotification, listNotificationsForEmployee, unreadNotificationCount, markNotificationRead, markAllNotificationsRead,
+    getPayrollRelease, releasePayroll,
+    getAppSetting, setAppSetting,
     exportAllData, logAudit,
   };
 })();

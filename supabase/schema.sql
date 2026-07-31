@@ -252,6 +252,47 @@ create table "auditLog" (
   created_at timestamptz not null default now()
 );
 
+-- ---------- notifications (Employee Self-Service) ----------
+-- Populated automatically by js/store.js whenever HR reviews an NSD/OT/Holiday pay
+-- request, a leave request, or an attendance correction, or releases a payroll cutoff --
+-- never written to directly by the ESS portal itself (see enforce_notification_update
+-- below, which only ever lets an employee flip their own row's readAt).
+create table notifications (
+  id text primary key,
+  "employeeId" text not null references employees(id) on delete cascade,
+  type text not null,                          -- e.g. 'ot_approved', 'leave_rejected', 'payroll_released'
+  message text not null,
+  "relatedTable" text,
+  "relatedId" text,
+  "readAt" timestamptz,
+  created_at timestamptz not null default now()
+);
+
+-- ---------- payrollReleases ----------
+-- Marks a specific pay-group cutoff as released/paid (js/views/payroll.js "Mark as
+-- Released"). Existence of a row = released; employees check this to know their payroll
+-- for that cutoff has actually been paid out, not just computed live.
+create table "payrollReleases" (
+  id text primary key,
+  "payCycle" text not null,
+  "cutoffFrom" date not null,
+  "cutoffTo" date not null,
+  "payDate" date not null,
+  "releasedBy" text,
+  "releasedAt" timestamptz not null default now(),
+  unique ("payCycle", "cutoffFrom")
+);
+
+-- ---------- appSettings ----------
+-- Small generic key/value store for admin-only app-wide settings -- currently just the
+-- audit log retention window (js/views/auditLog.js), extensible for future settings
+-- without a new table each time.
+create table "appSettings" (
+  key text primary key,
+  value jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
 -- =================================================================
 -- RBAC helpers — every policy below is built from these two functions.
 -- An "admin" is any authenticated user whose auth.uid() is NOT linked from any employees
@@ -290,6 +331,9 @@ alter table "payCutoffSettings" enable row level security;
 alter table "leaveRequests" enable row level security;
 alter table "attendanceCorrections" enable row level security;
 alter table "auditLog" enable row level security;
+alter table notifications enable row level security;
+alter table "payrollReleases" enable row level security;
+alter table "appSettings" enable row level security;
 
 -- Admin-only tables — unchanged from before, just re-expressed via is_admin().
 create policy "admin full access" on candidates
@@ -499,6 +543,56 @@ create policy "employee reads own attendance corrections" on "attendanceCorrecti
 create policy "employee submits own attendance corrections" on "attendanceCorrections"
   for insert to authenticated with check ("employeeId" = my_employee_id());
 
+-- Notifications: created only by HR-side actions (js/store.js), never by the ESS portal
+-- itself -- an employee may only read their own and mark their own read (the trigger
+-- below stops them from touching anything else on their own row, or anyone else's row at
+-- all, per the update policy's own_row check).
+create policy "admin full access" on notifications
+  for all to authenticated using (is_admin()) with check (is_admin());
+create policy "employee reads own notifications" on notifications
+  for select to authenticated using ("employeeId" = my_employee_id());
+create policy "employee marks own notifications read" on notifications
+  for update to authenticated
+  using ("employeeId" = my_employee_id())
+  with check ("employeeId" = my_employee_id());
+
+create or replace function enforce_notification_update() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if is_admin() then
+    return new;
+  end if;
+  if new.id is distinct from old.id
+    or new."employeeId" is distinct from old."employeeId"
+    or new.type is distinct from old.type
+    or new.message is distinct from old.message
+    or new."relatedTable" is distinct from old."relatedTable"
+    or new."relatedId" is distinct from old."relatedId"
+  then
+    raise exception 'Employees may only mark their own notifications read';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_enforce_notification_update on notifications;
+create trigger trg_enforce_notification_update
+  before update on notifications
+  for each row execute function enforce_notification_update();
+
+-- Payroll releases: not sensitive (no pay figures, just "this cutoff has been paid"), so
+-- every employee can read all of them to check their own pay group/cutoff; only admins
+-- create/edit.
+create policy "admin full access" on "payrollReleases"
+  for all to authenticated using (is_admin()) with check (is_admin());
+create policy "employee reads payroll releases" on "payrollReleases"
+  for select to authenticated using (true);
+
+-- App settings: admin-only (currently just audit log retention) -- no employee policy at
+-- all, so a linked employee session simply gets zero rows back, not an error.
+create policy "admin full access" on "appSettings"
+  for all to authenticated using (is_admin()) with check (is_admin());
+
 -- =================================================================
 -- Storage — private bucket for self-clock-in/out photo proof. Objects are stored under
 -- "<employeeId>/<filename>", so (storage.foldername(name))[1] is the owning employee's id.
@@ -551,7 +645,8 @@ create policy "admin full access to bank qr" on storage.objects
 alter publication supabase_realtime add table
   employees, candidates, "disciplinaryCases", complaints,
   attendance, deductions, "probationRecords", "payrollOverrides", holidays,
-  "payCutoffSettings", "leaveRequests", "attendanceCorrections", "auditLog";
+  "payCutoffSettings", "leaveRequests", "attendanceCorrections", "auditLog",
+  notifications, "payrollReleases", "appSettings";
 
 -- Seed the two pay groups' cutoff-day settings with the values that used to be hardcoded,
 -- so behavior is unchanged until HR actually edits them from the Calendar tab.
@@ -1098,3 +1193,101 @@ create trigger trg_stamp_attendance_approvals
 -- =================================================================
 
 alter table attendance add column if not exists "otHours" numeric(5,2);
+
+-- =================================================================
+-- Notifications, payroll releases, and app settings -- incremental migration. Run once
+-- against a database that already has the migrations above applied. Safe to re-run.
+--
+-- notifications: populated automatically by js/store.js whenever HR reviews an NSD/OT/
+-- Holiday pay request, a leave request, or an attendance correction, or releases a
+-- payroll cutoff. Employees can read their own and mark their own read, never write
+-- anything else (enforced by the trigger below).
+--
+-- payrollReleases: existence of a row = that pay-group cutoff has been released/paid
+-- (js/views/payroll.js "Mark as Released"). Not sensitive, every employee can read all of
+-- them to check their own.
+--
+-- appSettings: small generic key/value store, currently just holds the audit log
+-- retention window (js/views/auditLog.js). Admin-only.
+-- =================================================================
+
+create table if not exists notifications (
+  id text primary key,
+  "employeeId" text not null references employees(id) on delete cascade,
+  type text not null,
+  message text not null,
+  "relatedTable" text,
+  "relatedId" text,
+  "readAt" timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists "payrollReleases" (
+  id text primary key,
+  "payCycle" text not null,
+  "cutoffFrom" date not null,
+  "cutoffTo" date not null,
+  "payDate" date not null,
+  "releasedBy" text,
+  "releasedAt" timestamptz not null default now(),
+  unique ("payCycle", "cutoffFrom")
+);
+
+create table if not exists "appSettings" (
+  key text primary key,
+  value jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table notifications enable row level security;
+alter table "payrollReleases" enable row level security;
+alter table "appSettings" enable row level security;
+
+drop policy if exists "admin full access" on notifications;
+create policy "admin full access" on notifications
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "employee reads own notifications" on notifications;
+create policy "employee reads own notifications" on notifications
+  for select to authenticated using ("employeeId" = my_employee_id());
+drop policy if exists "employee marks own notifications read" on notifications;
+create policy "employee marks own notifications read" on notifications
+  for update to authenticated
+  using ("employeeId" = my_employee_id())
+  with check ("employeeId" = my_employee_id());
+
+create or replace function enforce_notification_update() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if is_admin() then
+    return new;
+  end if;
+  if new.id is distinct from old.id
+    or new."employeeId" is distinct from old."employeeId"
+    or new.type is distinct from old.type
+    or new.message is distinct from old.message
+    or new."relatedTable" is distinct from old."relatedTable"
+    or new."relatedId" is distinct from old."relatedId"
+  then
+    raise exception 'Employees may only mark their own notifications read';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_enforce_notification_update on notifications;
+create trigger trg_enforce_notification_update
+  before update on notifications
+  for each row execute function enforce_notification_update();
+
+drop policy if exists "admin full access" on "payrollReleases";
+create policy "admin full access" on "payrollReleases"
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "employee reads payroll releases" on "payrollReleases";
+create policy "employee reads payroll releases" on "payrollReleases"
+  for select to authenticated using (true);
+
+drop policy if exists "admin full access" on "appSettings";
+create policy "admin full access" on "appSettings"
+  for all to authenticated using (is_admin()) with check (is_admin());
+
+alter publication supabase_realtime add table notifications, "payrollReleases", "appSettings";
