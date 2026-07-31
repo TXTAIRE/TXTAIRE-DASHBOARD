@@ -270,6 +270,46 @@ function render() {
   }
 }
 
+// Every view re-renders by wholesale replacing main.innerHTML -- after saving a form,
+// applying a filter, editing a row, etc. -- which was silently resetting scroll position
+// (both the page itself and any wide table's horizontal scroll) back to the top/start
+// every single time. Fixed once, system-wide, via a MutationObserver on the shared
+// container instead of patching every individual view's render function.
+function preserveScrollAcrossRerenders(container) {
+  // #main-content/.main has no height or overflow-y of its own -- the page scrolls at the
+  // document level, not on this element -- so the vertical position has to be tracked
+  // there. The horizontal case (a wide table like the Calendar) is different: that really
+  // is its own overflow-x:auto element nested inside container, so that one IS read/set
+  // directly.
+  const scroller = document.scrollingElement || document.documentElement;
+  let scrollTop = 0;
+  let panelScrollLeft = 0;
+
+  // Captured synchronously at the moment of interaction (click/submit/change), not via the
+  // "scroll" event -- confirmed the hard way (fixing the Attendance Calendar tab) that
+  // "scroll" doesn't fire promptly/reliably enough for this to work.
+  function capture() {
+    scrollTop = scroller.scrollTop;
+    const panel = qs('.panel', container);
+    if (panel) panelScrollLeft = panel.scrollLeft;
+  }
+  ['click', 'submit', 'change'].forEach(evt => container.addEventListener(evt, capture, true));
+  window.addEventListener('scroll', capture, { passive: true });
+
+  function restore() {
+    scroller.scrollTop = scrollTop;
+    const panel = qs('.panel', container);
+    if (panel) panel.scrollLeft = panelScrollLeft;
+  }
+  const observer = new MutationObserver(() => {
+    restore();
+    // Also deferred a tick -- setting scrollTop/scrollLeft immediately after new content
+    // is inserted, before the browser has laid it out, can get silently clamped to 0.
+    setTimeout(restore, 0);
+  });
+  observer.observe(container, { childList: true });
+}
+
 let appStarted = false;
 let signedInEmail = null;
 function currentUserEmail() { return signedInEmail; }
@@ -303,6 +343,7 @@ async function startApp(session) {
   window.addEventListener('hashchange', render);
 
   qs('#main-content').innerHTML = '<div class="empty">Loading…</div>';
+  preserveScrollAcrossRerenders(qs('#main-content'));
   await Store.init();
 
   // Live updates from other devices: any remote change refetches that table and

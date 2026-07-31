@@ -103,6 +103,33 @@ function renderEssRoute() {
   if (view && view.render) view.render(main, myEmployee);
 }
 
+// Every view re-renders by wholesale replacing main.innerHTML -- after saving a form,
+// requesting OT, editing a day, etc. -- which was silently resetting scroll position back
+// to the top every single time. Fixed once, system-wide, via a MutationObserver on the
+// shared container instead of patching every individual view's render function.
+function preserveScrollAcrossRerenders(container) {
+  // #ess-main has no height or overflow-y of its own -- the page scrolls at the document
+  // level, not on this element -- so the position has to be tracked/restored there.
+  const scroller = document.scrollingElement || document.documentElement;
+  let scrollTop = 0;
+
+  // Captured synchronously at the moment of interaction (click/submit/change), not via the
+  // "scroll" event -- confirmed the hard way (fixing the admin dashboard's Attendance
+  // Calendar tab) that "scroll" doesn't fire promptly/reliably enough for this to work.
+  function capture() { scrollTop = scroller.scrollTop; }
+  ['click', 'submit', 'change'].forEach(evt => container.addEventListener(evt, capture, true));
+  window.addEventListener('scroll', capture, { passive: true });
+
+  function restore() { scroller.scrollTop = scrollTop; }
+  const observer = new MutationObserver(() => {
+    restore();
+    // Also deferred a tick -- setting scrollTop immediately after new content is inserted,
+    // before the browser has laid it out, can get silently clamped to 0.
+    setTimeout(restore, 0);
+  });
+  observer.observe(container, { childList: true });
+}
+
 let essStarted = false;
 async function startEss(session) {
   if (essStarted) return;
@@ -124,6 +151,7 @@ async function startEss(session) {
   qs('#ess-app').classList.remove('hidden');
   qs('#ess-logout').addEventListener('click', () => sb.auth.signOut());
   qsa('.ess-nav-btn').forEach(b => b.addEventListener('click', () => { essRoute = b.dataset.route; renderEssRoute(); }));
+  preserveScrollAcrossRerenders(qs('#ess-main'));
 
   Store.onRemoteChange(() => {
     if (qs('.modal-backdrop')) return;
