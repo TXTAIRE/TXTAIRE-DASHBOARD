@@ -288,6 +288,7 @@ window.Views.attendance = (function () {
       <div class="filters">
         <button class="btn btn-ghost btn-sm" id="cal-btn-prev-month">← Prev month</button>
         <div class="field"><label>Month</label><input type="month" id="cal-month-input" value="${monthValue}" /></div>
+        <div class="field"><label>Year</label><input type="number" id="cal-year-input" value="${calYear}" min="2000" max="2100" step="1" style="width:90px;" /></div>
         <button class="btn btn-ghost btn-sm" id="cal-btn-next-month">Next month →</button>
       </div>
       <div class="page-sub" style="margin-bottom:10px;">
@@ -346,6 +347,10 @@ window.Views.attendance = (function () {
       const [y, m] = ev.target.value.split('-').map(Number);
       calYear = y; calMonth = m;
       renderCalendarTab(body, main);
+    });
+    qs('#cal-year-input', body).addEventListener('change', (ev) => {
+      const y = Number(ev.target.value);
+      if (y >= 2000 && y <= 2100) { calYear = y; renderCalendarTab(body, main); }
     });
     qs('#cal-btn-prev-month', body).addEventListener('click', () => { shiftCalMonth(-1); renderCalendarTab(body, main); });
     qs('#cal-btn-next-month', body).addEventListener('click', () => { shiftCalMonth(1); renderCalendarTab(body, main); });

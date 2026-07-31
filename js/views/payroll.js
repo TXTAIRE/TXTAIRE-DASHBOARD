@@ -119,6 +119,7 @@ window.Views.payroll = (function () {
       <div class="filters">
         <button class="btn btn-ghost btn-sm" id="btn-prev-month">← Prev month</button>
         <div class="field"><label>Month</label><input type="month" id="month-input" value="${monthValue}" /></div>
+        <div class="field"><label>Year</label><input type="number" id="year-input" value="${year}" min="2000" max="2100" step="1" style="width:90px;" /></div>
         <button class="btn btn-ghost btn-sm" id="btn-next-month">Next month →</button>
         <div class="field">
           <label>Cutoff</label>
@@ -233,6 +234,10 @@ window.Views.payroll = (function () {
       const [y, m] = ev.target.value.split('-').map(Number);
       year = y; month = m;
       renderPayrollTab(body, main);
+    });
+    qs('#year-input', body).addEventListener('change', (ev) => {
+      const y = Number(ev.target.value);
+      if (y >= 2000 && y <= 2100) { year = y; renderPayrollTab(body, main); }
     });
     qs('#btn-prev-month', body).addEventListener('click', () => { shiftMonth(-1); renderPayrollTab(body, main); });
     qs('#btn-next-month', body).addEventListener('click', () => { shiftMonth(1); renderPayrollTab(body, main); });
