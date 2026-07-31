@@ -312,10 +312,13 @@ function computeRow(emp, from, to) {
   const workDays = workDaysInRange(from, to);
   const holidayWorkDayCount = holidays.filter(h => new Date(h.date + 'T00:00:00').getDay() !== 0).length;
   const ordinaryWorkDays = Math.max(0, workDays - holidayWorkDayCount);
-  const presentOnOrdinaryDays = presentRecords.filter(r => !holidayByDate[r.date]).length;
-  const computedAbsent = Math.max(0, ordinaryWorkDays - presentOnOrdinaryDays);
+  // Absence only ever counts a day HR (or the employee's own edit) explicitly marked
+  // status === 'Absent' on an actual attendance record -- never inferred just because a
+  // day in the cutoff has no record at all (e.g. not yet logged, or genuinely not
+  // applicable). A day with nothing entered contributes nothing here.
+  const explicitAbsentDays = allRecords.filter(r => r.status === 'Absent').length;
   const isAbsentOverridden = !!(override && override.daysAbsent != null);
-  const daysAbsent = isAbsentOverridden ? Number(override.daysAbsent) : computedAbsent;
+  const daysAbsent = isAbsentOverridden ? Number(override.daysAbsent) : explicitAbsentDays;
 
   let basePay = emp.payType === 'Daily' ? emp.rate * daysPresent : emp.rate;
   const isBasePayOverridden = !!(override && override.basePay != null);

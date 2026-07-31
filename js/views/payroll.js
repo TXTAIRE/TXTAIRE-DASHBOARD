@@ -155,7 +155,7 @@ window.Views.payroll = (function () {
                   <input type="number" class="days-input" min="0" step="0.5" value="${r.daysPresent}" data-emp="${r.emp.id}" title="${r.isOverridden ? 'Manually edited — overrides attendance count' : 'From attendance records'} · ${r.workDays} working days in this cutoff" style="${r.isOverridden ? 'border-color:var(--accent);' : ''}" />
                 </td>
                 <td class="num">
-                  <input type="number" class="absent-input ${r.daysAbsent ? 'red' : ''}" min="0" step="0.5" value="${r.daysAbsent}" data-emp="${r.emp.id}" title="${r.isAbsentOverridden ? 'Manually edited — overrides the attendance-derived count' : 'Ordinary working days in cutoff (excl. holidays) − days present'}" style="${r.isAbsentOverridden ? 'border-color:var(--accent);' : ''}" />
+                  <input type="number" class="absent-input ${r.daysAbsent ? 'red' : ''}" min="0" step="0.5" value="${r.daysAbsent}" data-emp="${r.emp.id}" title="${r.isAbsentOverridden ? 'Manually edited — overrides the attendance-derived count' : 'Count of days HR explicitly marked Absent on an attendance record this cutoff'}" style="${r.isAbsentOverridden ? 'border-color:var(--accent);' : ''}" />
                 </td>
                 <td class="num">
                   <div class="money-input-wrap"><span class="currency-prefix">₱</span><input type="number" class="basepay-input" min="0" step="0.01" value="${r.basePay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isBasePayOverridden ? 'Manually edited — overrides rate × days present (or flat monthly rate)' : 'Computed from the employee’s rate'}" style="${r.isBasePayOverridden ? 'border-color:var(--accent);' : ''}" /></div>
