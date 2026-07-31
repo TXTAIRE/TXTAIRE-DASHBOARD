@@ -7,6 +7,11 @@ window.Views.attendance = (function () {
   let calGroup = '10-20';
   let calYear = calToday.getFullYear();
   let calMonth = calToday.getMonth() + 1;
+  // Tracked separately from the DOM (not read off the old .panel element) because saving
+  // the Edit Attendance modal re-renders through renderView(), which rebuilds #tab-body
+  // from scratch -- the old scrollable panel is gone by the time renderCalendarTab runs
+  // again, so there'd be nothing to read the scroll position back from otherwise.
+  let calScrollLeft = 0;
 
   function setCalGroup(g) {
     calGroup = g;
@@ -249,13 +254,6 @@ window.Views.attendance = (function () {
   }
 
   function renderCalendarTab(body, main) {
-    // Logging/editing a day re-renders the whole table via body.innerHTML, which would
-    // otherwise reset the horizontal scroll back to day 1 every time -- capture and
-    // restore it so clicking a cell later in the month doesn't keep jumping the view back
-    // to the start.
-    const prevPanel = qs('.panel', body);
-    const scrollLeft = prevPanel ? prevPanel.scrollLeft : 0;
-
     const cutoffs = payCutoffs(calGroup, calYear, calMonth);
     const monthValue = `${calYear}-${pad2(calMonth)}`;
     const monthLabel = new Date(calYear, calMonth - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -332,21 +330,36 @@ window.Views.attendance = (function () {
       </div>
     `;
 
+    // Restores whatever horizontal scroll position was last recorded (module-level
+    // calScrollLeft, captured synchronously at click-time below -- not read off a "scroll"
+    // event, which doesn't fire reliably/promptly enough, and not read off the old .panel
+    // element, since saving the Edit Attendance modal re-renders through renderView(),
+    // which rebuilds #tab-body from scratch before this runs again). Deferred a tick since
+    // setting scrollLeft on a table that was just inserted via innerHTML -- before the
+    // browser has laid it out and knows how wide it actually is -- gets silently clamped
+    // back to 0 instead of taking effect.
     const newPanel = qs('.panel', body);
-    if (newPanel) newPanel.scrollLeft = scrollLeft;
+    if (newPanel) setTimeout(() => { newPanel.scrollLeft = calScrollLeft; }, 0);
 
-    qsa('#cal-seg-group button', body).forEach(b => b.addEventListener('click', () => { setCalGroup(b.dataset.val); renderCalendarTab(body, main); }));
-    qs('#cal-btn-edit-cutoff', body).addEventListener('click', () => openEditCutoffModal(body, main));
+    function captureScroll() {
+      const panel = qs('.panel', body);
+      if (panel) calScrollLeft = panel.scrollLeft;
+    }
+
+    qsa('#cal-seg-group button', body).forEach(b => b.addEventListener('click', () => { captureScroll(); setCalGroup(b.dataset.val); renderCalendarTab(body, main); }));
+    qs('#cal-btn-edit-cutoff', body).addEventListener('click', () => { captureScroll(); openEditCutoffModal(body, main); });
     qs('#cal-month-input', body).addEventListener('change', (ev) => {
+      captureScroll();
       const [y, m] = ev.target.value.split('-').map(Number);
       calYear = y; calMonth = m;
       renderCalendarTab(body, main);
     });
-    qs('#cal-btn-prev-month', body).addEventListener('click', () => { shiftCalMonth(-1); renderCalendarTab(body, main); });
-    qs('#cal-btn-next-month', body).addEventListener('click', () => { shiftCalMonth(1); renderCalendarTab(body, main); });
+    qs('#cal-btn-prev-month', body).addEventListener('click', () => { captureScroll(); shiftCalMonth(-1); renderCalendarTab(body, main); });
+    qs('#cal-btn-next-month', body).addEventListener('click', () => { captureScroll(); shiftCalMonth(1); renderCalendarTab(body, main); });
     qsa('.cal-cell', body).forEach(cell => cell.addEventListener('click', async (ev) => {
       const photoEl = ev.target.closest('[data-view-photo]');
       if (photoEl) { viewPhoto(photoEl.dataset.viewPhoto); return; }
+      captureScroll();
       const empId = cell.dataset.emp, date = cell.dataset.date;
       const rec = Store.listAttendance().find(a => a.employeeId === empId && a.date === date);
       if (!rec) {
