@@ -249,6 +249,13 @@ window.Views.attendance = (function () {
   }
 
   function renderCalendarTab(body, main) {
+    // Logging/editing a day re-renders the whole table via body.innerHTML, which would
+    // otherwise reset the horizontal scroll back to day 1 every time -- capture and
+    // restore it so clicking a cell later in the month doesn't keep jumping the view back
+    // to the start.
+    const prevPanel = qs('.panel', body);
+    const scrollLeft = prevPanel ? prevPanel.scrollLeft : 0;
+
     const cutoffs = payCutoffs(calGroup, calYear, calMonth);
     const monthValue = `${calYear}-${pad2(calMonth)}`;
     const monthLabel = new Date(calYear, calMonth - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -324,6 +331,9 @@ window.Views.attendance = (function () {
         </table>` : '<div class="empty">No staff assigned to this pay schedule.</div>'}
       </div>
     `;
+
+    const newPanel = qs('.panel', body);
+    if (newPanel) newPanel.scrollLeft = scrollLeft;
 
     qsa('#cal-seg-group button', body).forEach(b => b.addEventListener('click', () => { setCalGroup(b.dataset.val); renderCalendarTab(body, main); }));
     qs('#cal-btn-edit-cutoff', body).addEventListener('click', () => openEditCutoffModal(body, main));
