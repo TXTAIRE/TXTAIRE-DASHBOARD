@@ -759,6 +759,17 @@ const Store = (function () {
     }
     return getLeaveRequest(id);
   }
+  // Employee edits their own request (type/dates/reason) -- any status, anytime. The
+  // trigger-enforced RLS policy resets status back to Pending and clears the prior review
+  // server-side, since HR's decision was for the old content; this just sends the new
+  // content and lets that happen.
+  async function updateLeaveRequest(id, patch) {
+    await updateRow('leaveRequests', id, patch);
+    return getLeaveRequest(id);
+  }
+  async function deleteLeaveRequest(id) {
+    await deleteRow('leaveRequests', id);
+  }
 
   // ---- Attendance Corrections (Employee Self-Service) ----
   function listAttendanceCorrections() { return state.attendanceCorrections.slice(); }
@@ -874,7 +885,7 @@ const Store = (function () {
     getPayrollOverride, setPayrollOverride,
     listHolidays, getHoliday, holidaysInRange, addHoliday, updateHoliday, deleteHoliday,
     listPayCutoffSettings, getPayCutoffSetting, updatePayCutoffSetting,
-    listLeaveRequests, getLeaveRequest, leaveRequestsForEmployee, addLeaveRequest, reviewLeaveRequest,
+    listLeaveRequests, getLeaveRequest, leaveRequestsForEmployee, addLeaveRequest, reviewLeaveRequest, updateLeaveRequest, deleteLeaveRequest,
     listAttendanceCorrections, getAttendanceCorrection, attendanceCorrectionsForEmployee, addAttendanceCorrection, reviewAttendanceCorrection,
     listAuditLog, purgeOldAuditLog,
     createNotification, listNotificationsForEmployee, unreadNotificationCount, markNotificationRead, markAllNotificationsRead,

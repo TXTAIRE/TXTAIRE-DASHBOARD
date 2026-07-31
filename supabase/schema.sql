@@ -527,14 +527,62 @@ create policy "employee reads pay cutoff settings" on "payCutoffSettings"
   for select to authenticated using (true);
 
 -- Leave requests / attendance corrections: admins manage everything (review, approve,
--- reject); employees can submit their own and read their own history, but never edit or
--- delete an existing request (only HR changes status/reviewNotes).
+-- reject); employees can submit their own and read their own history. Employees may also
+-- edit (change type/dates/reason) or delete their own leave request, any status, anytime
+-- -- product decision, same pattern as the attendance edit/delete feature. The trigger
+-- below stops an employee from touching status/reviewedBy/reviewedDate/reviewNotes
+-- directly, and automatically resets an edited request back to Pending (clearing any
+-- prior review) since HR's original decision was for the old dates/reason, not the
+-- edited ones.
 create policy "admin full access" on "leaveRequests"
   for all to authenticated using (is_admin()) with check (is_admin());
 create policy "employee reads own leave requests" on "leaveRequests"
   for select to authenticated using ("employeeId" = my_employee_id());
 create policy "employee submits own leave requests" on "leaveRequests"
   for insert to authenticated with check ("employeeId" = my_employee_id());
+create policy "employee updates own leave requests" on "leaveRequests"
+  for update to authenticated
+  using ("employeeId" = my_employee_id())
+  with check ("employeeId" = my_employee_id());
+create policy "employee deletes own leave requests" on "leaveRequests"
+  for delete to authenticated using ("employeeId" = my_employee_id());
+
+create or replace function enforce_employee_leave_request_update() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if is_admin() then
+    return new;
+  end if;
+  if new.id is distinct from old.id or new."employeeId" is distinct from old."employeeId" then
+    raise exception 'Employees may not change the owner of a leave request';
+  end if;
+  -- Editing the actual content of the request re-opens it for review -- HR's original
+  -- decision doesn't carry over to different dates/reason/type.
+  if new."leaveType" is distinct from old."leaveType"
+    or new."startDate" is distinct from old."startDate"
+    or new."endDate" is distinct from old."endDate"
+    or new.reason is distinct from old.reason
+  then
+    new.status := 'Pending';
+    new."reviewedBy" := null;
+    new."reviewedDate" := null;
+    new."reviewNotes" := '';
+  else
+    -- Not an actual content edit (e.g. a no-op save) -- employees still can't move status/
+    -- review fields directly.
+    new.status := old.status;
+    new."reviewedBy" := old."reviewedBy";
+    new."reviewedDate" := old."reviewedDate";
+    new."reviewNotes" := old."reviewNotes";
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_enforce_employee_leave_request_update on "leaveRequests";
+create trigger trg_enforce_employee_leave_request_update
+  before update on "leaveRequests"
+  for each row execute function enforce_employee_leave_request_update();
 
 create policy "admin full access" on "attendanceCorrections"
   for all to authenticated using (is_admin()) with check (is_admin());
@@ -1291,3 +1339,53 @@ create policy "admin full access" on "appSettings"
   for all to authenticated using (is_admin()) with check (is_admin());
 
 alter publication supabase_realtime add table notifications, "payrollReleases", "appSettings";
+
+-- =================================================================
+-- Let employees edit and delete their own leave request -- incremental migration. Run
+-- once against a database that already has the migrations above applied. Safe to re-run.
+-- Any status, anytime -- same pattern as the attendance edit/delete feature. Editing the
+-- actual content (type/dates/reason) resets an already-reviewed request back to Pending,
+-- since HR's decision was for the old content, not the edited one.
+-- =================================================================
+
+drop policy if exists "employee updates own leave requests" on "leaveRequests";
+create policy "employee updates own leave requests" on "leaveRequests"
+  for update to authenticated
+  using ("employeeId" = my_employee_id())
+  with check ("employeeId" = my_employee_id());
+drop policy if exists "employee deletes own leave requests" on "leaveRequests";
+create policy "employee deletes own leave requests" on "leaveRequests"
+  for delete to authenticated using ("employeeId" = my_employee_id());
+
+create or replace function enforce_employee_leave_request_update() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if is_admin() then
+    return new;
+  end if;
+  if new.id is distinct from old.id or new."employeeId" is distinct from old."employeeId" then
+    raise exception 'Employees may not change the owner of a leave request';
+  end if;
+  if new."leaveType" is distinct from old."leaveType"
+    or new."startDate" is distinct from old."startDate"
+    or new."endDate" is distinct from old."endDate"
+    or new.reason is distinct from old.reason
+  then
+    new.status := 'Pending';
+    new."reviewedBy" := null;
+    new."reviewedDate" := null;
+    new."reviewNotes" := '';
+  else
+    new.status := old.status;
+    new."reviewedBy" := old."reviewedBy";
+    new."reviewedDate" := old."reviewedDate";
+    new."reviewNotes" := old."reviewNotes";
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_enforce_employee_leave_request_update on "leaveRequests";
+create trigger trg_enforce_employee_leave_request_update
+  before update on "leaveRequests"
+  for each row execute function enforce_employee_leave_request_update();

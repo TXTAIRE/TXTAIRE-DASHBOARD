@@ -16,28 +16,47 @@ window.EssViews.leave = (function () {
           <div class="ess-row"><span class="label">Dates</span><span class="value">${fmtDate(r.startDate)} – ${fmtDate(r.endDate)}</span></div>
           ${r.reason ? `<div class="ess-sub" style="margin-top:6px;">${escapeHtml(r.reason)}</div>` : ''}
           ${r.reviewNotes ? `<div class="ess-sub" style="margin-top:6px;">HR: ${escapeHtml(r.reviewNotes)}</div>` : ''}
+          <div class="modal-actions" style="justify-content:flex-start; margin-top:10px; padding-top:0;">
+            <button type="button" class="link-btn" data-edit-leave="${r.id}">✏️ Edit</button>
+            <button type="button" class="link-btn" data-delete-leave="${r.id}" style="color:var(--red);">🗑 Delete</button>
+          </div>
         </div>
       `).join('') : '<div class="ess-empty">No leave requests yet.</div>'}
     `;
 
     qs('#btn-new-leave', main).addEventListener('click', () => openLeaveForm(main, emp));
+    qsa('[data-edit-leave]', main).forEach(b => b.addEventListener('click', () => {
+      const r = rows.find(x => x.id === b.dataset.editLeave);
+      if (r) openLeaveForm(main, emp, r);
+    }));
+    qsa('[data-delete-leave]', main).forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('Delete this leave request? This cannot be undone.')) return;
+      await Store.deleteLeaveRequest(b.dataset.deleteLeave);
+      toast('✔ Leave request deleted.');
+      render(main, emp);
+    }));
   }
 
-  function openLeaveForm(main, emp) {
+  // Editing an already-Approved/Rejected request re-opens it for HR review (the
+  // trigger-enforced RLS policy resets status back to Pending server-side) -- shown here
+  // so the employee isn't surprised when a decided request reverts after they change it.
+  function openLeaveForm(main, emp, existing) {
+    const r = existing || { leaveType: 'Vacation', startDate: todayISO(), endDate: todayISO(), reason: '' };
     openEssModal(`
-      <h2>New Leave Request</h2>
+      <h2>${existing ? 'Edit Leave Request' : 'New Leave Request'}</h2>
+      ${existing && existing.status !== 'Pending' ? `<div class="modal-sub">Editing this will send it back to HR for review.</div>` : ''}
       <form id="leave-form">
         <div class="modal-grid">
           <div class="field full"><label>Type</label>
-            <select name="leaveType">${['Vacation', 'Sick', 'Emergency', 'Other'].map(t => `<option>${t}</option>`).join('')}</select>
+            <select name="leaveType">${['Vacation', 'Sick', 'Emergency', 'Other'].map(t => `<option ${t === r.leaveType ? 'selected' : ''}>${t}</option>`).join('')}</select>
           </div>
-          <div class="field"><label>Start date</label><input type="date" name="startDate" value="${todayISO()}" required /></div>
-          <div class="field"><label>End date</label><input type="date" name="endDate" value="${todayISO()}" required /></div>
-          <div class="field full"><label>Reason</label><textarea name="reason" rows="3"></textarea></div>
+          <div class="field"><label>Start date</label><input type="date" name="startDate" value="${r.startDate}" required /></div>
+          <div class="field"><label>End date</label><input type="date" name="endDate" value="${r.endDate}" required /></div>
+          <div class="field full"><label>Reason</label><textarea name="reason" rows="3">${escapeHtml(r.reason || '')}</textarea></div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
-          <button type="submit" class="btn btn-primary">Submit</button>
+          <button type="submit" class="btn btn-primary">${existing ? 'Save changes' : 'Submit'}</button>
         </div>
       </form>
     `, (bd) => {
@@ -45,14 +64,19 @@ window.EssViews.leave = (function () {
         ev.preventDefault();
         const fd = new FormData(ev.target);
         if (fd.get('endDate') < fd.get('startDate')) { toast('End date must be on or after start date.'); return; }
-        await Store.addLeaveRequest({
-          employeeId: emp.id,
+        const patch = {
           leaveType: fd.get('leaveType'),
           startDate: fd.get('startDate'),
           endDate: fd.get('endDate'),
           reason: fd.get('reason').trim(),
-        });
-        toast('✔ Leave request submitted.');
+        };
+        if (existing) {
+          await Store.updateLeaveRequest(existing.id, patch);
+          toast('✔ Leave request updated.');
+        } else {
+          await Store.addLeaveRequest(Object.assign({ employeeId: emp.id }, patch));
+          toast('✔ Leave request submitted.');
+        }
         closeEssModal();
         render(main, emp);
       });
