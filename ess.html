@@ -20,19 +20,20 @@
 <div id="ess-app" class="hidden">
   <header class="ess-header">
     <img src="assets/logo.svg" alt="TxTAIRE" class="ess-logo" />
-    <div style="display:flex; align-items:center; gap:14px;">
-      <button id="ess-bell" class="ess-bell" title="Notifications" aria-label="Notifications">
-        🔔<span id="ess-bell-badge" class="ess-bell-badge hidden">0</span>
-      </button>
-      <button id="ess-logout" class="link-btn">Sign out</button>
-    </div>
+    <button id="ess-logout" class="link-btn">Sign out</button>
   </header>
   <main id="ess-main" class="ess-main"></main>
   <nav id="ess-nav" class="ess-nav">
     <button class="ess-nav-btn" data-route="attendance"><span class="ess-nav-ic">&#128337;</span>My Attendance</button>
     <button class="ess-nav-btn" data-route="payroll"><span class="ess-nav-ic">&#128176;</span>My Payroll</button>
     <button class="ess-nav-btn" data-route="leave"><span class="ess-nav-ic">&#128196;</span>My Leave</button>
+    <div class="ess-nav-spacer"></div>
     <button class="ess-nav-btn" data-route="profile"><span class="ess-nav-ic">&#128100;</span>My Profile</button>
+    <button class="ess-nav-btn" data-route="notifications">
+      <span class="ess-nav-ic">&#128276;<span id="ess-nav-notif-badge" class="ess-bell-badge hidden">0</span></span>
+      Notifications
+    </button>
+    <button type="button" id="ess-fab-clock" class="ess-fab" title="Time In / Time Out" aria-label="Quick Time In or Time Out">+</button>
   </nav>
 </div>
 
@@ -47,6 +48,7 @@
 <script src="js/ess-views/payroll.js"></script>
 <script src="js/ess-views/leave.js"></script>
 <script src="js/ess-views/profile.js"></script>
+<script src="js/ess-views/notifications.js"></script>
 <script src="js/register-sw.js"></script>
 </body>
 </html>

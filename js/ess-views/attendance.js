@@ -847,6 +847,17 @@ window.EssViews.attendance = (function () {
     });
   }
 
+  // Invoked from the bottom-nav "+" quick-clock button, which is reachable from any ESS
+  // page — figures out whether today still needs a Time In or a Time Out (or is already
+  // done) and opens the same camera flow used on the Attendance page itself.
+  function quickClock(main, emp) {
+    const today = todayISO();
+    const todayRec = Store.attendanceForDate(today).find(r => r.employeeId === emp.id);
+    if (!todayRec) { openCameraCapture(main, emp, 'in'); return; }
+    if (!todayRec.timeOut) { openCameraCapture(main, emp, 'out'); return; }
+    toast('✔ You\'ve already completed today\'s attendance.');
+  }
+
   function openCameraCapture(main, emp, kind) {
     let stream = null;
 
@@ -923,5 +934,5 @@ window.EssViews.attendance = (function () {
     });
   }
 
-  return { render };
+  return { render, quickClock };
 })();
