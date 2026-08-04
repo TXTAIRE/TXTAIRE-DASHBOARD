@@ -54,11 +54,19 @@ window.EssViews.attendance = (function () {
     const pay = rec ? computeDayPay(dailyRateEq, rec, holiday) : null;
     const nsdRawHrs = rec ? nightOverlapHours(rec.timeIn, rec.timeOut) : 0;
     const holidayLabel = holiday ? `Holiday Pay — ${escapeHtml(holiday.name)} (${escapeHtml(holiday.type)} Holiday)` : 'Holiday Pay';
+    // The "Edit" affordance (Time In/Out/Status) only ever makes sense within the same
+    // 24-hour window the DB trigger enforces -- past that, this button still opens the same
+    // modal (Delete is always available, any day), just relabeled so it doesn't claim
+    // editability the record no longer has.
+    const editable = rec ? withinEditWindow(rec) : false;
     return `
       <div class="ess-card">
         <div class="ess-card-label" style="display:flex; justify-content:space-between; align-items:center;">
           <span>${dow}</span>
-          ${rec ? `<button type="button" class="link-btn" data-edit-day="${rec.id}" title="Edit or delete this day's attendance">✏️ Edit</button>` : ''}
+          ${rec ? (editable
+            ? `<button type="button" class="link-btn" data-edit-day="${rec.id}" title="Edit or delete this day's attendance">✏️ Edit</button>`
+            : `<button type="button" class="link-btn" data-edit-day="${rec.id}" title="More than 24 hours old — Time In/Out and Status can no longer be edited, but you can still delete this record">🗑 Delete</button>`
+          ) : ''}
         </div>
         ${rec ? `
         <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(rec.timeIn)} ✅ <button class="link-btn" data-manage-photo="in" data-rec-id="${rec.id}" title="Edit or delete photo">⋯</button></span></div>
@@ -235,7 +243,10 @@ window.EssViews.attendance = (function () {
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0; display:flex; justify-content:space-between; align-items:center;">
         <span>Today's Attendance</span>
-        ${todayRec ? `<button type="button" class="link-btn" data-edit-day="${todayRec.id}" title="Edit or delete today's attendance">✏️ Edit</button>` : ''}
+        ${todayRec ? (withinEditWindow(todayRec)
+          ? `<button type="button" class="link-btn" data-edit-day="${todayRec.id}" title="Edit or delete today's attendance">✏️ Edit</button>`
+          : `<button type="button" class="link-btn" data-edit-day="${todayRec.id}" title="More than 24 hours old — Time In/Out and Status can no longer be edited, but you can still delete this record">🗑 Delete</button>`
+        ) : ''}
       </div>
       <div class="ess-card">
         ${todayRec ? `
