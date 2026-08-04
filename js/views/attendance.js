@@ -38,11 +38,14 @@ window.Views.attendance = (function () {
     if (!employees.length) return '<div class="empty">No staff in this group.</div>';
     return `
       <table>
-        <thead><tr><th>Name</th><th>Position</th><th>Status</th><th>Time In</th><th>Time Out</th><th class="num">Hours</th><th></th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Position</th><th>Status</th><th>Time In</th><th>Time Out</th><th class="num">Hours</th><th>Location</th><th></th><th></th></tr></thead>
         <tbody>
           ${employees.map(e => {
             const r = recByEmp[e.id];
             const photos = [r && r.timeInPhotoPath, r && r.timeOutPhotoPath].filter(Boolean);
+            const locations = [];
+            if (r && r.timeInLocation) locations.push({ kind: 'in', text: r.timeInLocation });
+            if (r && r.timeOutLocation) locations.push({ kind: 'out', text: r.timeOutLocation });
             return `
             <tr>
               <td class="name">${escapeHtml(e.name)}</td>
@@ -51,6 +54,7 @@ window.Views.attendance = (function () {
               <td class="dim">${r ? to12Hour(r.timeIn) : '—'}</td>
               <td class="dim">${r ? to12Hour(r.timeOut) : '—'}</td>
               <td class="num">${r ? r.hours : '—'}</td>
+              <td>${locations.length ? locations.map(l => `<button class="link-btn" data-location="${escapeHtml(l.text)}" title="${escapeHtml(l.text)}">📍${locations.length > 1 ? (l.kind === 'in' ? ' In' : ' Out') : ''}</button>`).join(' ') : '<span class="dim">—</span>'}</td>
               <td>${photos.length ? photos.map((p, i) => `<button class="link-btn" data-photo="${p}" title="Self-clock-in photo proof">📷${photos.length > 1 ? (i === 0 ? ' In' : ' Out') : ''}</button>`).join(' ') : ''}</td>
               <td><button class="link-btn" data-emp="${e.id}" data-rec="${r ? r.id : ''}">${r ? 'Edit →' : 'Log →'}</button></td>
             </tr>
@@ -200,6 +204,7 @@ window.Views.attendance = (function () {
     qs('#btn-next-day', body).addEventListener('click', () => { selectedDate = addDays(selectedDate, 1); renderDailyTab(body, main); });
     qsa('[data-emp]', body).forEach(b => b.addEventListener('click', () => openAttendanceModal(main, b.dataset.emp, b.dataset.rec || null)));
     qsa('[data-photo]', body).forEach(b => b.addEventListener('click', () => viewPhoto(b.dataset.photo)));
+    qsa('[data-location]', body).forEach(b => b.addEventListener('click', () => toast(b.dataset.location)));
   }
 
   // Calendar tab: rows = employees in the selected pay group, columns = every day in the
