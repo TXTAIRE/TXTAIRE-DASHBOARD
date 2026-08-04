@@ -47,7 +47,7 @@ window.Views.probation = (function () {
       <div class="crumb">HR</div>
       <div class="page-head">
         <div>
-          <h1 class="page-title">Probation &amp; Regularization</h1>
+          <h1 class="page-title">Employment Status</h1>
           <div class="page-sub">Probationary employees are evaluated at the 3rd month and again at the 6th month, when a regularization decision is due. Track start dates and both milestones here.</div>
         </div>
         <button class="btn btn-primary" id="btn-add-probation">+ Track employee</button>

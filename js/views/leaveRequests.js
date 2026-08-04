@@ -80,12 +80,15 @@ window.Views.leaveRequests = (function () {
       <div class="section-title">Notes</div>
       <div class="page-sub" style="margin-bottom:6px;">Visible to this employee alongside the decision — add or update anytime, whether or not the request has been decided yet.</div>
       <div class="field full"><textarea id="review-notes" rows="3">${escapeHtml(r.reviewNotes || '')}</textarea></div>
-      <div class="modal-actions" style="justify-content:flex-start; margin-top:10px; flex-wrap:wrap;">
-        <button class="btn btn-ghost btn-sm" id="btn-save-notes">Save Notes</button>
-        ${r.status === 'Pending' ? `
-        <button class="btn btn-ghost" id="btn-disapprove" style="color:var(--red);border-color:var(--red);">Disapprove</button>
-        <button class="btn btn-primary" id="btn-approve">Approve</button>
-        ` : ''}
+      <div class="modal-actions" style="justify-content:space-between; margin-top:10px; flex-wrap:wrap;">
+        <button class="btn btn-danger btn-sm" id="btn-delete-leave">Delete</button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-ghost btn-sm" id="btn-save-notes">Save Notes</button>
+          ${r.status === 'Pending' ? `
+          <button class="btn btn-ghost" id="btn-disapprove" style="color:var(--red);border-color:var(--red);">Disapprove</button>
+          <button class="btn btn-primary" id="btn-approve">Approve</button>
+          ` : ''}
+        </div>
       </div>
     `, (dr) => {
       const saveNotesBtn = qs('#btn-save-notes', dr);
@@ -106,6 +109,13 @@ window.Views.leaveRequests = (function () {
       if (disapproveBtn) disapproveBtn.addEventListener('click', async () => {
         await Store.reviewLeaveRequest(r.id, 'Disapproved', currentUserEmail(), qs('#review-notes', dr).value.trim());
         toast('Leave request disapproved.');
+        closeDrawer();
+        renderList(main);
+      });
+      qs('#btn-delete-leave', dr).addEventListener('click', async () => {
+        if (!confirm(`Delete this ${r.leaveType} leave request from ${emp ? emp.name : 'this employee'}? This cannot be undone.`)) return;
+        await Store.deleteLeaveRequest(r.id);
+        toast('✔ Leave request deleted.');
         closeDrawer();
         renderList(main);
       });
