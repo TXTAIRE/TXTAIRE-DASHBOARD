@@ -1659,3 +1659,120 @@ alter table attendance add column if not exists "timeOutLocation" text;
 -- =================================================================
 
 update "leaveRequests" set status = 'Disapproved' where status = 'Rejected';
+
+-- =================================================================
+-- Employment History (position/salary track record) -- incremental migration. Run once
+-- against a database that already has the migrations above applied. Safe to re-run.
+--
+-- A manually-curated log of an employee's position/pay changes over time (new hire,
+-- promotion, salary adjustment, transfer, etc.), same "HR logs it, employee can only
+-- read it" pattern as Disciplinary History. Shown on the admin Employees -> employee
+-- detail drawer, and read-only on the employee's own My Portal -> My Profile.
+-- =================================================================
+
+create table if not exists "employmentHistory" (
+  id text primary key,
+  "employeeId" text not null references employees(id) on delete cascade,
+  position text not null,
+  category text,
+  "payType" text,
+  rate numeric(12,2),
+  "effectiveDate" date not null,
+  reason text default '',                      -- 'New Hire' | 'Promotion' | 'Salary Adjustment' | 'Transfer' | 'Other'
+  notes text default '',
+  created_at timestamptz not null default now()
+);
+
+alter table "employmentHistory" enable row level security;
+
+drop policy if exists "admin full access" on "employmentHistory";
+create policy "admin full access" on "employmentHistory"
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "employee reads own employment history" on "employmentHistory";
+create policy "employee reads own employment history" on "employmentHistory"
+  for select to authenticated using ("employeeId" = my_employee_id());
+
+alter publication supabase_realtime add table "employmentHistory";
+
+-- =================================================================
+-- 201 File (employee documents/requirements) -- incremental migration. Run once against a
+-- database that already has the migrations above applied. Safe to re-run.
+--
+-- Both employees (My Portal -> My Profile) and admins can upload documents (valid ID,
+-- SSS, PhilHealth, Pag-IBIG, TIN, NBI clearance, etc.). Every upload starts 'Pending';
+-- only an admin can move it to 'Verified'/'Rejected' -- enforced by the trigger below,
+-- not just trusted to app code, same pattern as the attendance/leave-request triggers.
+-- =================================================================
+
+create table if not exists "employeeDocuments" (
+  id text primary key,
+  "employeeId" text not null references employees(id) on delete cascade,
+  category text not null default 'Other',      -- 'Valid ID' | 'SSS' | 'PhilHealth' | 'Pag-IBIG' | 'TIN' | 'NBI Clearance' | 'Birth Certificate' | 'Resume/CV' | 'Diploma/TOR' | 'Other'
+  "fileName" text not null,
+  "filePath" text not null,
+  "mimeType" text,
+  "fileSize" bigint,
+  "uploadedBy" text,
+  status text not null default 'Pending',      -- 'Pending' | 'Verified' | 'Rejected'
+  "verifiedBy" text,
+  "verifiedDate" date,
+  "verifyNotes" text default '',
+  created_at timestamptz not null default now()
+);
+
+alter table "employeeDocuments" enable row level security;
+
+drop policy if exists "admin full access" on "employeeDocuments";
+create policy "admin full access" on "employeeDocuments"
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "employee reads own documents" on "employeeDocuments";
+create policy "employee reads own documents" on "employeeDocuments"
+  for select to authenticated using ("employeeId" = my_employee_id());
+drop policy if exists "employee uploads own documents" on "employeeDocuments";
+create policy "employee uploads own documents" on "employeeDocuments"
+  for insert to authenticated with check ("employeeId" = my_employee_id());
+drop policy if exists "employee deletes own documents" on "employeeDocuments";
+create policy "employee deletes own documents" on "employeeDocuments"
+  for delete to authenticated using ("employeeId" = my_employee_id());
+
+create or replace function enforce_employee_document_insert() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then
+    new.status := 'Pending';
+    new."verifiedBy" := null;
+    new."verifiedDate" := null;
+    new."verifyNotes" := '';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_enforce_employee_document_insert on "employeeDocuments";
+create trigger trg_enforce_employee_document_insert
+  before insert on "employeeDocuments"
+  for each row execute function enforce_employee_document_insert();
+
+alter publication supabase_realtime add table "employeeDocuments";
+
+insert into storage.buckets (id, name, public)
+values ('employee-201', 'employee-201', false)
+on conflict (id) do nothing;
+
+drop policy if exists "employee uploads own 201 documents" on storage.objects;
+create policy "employee uploads own 201 documents" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'employee-201' and (storage.foldername(name))[1] = my_employee_id());
+drop policy if exists "employee reads own 201 documents" on storage.objects;
+create policy "employee reads own 201 documents" on storage.objects
+  for select to authenticated
+  using (bucket_id = 'employee-201' and (storage.foldername(name))[1] = my_employee_id());
+drop policy if exists "employee deletes own 201 documents" on storage.objects;
+create policy "employee deletes own 201 documents" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'employee-201' and (storage.foldername(name))[1] = my_employee_id());
+drop policy if exists "admin full access to 201 documents" on storage.objects;
+create policy "admin full access to 201 documents" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'employee-201' and is_admin())
+  with check (bucket_id = 'employee-201' and is_admin());

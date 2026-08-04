@@ -117,6 +117,14 @@ const PAY_GROUP_NAMES = { '10-20': 'Admins', '15-30': 'Technicians' };
 // group (e.g. right after the migration, before it's been seeded) -- once a row exists,
 // Store.getPayCutoffSetting() is the actual source of truth, editable from Attendance →
 // Calendar → "Edit Cutoff Days".
+// Shared 201 File document category list -- same options offered on the admin Employees
+// detail drawer and the employee's own My Portal -> My Profile upload form, so labels
+// never drift between the two.
+const DOCUMENT_CATEGORIES = [
+  'Valid ID', 'SSS', 'PhilHealth', 'Pag-IBIG', 'TIN', 'NBI Clearance',
+  'Birth Certificate', 'Resume/CV', 'Diploma/TOR', 'Other',
+];
+
 const DEFAULT_CUTOFF_SETTINGS = {
   '10-20': { cutoffAEndDay: 3, paydayADay: 5, cutoffBEndDay: 18, paydayBDay: 20 },
   '15-30': { cutoffAEndDay: 10, paydayADay: 15, cutoffBEndDay: 25, paydayBDay: 30 },
@@ -422,6 +430,8 @@ const Store = (function () {
     expenses: 'expenses',
     bills: 'bills',
     officeFiles: 'officeFiles',
+    employmentHistory: 'employmentHistory',
+    employeeDocuments: 'employeeDocuments',
   };
 
   const state = {
@@ -431,6 +441,7 @@ const Store = (function () {
     leaveRequests: [], attendanceCorrections: [], auditLog: [],
     notifications: [], payrollReleases: [], appSettings: [],
     expenses: [], bills: [], officeFiles: [],
+    employmentHistory: [], employeeDocuments: [],
   };
 
   let remoteChangeCallback = null;
@@ -700,6 +711,18 @@ const Store = (function () {
   }
   async function deleteProbation(id) {
     await deleteRow('probationRecords', id);
+  }
+
+  // ---- Employment History (position/salary track record) ----
+  function employmentHistoryForEmployee(employeeId) {
+    return state.employmentHistory.filter(h => h.employeeId === employeeId).slice().sort((a, b) => (b.effectiveDate || '').localeCompare(a.effectiveDate || ''));
+  }
+  async function addEmploymentHistory(rec) {
+    rec.id = genId('eh');
+    return insertRow('employmentHistory', rec);
+  }
+  async function deleteEmploymentHistory(id) {
+    await deleteRow('employmentHistory', id);
   }
 
   // ---- Payroll overrides (editable "days present" per employee per cutoff) ----
@@ -1005,6 +1028,45 @@ const Store = (function () {
     await deleteRow('officeFiles', id);
   }
 
+  // ---- 201 File (employee documents/requirements) ----
+  // Both the employee (My Portal -> My Profile) and admins can upload; every upload
+  // starts 'Pending' -- the trigger-enforced RLS policy (enforce_employee_document_insert
+  // in supabase/schema.sql) forces that server-side for anyone but an admin, so only HR can
+  // actually move a document to 'Verified'/'Rejected'.
+  function employeeDocumentsForEmployee(employeeId) {
+    return state.employeeDocuments.filter(d => d.employeeId === employeeId).slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  }
+  async function uploadEmployeeDocument(employeeId, file, category, uploadedBy) {
+    const ext = (file.name && file.name.split('.').pop()) || 'dat';
+    const path = `${employeeId}/${genId('doc')}.${ext}`;
+    const { error: upErr } = await sb.storage.from('employee-201').upload(path, file, { contentType: file.type || 'application/octet-stream' });
+    if (upErr) { toast('File upload failed: ' + upErr.message); throw upErr; }
+    return insertRow('employeeDocuments', {
+      id: genId('ed'), employeeId, category: category || 'Other',
+      fileName: file.name, filePath: path,
+      mimeType: file.type || null, fileSize: file.size || null,
+      uploadedBy: uploadedBy || null, status: 'Pending',
+    });
+  }
+  async function getSignedEmployeeDocumentUrl(path) {
+    if (!path) return null;
+    const { data, error } = await sb.storage.from('employee-201').createSignedUrl(path, 3600);
+    if (error) { console.error('Failed to sign employee document URL', error); return null; }
+    return data.signedUrl;
+  }
+  // Admin-only in practice (category/status/verify notes) -- RLS gives employees no update
+  // policy on this table at all, so this always runs as an admin edit.
+  async function updateEmployeeDocument(id, patch) {
+    await updateRow('employeeDocuments', id, patch);
+  }
+  async function deleteEmployeeDocument(id, path) {
+    if (path) {
+      const { error } = await sb.storage.from('employee-201').remove([path]);
+      if (error) console.error('Failed to delete employee document from storage', error);
+    }
+    await deleteRow('employeeDocuments', id);
+  }
+
   // ---- Backup: a full snapshot of every table currently loaded in memory. The free
   // Supabase tier has no automatic backups/point-in-time recovery, so this is what backs
   // the admin "Download Backup" button — a plain JSON export HR can save wherever they like.
@@ -1022,6 +1084,7 @@ const Store = (function () {
     listDeductions, deductionsInRange, addDeduction, deleteDeduction,
     listBonuses, bonusesInRange, addBonus, deleteBonus,
     listProbations, getProbation, getProbationByEmployee, addProbation, updateProbation, deleteProbation,
+    employmentHistoryForEmployee, addEmploymentHistory, deleteEmploymentHistory,
     getPayrollOverride, setPayrollOverride,
     listHolidays, getHoliday, holidaysInRange, addHoliday, updateHoliday, deleteHoliday,
     listPayCutoffSettings, getPayCutoffSetting, updatePayCutoffSetting,
@@ -1035,6 +1098,7 @@ const Store = (function () {
     uploadReceiptPhoto, getSignedReceiptUrl, deleteReceiptPhoto,
     listBills, getBill, addBill, updateBill, deleteBill, payBill,
     listOfficeFiles, uploadOfficeFile, getSignedOfficeFileUrl, deleteOfficeFile,
+    employeeDocumentsForEmployee, uploadEmployeeDocument, getSignedEmployeeDocumentUrl, updateEmployeeDocument, deleteEmployeeDocument,
     exportAllData, logAudit,
   };
 })();

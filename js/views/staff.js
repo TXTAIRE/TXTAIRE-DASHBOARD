@@ -82,10 +82,17 @@ window.Views.staff = (function () {
     qsa('[data-open]', main).forEach(b => b.addEventListener('click', () => openEmployeeDetail(main, b.dataset.open)));
   }
 
+  function documentStatusBadge(status) {
+    const map = { Pending: 'badge-yellow', Verified: 'badge-green', Rejected: 'badge-red' };
+    return `<span class="badge ${map[status] || 'badge-gray'}">${escapeHtml(status)}</span>`;
+  }
+
   function openEmployeeDetail(main, id) {
     const e = Store.getEmployee(id);
     if (!e) return;
     const cases = Store.listCases().filter(c => c.employeeId === id);
+    const history = Store.employmentHistoryForEmployee(id);
+    const docs = Store.employeeDocumentsForEmployee(id);
     openDrawer(`
       <h2>${escapeHtml(e.name)}</h2>
       <div class="page-sub" style="margin-bottom:14px;">${e.category} · ${escapeHtml(e.position)}</div>
@@ -111,6 +118,18 @@ window.Views.staff = (function () {
         Payday: ${e.payCycle ? paydayLabel(e.payCycle) : '—'}
       </div>
       ${e.notes ? `<div class="section-title">Notes</div><div class="page-sub">${escapeHtml(e.notes)}</div>` : ''}
+      <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Employment History <span class="dim" style="font-weight:400;">(position &amp; salary track record — also visible read-only to this employee on My Profile)</span></span>
+        <button class="link-btn" id="btn-add-history">+ Add entry</button>
+      </div>
+      ${history.length ? `<div class="timeline">${history.map(h => `
+        <div class="tl-item"><div class="tl-dot"></div><div class="tl-body">
+          <div class="tl-title">${escapeHtml(h.position)}${h.rate ? ' — ' + fmtMoney(h.rate) + (h.payType === 'Daily' ? ' / day' : ' / cutoff') : ''}</div>
+          <div class="tl-meta">${fmtDate(h.effectiveDate)}${h.reason ? ' · ' + escapeHtml(h.reason) : ''}</div>
+          ${h.notes ? `<div class="page-sub" style="margin-top:2px;">${escapeHtml(h.notes)}</div>` : ''}
+          <button class="link-btn" data-del-history="${h.id}" style="font-size:11px; margin-top:2px;">Delete</button>
+        </div></div>
+      `).join('')}</div>` : '<div class="page-sub">No employment history logged yet — current position/rate above is all that\'s on file.</div>'}
       <div class="section-title">Bank Details <span class="dim" style="font-weight:400;">(payroll disbursement — visible only to HR/admins and this employee)</span></div>
       <div class="page-sub">
         Account number: ${e.bankAccountNumber ? `<strong>${escapeHtml(e.bankAccountNumber)}</strong>` : '<span class="dim">not set</span>'}
@@ -125,6 +144,29 @@ window.Views.staff = (function () {
           ? `<button class="btn btn-ghost btn-sm" id="btn-revoke-ess">Revoke portal access</button>`
           : `<button class="btn btn-ghost btn-sm" id="btn-grant-ess">Grant portal access</button>`}
       </div>
+      <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>201 File <span class="dim" style="font-weight:400;">(requirements &amp; records — valid ID, SSS, PhilHealth, etc.)</span></span>
+        <button class="link-btn" id="btn-upload-document">+ Upload document</button>
+      </div>
+      ${docs.length ? `
+      <div class="panel" style="margin-bottom:14px;">
+        <table>
+          <thead><tr><th>Category</th><th>File</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${docs.map(d => `
+              <tr>
+                <td class="dim">${escapeHtml(d.category)}</td>
+                <td class="name">${escapeHtml(d.fileName)}</td>
+                <td>${documentStatusBadge(d.status)}</td>
+                <td style="white-space:nowrap;">
+                  <button class="link-btn" data-view-doc="${d.filePath}">View</button>
+                  <button class="link-btn" data-manage-doc="${d.id}">Manage</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>` : '<div class="page-sub" style="margin-bottom:14px;">No documents uploaded yet.</div>'}
       <div class="section-title">Disciplinary History</div>
       ${cases.length ? `<div class="timeline">${cases.map(c => `
         <div class="tl-item"><div class="tl-dot"></div><div class="tl-body">
@@ -155,6 +197,163 @@ window.Views.staff = (function () {
           closeDrawer();
           renderList(main);
         }
+      });
+      qs('#btn-add-history', dr).addEventListener('click', () => openEmploymentHistoryForm(main, e));
+      qsa('[data-del-history]', dr).forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('Delete this employment history entry?')) return;
+        await Store.deleteEmploymentHistory(b.dataset.delHistory);
+        toast('Entry deleted.');
+        closeDrawer();
+        openEmployeeDetail(main, id);
+      }));
+      qs('#btn-upload-document', dr).addEventListener('click', () => openUploadDocumentModal(main, e));
+      qsa('[data-view-doc]', dr).forEach(b => b.addEventListener('click', () => {
+        const win = window.open('', '_blank');
+        Store.getSignedEmployeeDocumentUrl(b.dataset.viewDoc).then((url) => {
+          if (url && win) win.location.href = url;
+          else if (win) win.close();
+        });
+      }));
+      qsa('[data-manage-doc]', dr).forEach(b => b.addEventListener('click', () => {
+        const doc = docs.find(d => d.id === b.dataset.manageDoc);
+        if (doc) openManageDocumentModal(main, e, doc);
+      }));
+    });
+  }
+
+  // Position/salary change log -- purely additive (never edits the employee's current
+  // rate/position, which still lives on the employee record itself and is changed via the
+  // normal Edit Employee form) -- this is just the historical trail of how it got there.
+  function openEmploymentHistoryForm(main, e) {
+    openModal(`
+      <h2>Add Employment History Entry</h2>
+      <div class="modal-sub">${escapeHtml(e.name)} — logs a position/salary change; doesn't affect the employee's current record above.</div>
+      <form id="history-form">
+        <div class="modal-grid">
+          <div class="field"><label>Effective date</label><input type="date" name="effectiveDate" value="${todayISO()}" required /></div>
+          <div class="field"><label>Reason</label>
+            <select name="reason">${['New Hire', 'Promotion', 'Salary Adjustment', 'Transfer', 'Other'].map(r => `<option>${r}</option>`).join('')}</select>
+          </div>
+          <div class="field full"><label>Position</label><input name="position" required value="${escapeHtml(e.position)}" /></div>
+          <div class="field"><label>Pay type</label>
+            <select name="payType">${['Monthly', 'Daily'].map(p => `<option ${p === e.payType ? 'selected' : ''}>${p}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Rate (PHP)</label><input type="number" name="rate" min="0" step="0.01" value="${e.rate || ''}" /></div>
+          <div class="field full"><label>Notes</label><textarea name="notes" rows="2"></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Add entry</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#history-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        await Store.addEmploymentHistory({
+          employeeId: e.id,
+          effectiveDate: fd.get('effectiveDate'),
+          reason: fd.get('reason'),
+          position: fd.get('position').trim(),
+          category: e.category,
+          payType: fd.get('payType'),
+          rate: Number(fd.get('rate')) || 0,
+          notes: fd.get('notes').trim(),
+        });
+        toast('✔ Employment history entry added.');
+        closeModal();
+        openEmployeeDetail(main, e.id);
+      });
+    });
+  }
+
+  // Admin uploads a document on the employee's behalf -- same DOCUMENT_CATEGORIES list and
+  // storage path convention (js/store.js uploadEmployeeDocument) as the employee's own
+  // upload on My Portal -> My Profile, so both sides show up in the same 201 File list.
+  function openUploadDocumentModal(main, e) {
+    openModal(`
+      <h2>Upload Document — ${escapeHtml(e.name)}</h2>
+      <form id="doc-upload-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Category</label>
+            <select name="category">${DOCUMENT_CATEGORIES.map(c => `<option>${c}</option>`).join('')}</select>
+          </div>
+          <div class="field full"><label>File</label><input type="file" name="file" required /></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Upload</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#doc-upload-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const file = fd.get('file');
+        if (!file || !file.size) { toast('Choose a file first.'); return; }
+        const submitBtn = qs('button[type="submit"]', bd);
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Uploading…';
+        try {
+          await Store.uploadEmployeeDocument(e.id, file, fd.get('category'), currentUserEmail());
+          toast('✔ Document uploaded.');
+          closeModal();
+          openEmployeeDetail(main, e.id);
+        } catch (err) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Upload';
+        }
+      });
+    });
+  }
+
+  // View + edit (category/notes) + verify, all in one place -- the actual file itself is
+  // immutable once uploaded (delete and re-upload to replace it), consistent with how every
+  // other upload-only record in this app works (deductions, bonuses, office files).
+  function openManageDocumentModal(main, e, d) {
+    openModal(`
+      <h2>Manage Document — ${escapeHtml(e.name)}</h2>
+      <div class="modal-sub">${escapeHtml(d.fileName)}${d.uploadedBy ? ' · uploaded by ' + escapeHtml(d.uploadedBy) : ''}</div>
+      <form id="doc-manage-form">
+        <div class="modal-grid">
+          <div class="field"><label>Category</label>
+            <select name="category">${DOCUMENT_CATEGORIES.map(c => `<option ${c === d.category ? 'selected' : ''}>${c}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Status</label>
+            <select name="status">${['Pending', 'Verified', 'Rejected'].map(s => `<option ${s === d.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
+          </div>
+          <div class="field full"><label>Verification Notes</label><textarea name="verifyNotes" rows="2">${escapeHtml(d.verifyNotes || '')}</textarea></div>
+        </div>
+        ${d.verifiedBy ? `<div class="page-sub">Last reviewed by ${escapeHtml(d.verifiedBy)} on ${fmtDate(d.verifiedDate)}</div>` : ''}
+        <div class="modal-actions" style="justify-content:space-between;">
+          <button type="button" class="btn btn-danger" id="btn-delete-doc">Delete</button>
+          <div style="display:flex; gap:8px;">
+            <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#doc-manage-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const status = fd.get('status');
+        const patch = { category: fd.get('category'), status, verifyNotes: fd.get('verifyNotes').trim() };
+        if (status !== d.status) {
+          patch.verifiedBy = currentUserEmail();
+          patch.verifiedDate = todayISO();
+        }
+        await Store.updateEmployeeDocument(d.id, patch);
+        toast('✔ Document updated.');
+        closeModal();
+        openEmployeeDetail(main, e.id);
+      });
+      qs('#btn-delete-doc', bd).addEventListener('click', async () => {
+        if (!confirm(`Delete "${d.fileName}"? This cannot be undone.`)) return;
+        await Store.deleteEmployeeDocument(d.id, d.filePath);
+        toast('✔ Document deleted.');
+        closeModal();
+        openEmployeeDetail(main, e.id);
       });
     });
   }
