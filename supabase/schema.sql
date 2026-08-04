@@ -483,12 +483,22 @@ begin
     return new;
   end if;
   -- Which day this is and whose record it is never change through this path, on any day
-  -- (past or present). Everything else about the record (timeIn/timeOut/hours/status,
-  -- photo fields) the employee may edit themselves, any day, per product decision.
+  -- (past or present). Photo fields the employee may edit themselves anytime, no window.
   if new.date is distinct from old.date
     or new."employeeId" is distinct from old."employeeId"
   then
     raise exception 'Employees may not change the date or owner of an attendance record';
+  end if;
+  -- Time In/Out/Hours/Status may only be edited within 24 hours of when the record was
+  -- originally created ("uploaded") -- after that, the employee must use Report
+  -- Attendance Concern instead, so any later correction goes through HR review.
+  if (new."timeIn" is distinct from old."timeIn"
+    or new."timeOut" is distinct from old."timeOut"
+    or new.hours is distinct from old.hours
+    or new.status is distinct from old.status)
+    and now() - old.created_at > interval '24 hours'
+  then
+    raise exception 'Time In/Out can only be edited within 24 hours of being recorded -- use Report Attendance Concern instead';
   end if;
   -- Employees can request NSD/OT/Holiday pay (or cancel their own pending request back to
   -- null), but only HR can move a request to Approved/Rejected — enforced here rather than
@@ -1548,3 +1558,47 @@ create policy "admin full access to office files" on storage.objects
   with check (bucket_id = 'office-files' and is_admin());
 
 alter publication supabase_realtime add table expenses, bills, "officeFiles";
+
+-- =================================================================
+-- 24-hour edit window for employee Time In/Out edits -- incremental migration. Run once
+-- against a database that already has the migrations above applied. Safe to re-run.
+-- Employees could previously edit Time In/Out/Status on any of their own attendance rows,
+-- any day, no time limit. Now restricted to within 24 hours of when the record was
+-- originally created ("uploaded") -- after that, they must use Report Attendance Concern
+-- instead, so a later correction goes through HR review. Photo fields and the NSD/OT/
+-- Holiday request flow are unaffected.
+-- =================================================================
+
+create or replace function enforce_employee_attendance_update() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if is_admin() then
+    return new;
+  end if;
+  if new.date is distinct from old.date
+    or new."employeeId" is distinct from old."employeeId"
+  then
+    raise exception 'Employees may not change the date or owner of an attendance record';
+  end if;
+  if (new."timeIn" is distinct from old."timeIn"
+    or new."timeOut" is distinct from old."timeOut"
+    or new.hours is distinct from old.hours
+    or new.status is distinct from old.status)
+    and now() - old.created_at > interval '24 hours'
+  then
+    raise exception 'Time In/Out can only be edited within 24 hours of being recorded -- use Report Attendance Concern instead';
+  end if;
+  if (new."nsdStatus" is distinct from old."nsdStatus" and new."nsdStatus" is not null and new."nsdStatus" != 'Requested')
+    or (new."otStatus" is distinct from old."otStatus" and new."otStatus" is not null and new."otStatus" != 'Requested')
+    or (new."holidayStatus" is distinct from old."holidayStatus" and new."holidayStatus" is not null and new."holidayStatus" != 'Requested')
+  then
+    raise exception 'Employees may only request NSD/OT/Holiday pay, not approve or reject it';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_employee_attendance_update on attendance;
+create trigger trg_employee_attendance_update
+  before update on attendance
+  for each row execute function enforce_employee_attendance_update();

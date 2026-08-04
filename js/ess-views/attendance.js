@@ -396,44 +396,56 @@ window.EssViews.attendance = (function () {
   // without waiting on HR. Which day it is and whose record it is can never change (the
   // trigger-enforced RLS policy blocks that), and every change still lands in HR's audit
   // log via js/store.js's updateRow/deleteRow.
+  // Time In/Out/Status may only be edited within 24 hours of when the record was
+  // originally created ("uploaded") -- enforced for real by the DB trigger
+  // (enforce_employee_attendance_update in supabase/schema.sql), mirrored here so the
+  // employee sees why the fields are locked instead of a save just silently failing.
+  function withinEditWindow(rec) {
+    if (!rec.created_at) return true; // no timestamp on record (shouldn't happen) -- fail open to editable
+    return (Date.now() - new Date(rec.created_at).getTime()) < 24 * 3600000;
+  }
+
   function openEditDayModal(main, emp, rec) {
+    const editable = withinEditWindow(rec);
     openEssModal(`
       <h2>Edit Attendance</h2>
-      <div class="modal-sub">${fmtDate(rec.date)} — changes save immediately and are recorded in HR's audit log.</div>
+      <div class="modal-sub">${fmtDate(rec.date)} — ${editable ? 'changes save immediately and are recorded in HR\'s audit log.' : 'this record is more than 24 hours old, so Time In/Out and Status can no longer be edited directly. Use Report Attendance Concern instead if something needs to be corrected.'}</div>
       <form id="edit-day-form">
         <div class="modal-grid">
-          <div class="field"><label>Time In</label><input type="time" name="timeIn" value="${escapeHtml(rec.timeIn || '')}" required /></div>
-          <div class="field"><label>Time Out</label><input type="time" name="timeOut" value="${escapeHtml(rec.timeOut || '')}" /></div>
+          <div class="field"><label>Time In</label><input type="time" name="timeIn" value="${escapeHtml(rec.timeIn || '')}" ${editable ? 'required' : 'disabled'} /></div>
+          <div class="field"><label>Time Out</label><input type="time" name="timeOut" value="${escapeHtml(rec.timeOut || '')}" ${editable ? '' : 'disabled'} /></div>
           <div class="field full"><label>Status</label>
-            <select name="status">${ATTENDANCE_STATUS_OPTIONS.map(s => `<option ${s === rec.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
+            <select name="status" ${editable ? '' : 'disabled'}>${ATTENDANCE_STATUS_OPTIONS.map(s => `<option ${s === rec.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
           </div>
         </div>
         <div class="modal-actions" style="justify-content:space-between;">
           <button type="button" class="btn btn-danger" id="btn-delete-day">Delete</button>
           <div style="display:flex; gap:8px;">
             <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
-            <button type="submit" class="btn btn-primary">Save</button>
+            ${editable ? '<button type="submit" class="btn btn-primary">Save</button>' : ''}
           </div>
         </div>
       </form>
     `, (bd) => {
-      qs('#edit-day-form', bd).addEventListener('submit', async (ev) => {
-        ev.preventDefault();
-        const fd = new FormData(ev.target);
-        const timeIn = fd.get('timeIn');
-        const timeOut = fd.get('timeOut') || null;
-        const status = fd.get('status');
-        const submitBtn = qs('button[type="submit"]', bd);
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Saving…';
-        await Store.updateAttendance(rec.id, {
-          timeIn, timeOut, status,
-          hours: timeOut ? hoursBetween(timeIn, timeOut) : 0,
+      if (editable) {
+        qs('#edit-day-form', bd).addEventListener('submit', async (ev) => {
+          ev.preventDefault();
+          const fd = new FormData(ev.target);
+          const timeIn = fd.get('timeIn');
+          const timeOut = fd.get('timeOut') || null;
+          const status = fd.get('status');
+          const submitBtn = qs('button[type="submit"]', bd);
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Saving…';
+          await Store.updateAttendance(rec.id, {
+            timeIn, timeOut, status,
+            hours: timeOut ? hoursBetween(timeIn, timeOut) : 0,
+          });
+          toast('✔ Attendance updated.');
+          closeEssModal();
+          render(main, emp);
         });
-        toast('✔ Attendance updated.');
-        closeEssModal();
-        render(main, emp);
-      });
+      }
       qs('#btn-delete-day', bd).addEventListener('click', async () => {
         if (!confirm(`Delete your attendance record for ${fmtDate(rec.date)}? This cannot be undone.`)) return;
         await Promise.all([
