@@ -1602,3 +1602,35 @@ drop trigger if exists trg_employee_attendance_update on attendance;
 create trigger trg_employee_attendance_update
   before update on attendance
   for each row execute function enforce_employee_attendance_update();
+
+-- =================================================================
+-- Bonuses -- incremental migration. Run once against a database that already has the
+-- migrations above applied. Safe to re-run.
+--
+-- Mirrors "deductions": logged per employee per date (13th month, performance,
+-- incentive, etc.), matched against a payroll cutoff by date in js/store.js
+-- computeRow() and added to net pay after tax (same treatment as deductions are
+-- subtracted after tax). Admins manage entries from Payroll -> Bonuses; employees can
+-- only read their own, same as deductions.
+-- =================================================================
+
+create table if not exists bonuses (
+  id text primary key,
+  "employeeId" text not null references employees(id) on delete cascade,
+  date date not null,
+  kind text not null,                          -- '13th Month' | 'Performance' | 'Incentive' | 'Other'
+  notes text default '',
+  amount numeric(12,2) not null default 0,
+  created_at timestamptz not null default now()
+);
+
+alter table bonuses enable row level security;
+
+drop policy if exists "admin full access" on bonuses;
+create policy "admin full access" on bonuses
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "employee reads own bonuses" on bonuses;
+create policy "employee reads own bonuses" on bonuses
+  for select to authenticated using ("employeeId" = my_employee_id());
+
+alter publication supabase_realtime add table bonuses;

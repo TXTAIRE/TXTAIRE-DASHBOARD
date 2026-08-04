@@ -56,15 +56,17 @@ window.Views.payroll = (function () {
       <div class="page-head">
         <div>
           <h1 class="page-title">Payroll</h1>
-          <div class="page-sub">Admins (Admin &amp; Office Staff) are paid ${paydayLabel('10-20')}; Technicians (Field Personnel) are paid ${paydayLabel('15-30')}. Cutoff days are editable from Attendance → Calendar → Edit Cutoff Days. Both schedules pay twice a month; no cutoff should exceed 16 days, per the Labor Code of the Philippines. Gross pay = base pay + COLA + housing allowance + night shift differential + overtime + holiday pay; net pay = gross pay − withholding tax − deductions.</div>
+          <div class="page-sub">Admins (Admin &amp; Office Staff) are paid ${paydayLabel('10-20')}; Technicians (Field Personnel) are paid ${paydayLabel('15-30')}. Cutoff days are editable from Attendance → Calendar → Edit Cutoff Days. Both schedules pay twice a month; no cutoff should exceed 16 days, per the Labor Code of the Philippines. Gross pay = base pay + COLA + housing allowance + night shift differential + overtime + holiday pay; net pay = gross pay − withholding tax − deductions + bonuses.</div>
         </div>
         ${activeTab === 'deductions' ? '<button class="btn btn-primary" id="btn-new-deduction">+ New deduction</button>' : ''}
+        ${activeTab === 'bonuses' ? '<button class="btn btn-primary" id="btn-new-bonus">+ New bonus</button>' : ''}
         ${activeTab === 'holidays' ? '<button class="btn btn-primary" id="btn-new-holiday">+ Add holiday</button>' : ''}
       </div>
 
       <div class="tabs">
         <div class="tab ${activeTab === 'payroll' ? 'active' : ''}" data-tab="payroll">Payroll</div>
         <div class="tab ${activeTab === 'deductions' ? 'active' : ''}" data-tab="deductions">Deductions</div>
+        <div class="tab ${activeTab === 'bonuses' ? 'active' : ''}" data-tab="bonuses">Bonuses</div>
         <div class="tab ${activeTab === 'holidays' ? 'active' : ''}" data-tab="holidays">Holidays</div>
       </div>
 
@@ -74,11 +76,14 @@ window.Views.payroll = (function () {
     qsa('.tab', main).forEach(t => t.addEventListener('click', () => { activeTab = t.dataset.tab; renderView(main); }));
     const btnNewDed = qs('#btn-new-deduction', main);
     if (btnNewDed) btnNewDed.addEventListener('click', () => openDeductionForm(main));
+    const btnNewBonus = qs('#btn-new-bonus', main);
+    if (btnNewBonus) btnNewBonus.addEventListener('click', () => openBonusForm(main));
     const btnNewHol = qs('#btn-new-holiday', main);
     if (btnNewHol) btnNewHol.addEventListener('click', () => openHolidayForm(main));
 
     if (activeTab === 'payroll') renderPayrollTab(qs('#tab-body', main), main);
     else if (activeTab === 'deductions') renderDeductionsTab(qs('#tab-body', main), main);
+    else if (activeTab === 'bonuses') renderBonusesTab(qs('#tab-body', main), main);
     else renderHolidaysTab(qs('#tab-body', main), main);
   }
 
@@ -104,6 +109,7 @@ window.Views.payroll = (function () {
     const totalAttendanceDed = rows.reduce((s, r) => s + r.attendanceDed, 0);
     const totalLateUndertimeDed = rows.reduce((s, r) => s + r.lateUndertimeDed, 0);
     const totalAbsentDays = rows.reduce((s, r) => s + r.daysAbsent, 0);
+    const totalBonus = rows.reduce((s, r) => s + r.bonusTotal, 0);
     const totalNet = rows.reduce((s, r) => s + r.net, 0);
 
     body.innerHTML = `
@@ -143,6 +149,7 @@ window.Views.payroll = (function () {
         <div class="kpi-card"><div class="kpi-label">Total Withholding Tax</div><div class="kpi-value ${totalTax ? 'red' : ''}" style="font-size:20px;">${fmtMoney(totalTax)}</div></div>
         <div class="kpi-card"><div class="kpi-label">Total Deductions</div><div class="kpi-value ${totalDed ? 'red' : ''}" style="font-size:20px;">${fmtMoney(totalDed)}</div>${totalAttendanceDed || totalLateUndertimeDed ? `<div class="kpi-sub">incl. ${fmtMoney(totalAttendanceDed)} absences, ${fmtMoney(totalLateUndertimeDed)} late/undertime</div>` : ''}</div>
         <div class="kpi-card"><div class="kpi-label">Total Absent Days</div><div class="kpi-value ${totalAbsentDays ? 'red' : ''}" style="font-size:20px;">${totalAbsentDays}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Bonuses</div><div class="kpi-value ${totalBonus ? 'green' : ''}" style="font-size:20px;">${fmtMoney(totalBonus)}</div></div>
         <div class="kpi-card"><div class="kpi-label">Total Net Pay</div><div class="kpi-value green" style="font-size:20px;">${fmtMoney(totalNet)}</div></div>
         <div class="kpi-card"><div class="kpi-label">Staff on Schedule</div><div class="kpi-value">${rows.length}</div></div>
       </div>
@@ -152,7 +159,7 @@ window.Views.payroll = (function () {
       <div class="panel">
         ${rows.length ? `
         <table>
-          <thead><tr><th>Staff</th><th>Position</th><th class="num">Days Present</th><th class="num">Absent</th><th class="num">Base Pay</th><th class="num">COLA</th><th class="num">Housing Allowance</th><th class="num">NSD</th><th class="num">OT</th><th class="num">Holiday</th><th class="num">Gross Pay</th><th class="num">Withholding Tax</th><th class="num">Deductions</th><th class="num">Net Pay</th><th></th></tr></thead>
+          <thead><tr><th>Staff</th><th>Position</th><th class="num">Days Present</th><th class="num">Absent</th><th class="num">Base Pay</th><th class="num">COLA</th><th class="num">Housing Allowance</th><th class="num">NSD</th><th class="num">OT</th><th class="num">Holiday</th><th class="num">Gross Pay</th><th class="num">Withholding Tax</th><th class="num">Deductions</th><th class="num">Bonus</th><th class="num">Net Pay</th><th></th></tr></thead>
           <tbody>
             ${rows.map(r => `
               <tr>
@@ -185,6 +192,7 @@ window.Views.payroll = (function () {
                 <td class="num" style="font-weight:600;">${fmtMoney(r.gross)}</td>
                 <td class="num ${r.tax ? '' : 'dim'}">${r.tax ? fmtMoney(r.tax) : '—'}</td>
                 <td class="num ${r.dedTotal ? '' : 'dim'}" title="${[r.attendanceDed ? 'Incl. ' + fmtMoney(r.attendanceDed) + ' for ' + r.daysAbsent + ' absent day(s)' : '', r.lateUndertimeDed ? fmtMoney(r.lateUndertimeDed) + ' for late/undertime' : ''].filter(Boolean).join('; ')}">${r.dedTotal ? fmtMoney(r.dedTotal) : '—'}</td>
+                <td class="num ${r.bonusTotal ? 'green' : 'dim'}">${r.bonusTotal ? fmtMoney(r.bonusTotal) : '—'}</td>
                 <td class="num" style="font-weight:700;">${fmtMoney(r.net)}</td>
                 <td><button class="link-btn" data-dtr="${r.emp.id}">DTR →</button></td>
               </tr>
@@ -288,6 +296,42 @@ window.Views.payroll = (function () {
         await Store.deleteDeduction(b.dataset.del);
         toast('Deduction deleted.');
         renderDeductionsTab(body, main);
+      }
+    }));
+  }
+
+  function renderBonusesTab(body, main) {
+    const rows = Store.listBonuses().slice().sort((a, b) => b.date.localeCompare(a.date));
+    const total = rows.reduce((s, b) => s + Number(b.amount), 0);
+
+    body.innerHTML = `
+      <div class="hint">Bonuses (13th month pay, performance, incentives, etc.) roll up to each staff member's net pay on the Payroll tab, matched by date against the selected cutoff, and are added to net pay after tax.</div>
+      <div class="panel">
+        <div class="panel-head"><h3>${rows.length} entries</h3><div class="dim">Total ${fmtMoney(total)}</div></div>
+        ${rows.length ? `
+        <table>
+          <thead><tr><th>Date</th><th>Staff</th><th>Kind</th><th>Notes</th><th class="num">Amount</th><th></th></tr></thead>
+          <tbody>
+            ${rows.map(b => `
+              <tr>
+                <td class="dim">${fmtDate(b.date)}</td>
+                <td class="name">${escapeHtml(employeeName(b.employeeId))}</td>
+                <td><span class="badge badge-gray">${escapeHtml(b.kind)}</span></td>
+                <td class="dim">${escapeHtml(b.notes || '—')}</td>
+                <td class="num">${fmtMoney(b.amount)}</td>
+                <td><button class="link-btn" data-del="${b.id}">Delete</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>` : '<div class="empty">No bonuses yet. Add one with the button above.</div>'}
+      </div>
+    `;
+
+    qsa('[data-del]', body).forEach(b => b.addEventListener('click', async () => {
+      if (confirm('Delete this bonus?')) {
+        await Store.deleteBonus(b.dataset.del);
+        toast('Bonus deleted.');
+        renderBonusesTab(body, main);
       }
     }));
   }
@@ -423,6 +467,42 @@ window.Views.payroll = (function () {
           amount: Number(fd.get('amount')) || 0,
         });
         toast('Deduction added.');
+        closeModal();
+        renderView(main);
+      });
+    });
+  }
+
+  function openBonusForm(main) {
+    openModal(`
+      <h2>New bonus</h2>
+      <form id="bonus-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Employee</label><select name="employeeId">${employeeOptions()}</select></div>
+          <div class="field"><label>Date</label><input type="date" name="date" value="${todayISO()}" /></div>
+          <div class="field"><label>Kind</label>
+            <select name="kind">${['13th Month', 'Performance', 'Incentive', 'Other'].map(k => `<option>${k}</option>`).join('')}</select>
+          </div>
+          <div class="field full"><label>Amount (PHP)</label><input type="number" name="amount" min="0" step="0.01" required /></div>
+          <div class="field full"><label>Notes</label><textarea name="notes" rows="2"></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Add bonus</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#bonus-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        await Store.addBonus({
+          employeeId: fd.get('employeeId'),
+          date: fd.get('date'),
+          kind: fd.get('kind'),
+          notes: fd.get('notes').trim(),
+          amount: Number(fd.get('amount')) || 0,
+        });
+        toast('Bonus added.');
         closeModal();
         renderView(main);
       });

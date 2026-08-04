@@ -367,6 +367,11 @@ function computeRow(emp, from, to) {
   const attendanceDed = emp.payType === 'Monthly' && ordinaryWorkDays > 0 ? (emp.rate / ordinaryWorkDays) * daysAbsent : 0;
   const dedTotal = manualDed + attendanceDed + lateUndertimeDed;
 
+  // Bonuses (13th month, performance, incentives, etc.) -- logged per employee per date,
+  // matched against the cutoff the same way deductions are. Added after tax, same as
+  // deductions are subtracted after tax, rather than folded into the taxable gross.
+  const bonusTotal = Store.bonusesInRange(from, to).filter(b => b.employeeId === emp.id).reduce((s, b) => s + Number(b.amount), 0);
+
   // Withholding tax applies to what was actually earned, not the theoretical full-cutoff
   // gross before the absence deduction is subtracted -- a Monthly employee's basePay is
   // their full flat rate regardless of attendance, with absence clawed back separately via
@@ -374,13 +379,13 @@ function computeRow(emp, from, to) {
   // yet (e.g. before HR has entered it) showed a confusing negative "net": real tax charged
   // on pay that was then fully deducted right back out.
   const tax = withholdingTax(Math.max(0, gross - attendanceDed));
-  const net = gross - tax - dedTotal;
+  const net = gross - tax - dedTotal + bonusTotal;
 
   return {
     emp, daysPresent, isOverridden, workDays, daysAbsent, isAbsentOverridden, basePay, isBasePayOverridden,
     colaPay, isColaOverridden, housingPay, isHousingOverridden, nsdPay, isNsdOverridden,
     otPay, isOtOverridden, holidayPay, isHolidayOverridden,
-    gross, tax, manualDed, attendanceDed, lateUndertimeDed, dedTotal, net,
+    gross, tax, manualDed, attendanceDed, lateUndertimeDed, dedTotal, bonusTotal, net,
   };
 }
 
@@ -392,6 +397,7 @@ const Store = (function () {
     complaints: 'complaints',
     attendance: 'attendance',
     deductions: 'deductions',
+    bonuses: 'bonuses',
     probationRecords: 'probationRecords',
     payrollOverrides: 'payrollOverrides',
     holidays: 'holidays',
@@ -409,7 +415,7 @@ const Store = (function () {
 
   const state = {
     employees: [], candidates: [], disciplinaryCases: [], complaints: [],
-    attendance: [], deductions: [], probationRecords: [], payrollOverrides: [], holidays: [],
+    attendance: [], deductions: [], bonuses: [], probationRecords: [], payrollOverrides: [], holidays: [],
     payCutoffSettings: [],
     leaveRequests: [], attendanceCorrections: [], auditLog: [],
     notifications: [], payrollReleases: [], appSettings: [],
@@ -709,6 +715,17 @@ const Store = (function () {
     await deleteRow('deductions', id);
   }
 
+  // ---- Bonuses ----
+  function listBonuses() { return state.bonuses.slice(); }
+  function bonusesInRange(from, to) { return state.bonuses.filter(b => b.date >= from && b.date <= to); }
+  async function addBonus(b) {
+    b.id = genId('bon');
+    return insertRow('bonuses', b);
+  }
+  async function deleteBonus(id) {
+    await deleteRow('bonuses', id);
+  }
+
   // ---- Holidays (reference calendar for holiday pay) ----
   function listHolidays() { return state.holidays.slice(); }
   function getHoliday(id) { return state.holidays.find(h => h.id === id); }
@@ -983,6 +1000,7 @@ const Store = (function () {
     uploadAttendancePhoto, getSignedPhotoUrl, deleteAttendancePhoto,
     uploadBankQr, getSignedBankQrUrl, deleteBankQrPhoto,
     listDeductions, deductionsInRange, addDeduction, deleteDeduction,
+    listBonuses, bonusesInRange, addBonus, deleteBonus,
     listProbations, getProbation, getProbationByEmployee, addProbation, updateProbation, deleteProbation,
     getPayrollOverride, setPayrollOverride,
     listHolidays, getHoliday, holidaysInRange, addHoliday, updateHoliday, deleteHoliday,
