@@ -214,7 +214,7 @@ create table "leaveRequests" (
   "startDate" date not null,
   "endDate" date not null,
   reason text default '',
-  status text not null default 'Pending',      -- 'Pending' | 'Approved' | 'Rejected'
+  status text not null default 'Pending',      -- 'Pending' | 'Approved' | 'Disapproved'
   "reviewedBy" text,
   "reviewedDate" date,
   "reviewNotes" text default '',
@@ -1634,3 +1634,28 @@ create policy "employee reads own bonuses" on bonuses
   for select to authenticated using ("employeeId" = my_employee_id());
 
 alter publication supabase_realtime add table bonuses;
+
+-- =================================================================
+-- Time In/Out GPS location columns -- incremental migration. Run once against a
+-- database that already has the migrations above applied. Safe to re-run.
+--
+-- The employee's location was already captured on every self clock-in/out (js/ess-views/
+-- attendance.js bestEffortLocation) and stamped onto the photo itself, but never stored as
+-- its own queryable field -- an admin had to open the photo and read the text baked into
+-- it. These columns hold that same "City, Region · lat° N, lon° E (±accuracy m)" string
+-- as plain text so it shows up directly in the admin Attendance -> Edit Attendance modal.
+-- =================================================================
+
+alter table attendance add column if not exists "timeInLocation" text;
+alter table attendance add column if not exists "timeOutLocation" text;
+
+-- =================================================================
+-- Leave requests: "Rejected" renamed to "Disapproved" -- incremental migration. Run once
+-- against a database that already has the migrations above applied. Safe to re-run.
+--
+-- status is a free-text column (no check constraint), so this only needs a one-time data
+-- fix for any rows already decided under the old wording -- the app itself now always
+-- reads/writes 'Disapproved' going forward.
+-- =================================================================
+
+update "leaveRequests" set status = 'Disapproved' where status = 'Rejected';

@@ -2,8 +2,11 @@ window.Views.leaveRequests = (function () {
   let filterStatus = 'Pending';
 
   function statusBadge(status) {
-    const map = { Pending: 'badge-yellow', Approved: 'badge-green', Rejected: 'badge-red' };
-    return `<span class="badge ${map[status] || 'badge-gray'}">${escapeHtml(status)}</span>`;
+    // 'Rejected' kept as a display alias for any pre-migration rows still holding the old
+    // wording -- the app itself only ever writes 'Disapproved' going forward.
+    const map = { Pending: 'badge-yellow', Approved: 'badge-green', Disapproved: 'badge-red', Rejected: 'badge-red' };
+    const label = status === 'Rejected' ? 'Disapproved' : status;
+    return `<span class="badge ${map[status] || 'badge-gray'}">${escapeHtml(label)}</span>`;
   }
 
   function renderList(main) {
@@ -17,7 +20,7 @@ window.Views.leaveRequests = (function () {
       <div class="page-head">
         <div>
           <h1 class="page-title">Leave Requests</h1>
-          <div class="page-sub">Submitted from the Employee Self-Service portal. Review and approve or reject each request.</div>
+          <div class="page-sub">Submitted from the Employee Self-Service portal. Review and approve or disapprove each request.</div>
         </div>
       </div>
 
@@ -25,7 +28,7 @@ window.Views.leaveRequests = (function () {
         <div class="field">
           <label>Status</label>
           <div class="seg" id="seg-status">
-            ${['Pending', 'All', 'Approved', 'Rejected'].map(s => `<button data-val="${s}" class="${filterStatus === s ? 'active' : ''}">${s}</button>`).join('')}
+            ${['Pending', 'All', 'Approved', 'Disapproved'].map(s => `<button data-val="${s}" class="${filterStatus === s ? 'active' : ''}">${s}</button>`).join('')}
           </div>
         </div>
       </div>
@@ -71,18 +74,27 @@ window.Views.leaveRequests = (function () {
       <div class="section-title">Reason</div>
       <div class="page-sub">${escapeHtml(r.reason || '—')}</div>
       ${r.reviewedBy ? `
-      <div class="section-title">Review</div>
-      <div class="page-sub">By ${escapeHtml(r.reviewedBy)} on ${fmtDate(r.reviewedDate)}${r.reviewNotes ? '<br/>' + escapeHtml(r.reviewNotes) : ''}</div>
-      ` : ''}
-      ${r.status === 'Pending' ? `
       <div class="section-title">Decision</div>
-      <div class="field full"><label>Notes (optional)</label><textarea id="review-notes" rows="2"></textarea></div>
-      <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
-        <button class="btn btn-ghost" id="btn-reject" style="color:var(--red);border-color:var(--red);">Reject</button>
-        <button class="btn btn-primary" id="btn-approve">Approve</button>
-      </div>
+      <div class="page-sub">By ${escapeHtml(r.reviewedBy)} on ${fmtDate(r.reviewedDate)}</div>
       ` : ''}
+      <div class="section-title">Notes</div>
+      <div class="page-sub" style="margin-bottom:6px;">Visible to this employee alongside the decision — add or update anytime, whether or not the request has been decided yet.</div>
+      <div class="field full"><textarea id="review-notes" rows="3">${escapeHtml(r.reviewNotes || '')}</textarea></div>
+      <div class="modal-actions" style="justify-content:flex-start; margin-top:10px; flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" id="btn-save-notes">Save Notes</button>
+        ${r.status === 'Pending' ? `
+        <button class="btn btn-ghost" id="btn-disapprove" style="color:var(--red);border-color:var(--red);">Disapprove</button>
+        <button class="btn btn-primary" id="btn-approve">Approve</button>
+        ` : ''}
+      </div>
     `, (dr) => {
+      const saveNotesBtn = qs('#btn-save-notes', dr);
+      saveNotesBtn.addEventListener('click', async () => {
+        await Store.updateLeaveRequestNotes(r.id, qs('#review-notes', dr).value.trim());
+        toast('✔ Notes saved.');
+        closeDrawer();
+        renderList(main);
+      });
       const approveBtn = qs('#btn-approve', dr);
       if (approveBtn) approveBtn.addEventListener('click', async () => {
         await Store.reviewLeaveRequest(r.id, 'Approved', currentUserEmail(), qs('#review-notes', dr).value.trim());
@@ -90,10 +102,10 @@ window.Views.leaveRequests = (function () {
         closeDrawer();
         renderList(main);
       });
-      const rejectBtn = qs('#btn-reject', dr);
-      if (rejectBtn) rejectBtn.addEventListener('click', async () => {
-        await Store.reviewLeaveRequest(r.id, 'Rejected', currentUserEmail(), qs('#review-notes', dr).value.trim());
-        toast('Leave request rejected.');
+      const disapproveBtn = qs('#btn-disapprove', dr);
+      if (disapproveBtn) disapproveBtn.addEventListener('click', async () => {
+        await Store.reviewLeaveRequest(r.id, 'Disapproved', currentUserEmail(), qs('#review-notes', dr).value.trim());
+        toast('Leave request disapproved.');
         closeDrawer();
         renderList(main);
       });

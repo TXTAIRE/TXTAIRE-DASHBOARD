@@ -781,14 +781,23 @@ const Store = (function () {
   async function reviewLeaveRequest(id, status, reviewedBy, reviewNotes) {
     const r = getLeaveRequest(id);
     await updateRow('leaveRequests', id, { status, reviewedBy, reviewedDate: todayISO(), reviewNotes: reviewNotes || '' });
-    if (r && (status === 'Approved' || status === 'Rejected')) {
+    if (r && (status === 'Approved' || status === 'Disapproved')) {
       await createNotification({
         employeeId: r.employeeId,
+        // Internal notification type key stays 'leave_rejected' (icon lookup only, never
+        // shown to the user) even though the status/message wording is now "Disapproved".
         type: status === 'Approved' ? 'leave_approved' : 'leave_rejected',
         message: `Your ${r.leaveType} leave request (${fmtDate(r.startDate)} – ${fmtDate(r.endDate)}) was ${status.toLowerCase()}.`,
         relatedTable: 'leaveRequests', relatedId: id,
       });
     }
+    return getLeaveRequest(id);
+  }
+  // Lets HR add or update notes on a request independent of an Approve/Disapprove decision
+  // -- e.g. jotting context on a still-Pending request, or amending a note afterward --
+  // without touching status/reviewedBy/reviewedDate.
+  async function updateLeaveRequestNotes(id, notes) {
+    await updateRow('leaveRequests', id, { reviewNotes: notes || '' });
     return getLeaveRequest(id);
   }
   // Employee edits their own request (type/dates/reason) -- any status, anytime. The
@@ -1016,7 +1025,7 @@ const Store = (function () {
     getPayrollOverride, setPayrollOverride,
     listHolidays, getHoliday, holidaysInRange, addHoliday, updateHoliday, deleteHoliday,
     listPayCutoffSettings, getPayCutoffSetting, updatePayCutoffSetting,
-    listLeaveRequests, getLeaveRequest, leaveRequestsForEmployee, addLeaveRequest, reviewLeaveRequest, updateLeaveRequest, deleteLeaveRequest,
+    listLeaveRequests, getLeaveRequest, leaveRequestsForEmployee, addLeaveRequest, reviewLeaveRequest, updateLeaveRequestNotes, updateLeaveRequest, deleteLeaveRequest,
     listAttendanceCorrections, getAttendanceCorrection, attendanceCorrectionsForEmployee, addAttendanceCorrection, reviewAttendanceCorrection,
     listAuditLog, purgeOldAuditLog,
     createNotification, listNotificationsForEmployee, unreadNotificationCount, markNotificationRead, markAllNotificationsRead,

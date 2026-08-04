@@ -526,6 +526,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .dtr-logo { height: 44px; }
 .dtr-header h2 { margin: 0; font-size: 18px; }
 .dtr-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; font-size: 13px; margin-bottom: 16px; }
+/* The day-by-day table has 8 short columns that don't wrap well on a phone -- scrolls
+   horizontally within its own box on narrow screens instead of squeezing the page or
+   forcing the whole DTR wider than the viewport. */
+.dtr-table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .dtr-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .dtr-table th, .dtr-table td { border: 1px solid #ccc; padding: 5px 8px; text-align: left; }
 .dtr-table th { background: #f6f7f9; }
@@ -537,6 +541,21 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .dtr-signatures { display: flex; justify-content: space-between; margin-top: 56px; gap: 40px; }
 .dtr-sig { flex: 1; text-align: center; font-size: 12px; }
 .dtr-sig-line { border-top: 1px solid #333; margin-bottom: 6px; padding-top: 36px; }
+
+/* On-screen phone view (not print, which forces its own A4 layout below) -- tighter
+   padding/type and a single-column meta grid so the DTR fits a narrow viewport without
+   the page itself scrolling sideways; signatures stay side-by-side (still readable at
+   two-up down to very small widths) since stacking them reads oddly here. */
+@media (max-width: 480px) {
+  .dtr-overlay { padding: 14px 6px; }
+  .dtr-print { padding: 16px 14px; border-radius: 8px; }
+  .dtr-header { gap: 10px; }
+  .dtr-logo { height: 34px; }
+  .dtr-meta { grid-template-columns: 1fr; gap: 4px; font-size: 12.5px; }
+  .dtr-table { font-size: 11px; }
+  .dtr-table th, .dtr-table td { padding: 4px 6px; }
+  .dtr-signatures { gap: 16px; margin-top: 40px; }
+}
 
 @media print {
   @page { size: A4 portrait; margin: 10mm; }

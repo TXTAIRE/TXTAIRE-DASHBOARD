@@ -120,6 +120,7 @@ function openDTR(emp, from, to) {
         <div><strong>Category:</strong> ${escapeHtml(emp.category)}</div>
         <div><strong>Pay period:</strong> ${fmtDate(from)} – ${fmtDate(to)}</div>
       </div>
+      <div class="dtr-table-wrap">
       <table class="dtr-table">
         <thead><tr><th>Date</th><th>Day</th><th>Time In</th><th>Time Out</th><th>Hours</th><th class="num">NSD Hrs</th><th class="num">OT Hrs</th><th>Status</th></tr></thead>
         <tbody>
@@ -148,6 +149,7 @@ function openDTR(emp, from, to) {
           <td></td>
         </tr></tfoot>
       </table>
+      </div>
 
       <div class="dtr-summary">
         <div class="dtr-summary-title">Pay computation (per the Labor Code of the Philippines)</div>

@@ -190,7 +190,8 @@ window.EssViews.attendance = (function () {
         try {
           const oldPath = kind === 'in' ? rec.timeInPhotoPath : rec.timeOutPhotoPath;
           const path = await Store.uploadAttendancePhoto(emp.id, blob, kind);
-          await Store.updateAttendance(rec.id, kind === 'in' ? { timeInPhotoPath: path } : { timeOutPhotoPath: path });
+          const location = combineLocationText(locationText) || null;
+          await Store.updateAttendance(rec.id, kind === 'in' ? { timeInPhotoPath: path, timeInLocation: location } : { timeOutPhotoPath: path, timeOutLocation: location });
           if (oldPath) await Store.deleteAttendancePhoto(oldPath);
           stopStream(stream);
           closeEssModal();
@@ -709,15 +710,26 @@ window.EssViews.attendance = (function () {
     });
   }
 
+  // bestEffortLocation() returns { text, coordsText } -- combines both into one plain-text
+  // string (e.g. "Quezon City, Metro Manila · 14.65200° N, 121.03680° E (±15m)") for the
+  // timeInLocation/timeOutLocation columns, the same info already stamped onto the photo
+  // overlay, now also queryable/visible without opening the photo.
+  function combineLocationText(locationInfo) {
+    if (!locationInfo) return '';
+    return [locationInfo.text, locationInfo.coordsText].filter(Boolean).join(' · ');
+  }
+
   // timeStr/date are always captured at the moment the employee presses Confirm — never
   // recomputed here — so a clock-in/out queued offline still records the real time it
   // happened, not whenever the connection happens to come back and this finally runs.
-  async function saveClockEvent(emp, kind, photoPath, timeStr, date) {
+  async function saveClockEvent(emp, kind, photoPath, timeStr, date, locationText) {
+    const location = combineLocationText(locationText) || null;
     if (kind === 'in') {
       await Store.addAttendance({
         employeeId: emp.id, date, status: 'Present',
         timeIn: timeStr, timeOut: null, hours: 0,
         timeInPhotoPath: photoPath,
+        timeInLocation: location,
       });
     } else {
       const rec = Store.attendanceForDate(date).find(r => r.employeeId === emp.id);
@@ -726,6 +738,7 @@ window.EssViews.attendance = (function () {
         timeOut: timeStr,
         hours: hoursBetween(rec.timeIn, timeStr),
         timeOutPhotoPath: photoPath,
+        timeOutLocation: location,
       });
     }
   }
@@ -736,10 +749,13 @@ window.EssViews.attendance = (function () {
 
   // Stores the captured photo + intended attendance fields in IndexedDB instead of
   // Supabase. Nothing here touches the network — safe to call with no connection at all.
-  async function queueOffline(emp, kind, blob, timeStr, date) {
+  // locationText travels along too (already resolved before this is called), so a synced-
+  // later record still gets the location captured at the actual moment of clock-in/out.
+  async function queueOffline(emp, kind, blob, timeStr, date, locationText) {
     await OfflineQueue.add({
       localId: genId('offatt'),
       employeeId: emp.id, kind, timeStr, date, photoBlob: blob,
+      locationText: locationText || null,
       createdAt: Date.now(),
     });
   }
@@ -765,7 +781,7 @@ window.EssViews.attendance = (function () {
     for (const item of pending) {
       try {
         const path = await Store.uploadAttendancePhoto(emp.id, item.photoBlob, item.kind);
-        await saveClockEvent(emp, item.kind, path, item.timeStr, item.date);
+        await saveClockEvent(emp, item.kind, path, item.timeStr, item.date, item.locationText);
         await OfflineQueue.remove(item.localId);
         syncedAny = true;
       } catch (e) {
@@ -844,7 +860,7 @@ window.EssViews.attendance = (function () {
 
       canvas.toBlob(async (blob) => {
         if (!navigator.onLine) {
-          await queueOffline(emp, kind, blob, timeStr, date);
+          await queueOffline(emp, kind, blob, timeStr, date, locationText);
           stopStream(stream);
           closeEssModal();
           toast('📴 No connection — queued offline. Will sync automatically once you\'re back online.');
@@ -853,14 +869,14 @@ window.EssViews.attendance = (function () {
         }
         try {
           const path = await Store.uploadAttendancePhoto(emp.id, blob, kind);
-          await saveClockEvent(emp, kind, path, timeStr, date);
+          await saveClockEvent(emp, kind, path, timeStr, date, locationText);
           stopStream(stream);
           closeEssModal();
           toast(kind === 'in' ? '✔ Time In recorded' : '✔ Time Out recorded');
           render(main, emp);
         } catch (e) {
           if (isLikelyNetworkError(e)) {
-            await queueOffline(emp, kind, blob, timeStr, date);
+            await queueOffline(emp, kind, blob, timeStr, date, locationText);
             stopStream(stream);
             closeEssModal();
             toast('📴 Connection lost — queued offline. Will sync automatically once you\'re back online.');

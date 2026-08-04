@@ -490,6 +490,15 @@ window.Views.attendance = (function () {
           <div class="field"><label>Time in</label><input type="time" name="timeIn" id="att-time-in" value="${r.timeIn}" /></div>
           <div class="field"><label>Time out</label><input type="time" name="timeOut" id="att-time-out" value="${r.timeOut}" /></div>
           <div class="field"><label>Hours</label><input type="number" step="0.1" name="hours" value="${r.hours}" /></div>
+          ${rec && (r.timeInPhotoPath || r.timeOutPhotoPath || r.timeInLocation || r.timeOutLocation) ? `
+          <div class="field full">
+            <label>Self Clock-In Photo &amp; Location</label>
+            <div class="page-sub" style="display:flex; flex-direction:column; gap:4px; margin-top:2px;">
+              <span>Time In: ${r.timeInLocation ? escapeHtml(r.timeInLocation) : 'No location captured'} ${r.timeInPhotoPath ? `<button type="button" class="link-btn" data-photo="${r.timeInPhotoPath}">📷 View Photo</button>` : ''}</span>
+              <span>Time Out: ${r.timeOutLocation ? escapeHtml(r.timeOutLocation) : 'No location captured'} ${r.timeOutPhotoPath ? `<button type="button" class="link-btn" data-photo="${r.timeOutPhotoPath}">📷 View Photo</button>` : ''}</span>
+            </div>
+          </div>
+          ` : ''}
           <div class="field"><label>Night Shift Diff.</label>
             <label style="display:flex; align-items:center; gap:6px; font-weight:400; padding-top:8px;">
               <input type="checkbox" name="nsdApproved" ${r.nsdStatus === 'Approved' ? 'checked' : ''} style="width:auto;" /> Approved
@@ -542,6 +551,7 @@ window.Views.attendance = (function () {
         const selectEl = qs('#att-holiday-type', bd);
         if (!selectEl.value && ctx.effective) selectEl.value = ctx.effective.type;
       });
+      qsa('[data-photo]', bd).forEach(b => b.addEventListener('click', () => viewPhoto(b.dataset.photo)));
       // Hours auto-computes from Time In/Time Out (shared js/store.js hoursBetween, same
       // midnight-crossing math the ESS portal uses) whenever either changes, so HR doesn't
       // have to hand-calculate it -- the field stays a plain editable number afterward, for

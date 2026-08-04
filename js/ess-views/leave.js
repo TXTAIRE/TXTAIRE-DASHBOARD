@@ -1,7 +1,10 @@
 window.EssViews.leave = (function () {
   function statusBadge(status) {
-    const map = { Pending: 'badge-yellow', Approved: 'badge-green', Rejected: 'badge-red' };
-    return `<span class="badge ${map[status] || 'badge-gray'}">${escapeHtml(status)}</span>`;
+    // 'Rejected' kept as a display alias for any pre-migration rows still holding the old
+    // wording -- the app itself only ever writes 'Disapproved' going forward.
+    const map = { Pending: 'badge-yellow', Approved: 'badge-green', Disapproved: 'badge-red', Rejected: 'badge-red' };
+    const label = status === 'Rejected' ? 'Disapproved' : status;
+    return `<span class="badge ${map[status] || 'badge-gray'}">${escapeHtml(label)}</span>`;
   }
 
   function render(main, emp) {
@@ -37,7 +40,7 @@ window.EssViews.leave = (function () {
     }));
   }
 
-  // Editing an already-Approved/Rejected request re-opens it for HR review (the
+  // Editing an already-Approved/Disapproved request re-opens it for HR review (the
   // trigger-enforced RLS policy resets status back to Pending server-side) -- shown here
   // so the employee isn't surprised when a decided request reverts after they change it.
   function openLeaveForm(main, emp, existing) {
