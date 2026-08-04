@@ -220,6 +220,17 @@ function workDaysInRange(from, to) {
   return count;
 }
 
+// Total hours worked between two "HH:MM" times, handling a shift that crosses midnight
+// (e.g. 22:00-06:00) the same way nightOverlapHours below does. Shared by the admin
+// Attendance modal and the ESS Attendance page so Time In/Time Out always drive the same
+// auto-computed Hours figure in both places.
+function hoursBetween(timeIn, timeOut) {
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  let start = toMin(timeIn), end = toMin(timeOut);
+  if (end <= start) end += 1440; // crosses midnight
+  return Math.round(((end - start) / 60) * 100) / 100;
+}
+
 // Hours of a shift ("HH:MM"-"HH:MM") that fall within the legal night-shift-differential
 // window, 10:00 PM to 6:00 AM. Handles shifts that cross midnight (e.g. 22:00-06:00) and
 // early-morning shifts that don't (e.g. 04:00-13:00, where 04:00-06:00 counts).

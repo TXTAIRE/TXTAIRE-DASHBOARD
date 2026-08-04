@@ -113,6 +113,116 @@ function updateEssBellBadge() {
   badge.classList.toggle('hidden', count === 0);
 }
 
+// Printable Daily Time Record — same overlay/markup as the admin dashboard's DTR
+// (js/app.js openDTR), duplicated here rather than shared since each entry point already
+// keeps its own small self-contained helpers (qs/qsa/escapeHtml/toast/etc. above). Only
+// depends on globals that already exist identically in both js/store.js and here, so it
+// renders and prints the same way for an employee viewing their own record.
+function openDTR(emp, from, to) {
+  qsa('.dtr-overlay').forEach(el => el.remove());
+
+  const records = Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id);
+  const recByDate = {};
+  records.forEach(r => { recByDate[r.date] = r; });
+
+  const holidays = Store.holidaysInRange(from, to);
+  const holidayByDate = {};
+  holidays.forEach(h => { holidayByDate[h.date] = h; });
+
+  const workDays = workDaysInRange(from, to);
+  const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (workDays > 0 ? emp.rate / workDays : 0);
+
+  const days = [];
+  let d = from;
+  while (d <= to) { days.push(d); d = addDays(d, 1); }
+
+  let totalHours = 0, totalNsdHrs = 0, totalNsdPay = 0, totalOtHrs = 0, totalOtPay = 0, totalHolidayPay = 0;
+  const dayRows = days.map(date => {
+    const r = recByDate[date];
+    const holiday = holidayByDate[date];
+    const pay = computeDayPay(dailyRateEq, r, holiday);
+    const hrs = r ? (Number(r.hours) || 0) : 0;
+    totalHours += hrs;
+    totalNsdHrs += pay.nsdHrs;
+    totalNsdPay += pay.nsdPay;
+    totalOtHrs += pay.otHrs;
+    totalOtPay += pay.otPay;
+    totalHolidayPay += pay.holidayPay;
+    return { date, r, holiday, pay, hrs };
+  });
+
+  const overlay = document.createElement('div');
+  overlay.className = 'dtr-overlay';
+  overlay.innerHTML = `
+    <div class="dtr-print">
+      <div class="dtr-actions no-print">
+        <button class="btn btn-ghost btn-sm" id="dtr-close">Close</button>
+        <button class="btn btn-primary btn-sm" id="dtr-print-btn">Print / Save as PDF</button>
+      </div>
+      <div class="dtr-header">
+        <img src="assets/logo.svg" class="dtr-logo" alt="TxTAIRE" />
+        <h2>Daily Time Record</h2>
+      </div>
+      <div class="dtr-meta">
+        <div><strong>Name:</strong> ${escapeHtml(emp.name)}</div>
+        <div><strong>Position:</strong> ${escapeHtml(emp.position || '—')}</div>
+        <div><strong>Category:</strong> ${escapeHtml(emp.category)}</div>
+        <div><strong>Pay period:</strong> ${fmtDate(from)} – ${fmtDate(to)}</div>
+      </div>
+      <table class="dtr-table">
+        <thead><tr><th>Date</th><th>Day</th><th>Time In</th><th>Time Out</th><th>Hours</th><th class="num">NSD Hrs</th><th class="num">OT Hrs</th><th>Status</th></tr></thead>
+        <tbody>
+          ${dayRows.map(({ date, r, holiday, pay, hrs }) => {
+            const dow = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
+            const statusParts = [];
+            if (r) statusParts.push(r.status); else if (dow === 'Sun') statusParts.push('Rest Day');
+            if (holiday) statusParts.push(holiday.type === 'Regular' ? 'Regular Holiday' : 'Special Non-Working');
+            return `<tr>
+              <td>${fmtDate(date)}</td>
+              <td>${dow}</td>
+              <td>${r ? to12Hour(r.timeIn) : ''}</td>
+              <td>${r ? to12Hour(r.timeOut) : ''}</td>
+              <td>${r ? hrs : ''}</td>
+              <td class="num">${pay.nsdHrs ? pay.nsdHrs.toFixed(2) : ''}</td>
+              <td class="num">${pay.otHrs ? pay.otHrs.toFixed(2) : ''}</td>
+              <td>${escapeHtml(statusParts.join(' · '))}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+        <tfoot><tr>
+          <td colspan="4" style="text-align:right;font-weight:600;">Total</td>
+          <td style="font-weight:600;">${totalHours}</td>
+          <td class="num" style="font-weight:600;">${totalNsdHrs.toFixed(2)}</td>
+          <td class="num" style="font-weight:600;">${totalOtHrs.toFixed(2)}</td>
+          <td></td>
+        </tr></tfoot>
+      </table>
+
+      <div class="dtr-summary">
+        <div class="dtr-summary-title">Pay computation (per the Labor Code of the Philippines)</div>
+        <table class="dtr-table">
+          <thead><tr><th>Component</th><th>Basis</th><th class="num">Amount</th></tr></thead>
+          <tbody>
+            <tr><td>Night Shift Differential</td><td class="dim">${totalNsdHrs.toFixed(2)} hr(s) worked 10:00 PM–6:00 AM &times; 10% of hourly rate</td><td class="num">${fmtMoney(totalNsdPay)}</td></tr>
+            <tr><td>Overtime Pay</td><td class="dim">${totalOtHrs.toFixed(2)} hr(s) beyond 8/day &times; 125% ordinary / 169% special holiday / 260% regular holiday</td><td class="num">${fmtMoney(totalOtPay)}</td></tr>
+            <tr><td>Holiday Pay</td><td class="dim">200% (regular) / 130% (special) if worked; full day's pay if an unworked regular holiday</td><td class="num">${fmtMoney(totalHolidayPay)}</td></tr>
+            <tr><td style="font-weight:700;">Total NSD + OT + Holiday</td><td></td><td class="num" style="font-weight:700;">${fmtMoney(totalNsdPay + totalOtPay + totalHolidayPay)}</td></tr>
+          </tbody>
+        </table>
+        <div class="page-sub" style="margin-top:6px;">Daily-rate equivalent used for these computations: ${fmtMoney(dailyRateEq)} / day (${fmtMoney(dailyRateEq / 8)} / hour). This excludes base pay, COLA, and housing allowance — see My Payroll for full gross and net pay.</div>
+      </div>
+
+      <div class="dtr-signatures">
+        <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Employee Signature</div></div>
+        <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Supervisor / HR Signature</div></div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#dtr-close').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#dtr-print-btn').addEventListener('click', () => window.print());
+}
+
 // Every view re-renders by wholesale replacing main.innerHTML -- after saving a form,
 // requesting OT, editing a day, etc. -- which was silently resetting scroll position back
 // to the top every single time. Fixed once, system-wide, via a MutationObserver on the

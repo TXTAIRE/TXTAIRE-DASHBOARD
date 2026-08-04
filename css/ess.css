@@ -78,7 +78,7 @@
 .ess-cam-wrap video, .ess-cam-wrap img {
   width: 100%; height: 100%; object-fit: cover; display: block;
 }
-.ess-cam-wrap video { transform: scaleX(-1); } /* mirror the live feed only — natural "selfie" view. The captured photo itself (and its preview) is left unmirrored so the overlaid text reads correctly. */
+.ess-cam-wrap video { transform: scaleX(-1); } /* mirror the live feed — natural "selfie" view. The captured photo itself is also mirrored now (js/ess-views/attendance.js drawMirroredVideoFrame), so the saved photo matches this preview; only the overlaid text/logo stays unmirrored so it still reads correctly. */
 .ess-card-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; font-weight: 600; }
 .ess-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
 .ess-row:last-child { border-bottom: none; }

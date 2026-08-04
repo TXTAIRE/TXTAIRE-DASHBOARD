@@ -542,6 +542,20 @@ window.Views.attendance = (function () {
         const selectEl = qs('#att-holiday-type', bd);
         if (!selectEl.value && ctx.effective) selectEl.value = ctx.effective.type;
       });
+      // Hours auto-computes from Time In/Time Out (shared js/store.js hoursBetween, same
+      // midnight-crossing math the ESS portal uses) whenever either changes, so HR doesn't
+      // have to hand-calculate it -- the field stays a plain editable number afterward, for
+      // the rare case a break or other adjustment needs to be subtracted manually.
+      function recomputeHours() {
+        const timeIn = qs('#att-time-in', bd).value;
+        const timeOut = qs('#att-time-out', bd).value;
+        if (timeIn && timeOut) {
+          qs('input[name="hours"]', bd).value = hoursBetween(timeIn, timeOut);
+        }
+      }
+      qs('#att-time-in', bd).addEventListener('change', recomputeHours);
+      qs('#att-time-out', bd).addEventListener('change', recomputeHours);
+
       qs('#holiday-hint', bd).addEventListener('click', async (ev) => {
         const btn = ev.target.closest('[data-add-holiday]');
         if (!btn) return;

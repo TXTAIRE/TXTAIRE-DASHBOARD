@@ -52,10 +52,7 @@ window.EssViews.payroll = (function () {
     })();
 
     main.innerHTML = `
-      <div class="ess-section-title" style="margin-top:0; display:flex; justify-content:space-between; align-items:center;">
-        <span>My Payroll</span>
-        <button type="button" class="link-btn" id="btn-eye" title="${hideNumbers ? 'Show numbers' : 'Hide numbers'}" aria-label="${hideNumbers ? 'Show numbers' : 'Hide numbers'}" style="font-size:18px; line-height:1;">${hideNumbers ? '🙈' : '👁️'}</button>
-      </div>
+      <div class="ess-section-title" style="margin-top:0;">My Payroll</div>
 
       <div class="ess-card" style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 16px;">
         <button type="button" class="link-btn" id="btn-prev-cutoff">← Prev</button>
@@ -74,7 +71,8 @@ window.EssViews.payroll = (function () {
         ${release ? `<span class="badge badge-green">Released ${fmtDate(release.releasedAt.slice(0, 10))}</span>` : `<span class="badge badge-yellow">Not yet released</span>`}
       </div>
 
-      <div class="ess-card" style="text-align:center;">
+      <div class="ess-card" style="text-align:center; position:relative;">
+        <button type="button" class="link-btn" id="btn-eye" title="${hideNumbers ? 'Show numbers' : 'Hide numbers'}" aria-label="${hideNumbers ? 'Show numbers' : 'Hide numbers'}" style="position:absolute; top:16px; right:16px; font-size:18px; line-height:1;">${hideNumbers ? '🙈' : '👁️'}</button>
         <div class="ess-card-label">Net Pay</div>
         <div class="ess-big-value" style="color:var(--green);">${money(row.net)}</div>
         <div class="ess-sub">Gross ${money(row.gross)} − Tax ${money(row.tax)} − Deductions ${money(row.dedTotal)}${row.bonusTotal ? ' + Bonus ' + money(row.bonusTotal) : ''}</div>
@@ -89,7 +87,8 @@ window.EssViews.payroll = (function () {
         <div class="ess-row"><span class="label" style="${row.bonusTotal ? 'font-weight:700;' : ''}">Bonus</span><span class="value" style="${row.bonusTotal ? 'color:var(--green);' : ''}">${row.bonusTotal ? money(row.bonusTotal) : '—'}</span></div>
       </div>
 
-      <button class="btn btn-ghost btn-sm" id="btn-toggle-details" style="width:100%; justify-content:center;">${showDetails ? 'Hide' : 'View'} full details</button>
+      <button class="btn btn-ghost btn-sm" id="btn-toggle-details" style="width:100%; justify-content:center; margin-bottom:6px;">${showDetails ? 'Hide' : 'View'} full details</button>
+      <button class="btn btn-ghost btn-sm" id="btn-print-dtr" style="width:100%; justify-content:center;">🖨 View / Print DTR for this period</button>
 
       ${showDetails ? `
       <div class="ess-card" style="margin-top:12px;">
@@ -120,6 +119,7 @@ window.EssViews.payroll = (function () {
     if (btnToday) btnToday.addEventListener('click', () => { goToToday(emp); render(main, emp); });
     qsa('#seg-cutoff button', main).forEach(b => b.addEventListener('click', () => { half = b.dataset.val; render(main, emp); }));
     qs('#btn-toggle-details', main).addEventListener('click', () => { showDetails = !showDetails; render(main, emp); });
+    qs('#btn-print-dtr', main).addEventListener('click', () => openDTR(emp, selected.from, selected.to));
   }
 
   return { render };

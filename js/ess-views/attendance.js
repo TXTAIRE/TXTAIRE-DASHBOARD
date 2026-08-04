@@ -16,15 +16,35 @@ window.EssViews.attendance = (function () {
   // computeDayPay checks for 'Approved') — this renders that row's current state: a
   // Request button (only when the day is actually eligible — real night-shift hours,
   // real overtime hours, or an actual holiday), a Pending badge with Cancel, a Rejected
-  // badge with Request-again, the approved value once HR has signed off, or a plain "—"
-  // when the day was never eligible in the first place (nothing to request).
-  function requestRow(recId, statusVal, label, valueWhenApproved, kind, eligible) {
+  // badge with Request-again, the approved value with an Edit link (re-opens it for HR
+  // review — the trigger-enforced RLS policy lets an employee move their own request back
+  // to 'Requested' from any state, just never straight to Approved/Rejected themselves),
+  // or a plain "—" when the day was never eligible in the first place (nothing to request).
+  // Only OT actually rewrites the record's timeOut/hours (via openOtRequestModal) — the
+  // fields the DB trigger locks to a 24-hour edit window (enforce_employee_attendance_update
+  // in supabase/schema.sql). NSD/Holiday only ever flip their own status field, which isn't
+  // covered by that window, so they stay requestable/editable anytime. Past that window for
+  // OT, Request/Request-again/Edit are hidden — same boundary as openEditDayModal, same
+  // "use Report Attendance Concern instead" story.
+  function requestRow(rec, statusVal, label, valueWhenApproved, kind, eligible) {
+    const recId = rec.id;
+    const timeGated = kind === 'ot' && !withinEditWindow(rec);
     let action;
-    if (statusVal === 'Approved') action = `<strong>${escapeHtml(valueWhenApproved)}</strong> <span class="badge badge-green">Approved</span>`;
-    else if (statusVal === 'Requested') action = `<span class="badge badge-yellow">Pending approval</span> <button type="button" class="link-btn" data-cancel-request="${kind}" data-rec-id="${recId}">Cancel</button>`;
-    else if (statusVal === 'Rejected') action = `<span class="badge badge-red">Rejected</span> <button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Request again</button>`;
-    else if (eligible) action = `<button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Request</button>`;
-    else action = `<span class="dim">—</span>`;
+    if (statusVal === 'Approved') {
+      action = `<strong>${escapeHtml(valueWhenApproved)}</strong> <span class="badge badge-green">Approved</span>` +
+        (timeGated ? '' : ` <button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Edit</button>`);
+    } else if (statusVal === 'Requested') {
+      action = `<span class="badge badge-yellow">Pending approval</span> <button type="button" class="link-btn" data-cancel-request="${kind}" data-rec-id="${recId}">Cancel</button>`;
+    } else if (statusVal === 'Rejected') {
+      action = `<span class="badge badge-red">Rejected</span>` +
+        (timeGated ? '' : ` <button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Request again</button>`);
+    } else if (eligible) {
+      action = timeGated
+        ? `<span class="dim" title="More than 24 hours old — use Report Attendance Concern instead">—</span>`
+        : `<button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Request</button>`;
+    } else {
+      action = `<span class="dim">—</span>`;
+    }
     return `<div class="ess-row"><span class="label">${label}</span><span class="value">${action}</span></div>`;
   }
 
@@ -45,9 +65,9 @@ window.EssViews.attendance = (function () {
         <div class="ess-row"><span class="label">Time Out</span><span class="value">${rec.timeOut ? to12Hour(rec.timeOut) : '—'} ${rec.timeOut ? `<button class="link-btn" data-manage-photo="out" data-rec-id="${rec.id}" title="Edit or delete photo">⋯</button>` : ''}</span></div>
         <div class="ess-row"><span class="label">Hours</span><span class="value">${rec.hours}</span></div>
         <div class="ess-row"><span class="label">Status</span><span class="value">${escapeHtml(rec.status)}</span></div>
-        ${requestRow(rec.id, rec.nsdStatus, 'Night Shift Diff.', pay.nsdHrs.toFixed(2) + ' hr', 'nsd', nsdRawHrs > 0)}
-        ${requestRow(rec.id, rec.otStatus, 'Overtime', pay.otHrs.toFixed(2) + ' hr', 'ot', true)}
-        ${requestRow(rec.id, rec.holidayStatus, holidayLabel, fmtMoney(pay.holidayPay), 'holiday', !!holiday)}
+        ${requestRow(rec, rec.nsdStatus, 'Night Shift Diff.', pay.nsdHrs.toFixed(2) + ' hr', 'nsd', nsdRawHrs > 0)}
+        ${requestRow(rec, rec.otStatus, 'Overtime', pay.otHrs.toFixed(2) + ' hr', 'ot', true)}
+        ${requestRow(rec, rec.holidayStatus, holidayLabel, fmtMoney(pay.holidayPay), 'holiday', !!holiday)}
         ${Number(rec.hours) < 8 ? `<div class="ess-row"><span class="label">Undertime</span><span class="value">${(8 - Number(rec.hours)).toFixed(2)} hr</span></div>` : ''}
         ` : `<div class="ess-sub">Not logged${holiday ? ' · ' + escapeHtml(holiday.name) : ''}</div>`}
       </div>
@@ -125,7 +145,7 @@ window.EssViews.attendance = (function () {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        drawMirroredVideoFrame(ctx, video, canvas.width, canvas.height);
         drawOverlay(ctx, canvas.width, canvas.height, emp, locationText);
         showReplacePreview(bdEl, canvas, main, emp, rec, kind, stream, locationText);
       });
@@ -157,7 +177,7 @@ window.EssViews.attendance = (function () {
       qs('#btn-capture', bdEl).addEventListener('click', () => {
         const ctx = canvas.getContext('2d');
         canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        drawMirroredVideoFrame(ctx, video, canvas.width, canvas.height);
         drawOverlay(ctx, canvas.width, canvas.height, emp, locationText);
         showReplacePreview(bdEl, canvas, main, emp, rec, kind, stream, locationText);
       });
@@ -475,6 +495,20 @@ window.EssViews.attendance = (function () {
     if (stream) stream.getTracks().forEach(t => t.stop());
   }
 
+  // The live preview is mirrored (css/ess.css .ess-cam-wrap video { transform: scaleX(-1) })
+  // so it feels like a normal selfie camera -- but the captured frame used to be drawn
+  // unmirrored, so the saved photo never matched what the employee just saw and confirmed.
+  // Mirroring the actual pixels here (before drawOverlay stamps text on top) makes the
+  // saved/uploaded photo match the live preview one-to-one; the overlay text/logo is drawn
+  // afterward in the untransformed context so it still reads correctly, not flipped.
+  function drawMirroredVideoFrame(ctx, video, w, h) {
+    ctx.save();
+    ctx.translate(w, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, w, h);
+    ctx.restore();
+  }
+
   // Matches the on-screen camera box to the actual camera's native aspect ratio, instead
   // of a fixed portrait crop -- a phone's front camera is naturally portrait-ish, while a
   // laptop/desktop webcam is landscape, so hardcoding one ratio cropped whichever device
@@ -491,13 +525,6 @@ window.EssViews.attendance = (function () {
     };
     if (video.videoWidth) apply();
     else video.addEventListener('loadedmetadata', apply, { once: true });
-  }
-
-  function hoursBetween(timeIn, timeOut) {
-    const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-    let start = toMin(timeIn), end = toMin(timeOut);
-    if (end <= start) end += 1440; // crosses midnight
-    return Math.round(((end - start) / 60) * 100) / 100;
   }
 
   // Original brand mark, preloaded once so it's ready by the time a photo is captured.
@@ -800,7 +827,7 @@ window.EssViews.attendance = (function () {
       qs('#btn-capture', bdEl).addEventListener('click', () => {
         const ctx = canvas.getContext('2d');
         canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        drawMirroredVideoFrame(ctx, video, canvas.width, canvas.height);
         drawOverlay(ctx, canvas.width, canvas.height, emp, locationText);
         showPreview(bdEl, canvas, main, emp, kind, stream, locationText);
       });
@@ -897,7 +924,7 @@ window.EssViews.attendance = (function () {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        drawMirroredVideoFrame(ctx, video, canvas.width, canvas.height);
         drawOverlay(ctx, canvas.width, canvas.height, emp, locationText);
         showPreview(bdEl, canvas, main, emp, kind, stream, locationText);
       });
