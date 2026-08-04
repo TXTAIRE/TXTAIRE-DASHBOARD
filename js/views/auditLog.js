@@ -15,7 +15,7 @@ window.Views.auditLog = (function () {
 
   function renderList(main) {
     const rows = Store.listAuditLog().slice(0, 300);
-    const retentionDays = Number(Store.getAppSetting('auditLogRetentionDays', 30));
+    const retentionDays = Number(Store.getAppSetting('auditLogRetentionDays', 7));
 
     main.innerHTML = `
       <div class="crumb">HR</div>

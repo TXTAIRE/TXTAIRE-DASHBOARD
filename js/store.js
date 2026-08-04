@@ -829,12 +829,12 @@ const Store = (function () {
   // ---- Audit Log (read-only in the app; populated automatically by insertRow/updateRow/deleteRow) ----
   function listAuditLog() { return state.auditLog.slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')); }
 
-  // Deletes any auditLog row older than the configured retention window (default 30 days
+  // Deletes any auditLog row older than the configured retention window (default 7 days
   // if HR has never set one) -- called opportunistically whenever an admin opens the
   // Audit Log view. There's no server-side cron in this app, so "after 7/30 days" is
   // enforced the next time someone actually looks, not on a strict schedule.
   async function purgeOldAuditLog() {
-    const days = Number(getAppSetting('auditLogRetentionDays', 30));
+    const days = Number(getAppSetting('auditLogRetentionDays', 7));
     const cutoff = new Date(Date.now() - days * 86400000).toISOString();
     const stale = state.auditLog.filter(a => (a.created_at || '') < cutoff);
     if (!stale.length) return 0;
