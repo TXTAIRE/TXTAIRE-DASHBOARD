@@ -45,7 +45,7 @@ function openEssModal(innerHtml, onMount) {
   return bd;
 }
 
-const ESS_ROUTES = ['attendance', 'payroll', 'leave', 'profile', 'notifications'];
+const ESS_ROUTES = ['attendance', 'payroll', 'leave', 'profile', 'notifications', 'settings'];
 let essRoute = 'attendance';
 let myEmployee = null;
 
