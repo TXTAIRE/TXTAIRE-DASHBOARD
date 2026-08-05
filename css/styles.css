@@ -286,6 +286,12 @@ html, body {
   transition: border-color 0.15s, transform 0.1s;
 }
 .file-folder-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.file-folder-card.drag-over,
+#folder-dropzone.drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  background: var(--accent-dim, rgba(79,141,255,0.08));
+}
 .file-folder-icon { font-size: 34px; line-height: 1; margin-bottom: 8px; }
 .file-folder-name { font-size: 13px; font-weight: 600; word-break: break-word; }
 .file-folder-count { font-size: 11.5px; color: var(--text-faint); margin-top: 4px; }
