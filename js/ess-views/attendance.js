@@ -65,8 +65,8 @@ window.EssViews.attendance = (function () {
           ${rec && editable ? `<button type="button" class="link-btn" data-edit-day="${rec.id}" title="Edit or delete this day's attendance">✏️ Edit</button>` : ''}
         </div>
         ${rec ? `
-        <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(rec.timeIn)} ✅ <button class="link-btn" data-manage-photo="in" data-rec-id="${rec.id}" title="Edit or delete photo">⋯</button></span></div>
-        <div class="ess-row"><span class="label">Time Out</span><span class="value">${rec.timeOut ? to12Hour(rec.timeOut) : '—'} ${rec.timeOut ? `<button class="link-btn" data-manage-photo="out" data-rec-id="${rec.id}" title="Edit or delete photo">⋯</button>` : ''}</span></div>
+        <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(rec.timeIn)} ✅ ${editable ? `<button class="link-btn" data-manage-photo="in" data-rec-id="${rec.id}" title="Edit or delete photo">⋯</button>` : ''}</span></div>
+        <div class="ess-row"><span class="label">Time Out</span><span class="value">${rec.timeOut ? to12Hour(rec.timeOut) : '—'} ${rec.timeOut && editable ? `<button class="link-btn" data-manage-photo="out" data-rec-id="${rec.id}" title="Edit or delete photo">⋯</button>` : ''}</span></div>
         <div class="ess-row"><span class="label">Hours</span><span class="value">${rec.hours}</span></div>
         <div class="ess-row"><span class="label">Status</span><span class="value">${escapeHtml(rec.status)}</span></div>
         ${requestRow(rec, rec.nsdStatus, 'Night Shift Diff.', pay.nsdHrs.toFixed(2) + ' hr', 'nsd', nsdRawHrs > 0)}
@@ -243,8 +243,8 @@ window.EssViews.attendance = (function () {
       </div>
       <div class="ess-card">
         ${todayRec ? `
-        <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(todayRec.timeIn)} ✅ <button class="link-btn" data-manage-photo="in" data-rec-id="${todayRec.id}" title="Edit or delete photo">⋯</button></span></div>
-        <div class="ess-row"><span class="label">Time Out</span><span class="value">${todayRec.timeOut ? to12Hour(todayRec.timeOut) + ' ✅' : '—'} ${todayRec.timeOut ? `<button class="link-btn" data-manage-photo="out" data-rec-id="${todayRec.id}" title="Edit or delete photo">⋯</button>` : ''}</span></div>
+        <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(todayRec.timeIn)} ✅ ${withinEditWindow(todayRec) ? `<button class="link-btn" data-manage-photo="in" data-rec-id="${todayRec.id}" title="Edit or delete photo">⋯</button>` : ''}</span></div>
+        <div class="ess-row"><span class="label">Time Out</span><span class="value">${todayRec.timeOut ? to12Hour(todayRec.timeOut) + ' ✅' : '—'} ${todayRec.timeOut && withinEditWindow(todayRec) ? `<button class="link-btn" data-manage-photo="out" data-rec-id="${todayRec.id}" title="Edit or delete photo">⋯</button>` : ''}</span></div>
         <div class="ess-row"><span class="label">Status</span><span class="value">${escapeHtml(todayRec.status)}</span></div>
         ` : `<div class="ess-sub">No attendance logged yet for today.</div>`}
       </div>

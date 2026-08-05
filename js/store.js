@@ -10,7 +10,7 @@
 
 window.Views = window.Views || {};
 
-const CATEGORIES = ['Admin', 'Technician'];
+const CATEGORIES = ['Admin', 'Technician', 'Executive / Management'];
 
 const STAGES_STANDARD = ['Screening', 'Phone Interview', 'Face-to-Face Interview', '3-Day Trade Test', 'Evaluation', 'Decision'];
 const STAGES_TECHNICIAN = ['Screening', 'Phone Interview', 'Candidate Agreement', '7-Day Trade Test', 'Evaluation', 'Decision'];
@@ -860,6 +860,15 @@ const Store = (function () {
     }
     return getAttendanceCorrection(id);
   }
+  // Lets HR add or update notes on a correction independent of an Approve/Reject decision,
+  // same pattern as Store.updateLeaveRequestNotes.
+  async function updateAttendanceCorrectionNotes(id, notes) {
+    await updateRow('attendanceCorrections', id, { reviewNotes: notes || '' });
+    return getAttendanceCorrection(id);
+  }
+  async function deleteAttendanceCorrection(id) {
+    await deleteRow('attendanceCorrections', id);
+  }
 
   // ---- Audit Log (read-only in the app; populated automatically by insertRow/updateRow/deleteRow) ----
   function listAuditLog() { return state.auditLog.slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')); }
@@ -1095,7 +1104,7 @@ const Store = (function () {
     listHolidays, getHoliday, holidaysInRange, addHoliday, updateHoliday, deleteHoliday,
     listPayCutoffSettings, getPayCutoffSetting, updatePayCutoffSetting,
     listLeaveRequests, getLeaveRequest, leaveRequestsForEmployee, addLeaveRequest, reviewLeaveRequest, updateLeaveRequestNotes, updateLeaveRequest, deleteLeaveRequest,
-    listAttendanceCorrections, getAttendanceCorrection, attendanceCorrectionsForEmployee, addAttendanceCorrection, reviewAttendanceCorrection,
+    listAttendanceCorrections, getAttendanceCorrection, attendanceCorrectionsForEmployee, addAttendanceCorrection, reviewAttendanceCorrection, updateAttendanceCorrectionNotes, deleteAttendanceCorrection,
     listAuditLog, purgeOldAuditLog,
     createNotification, listNotificationsForEmployee, unreadNotificationCount, markNotificationRead, markAllNotificationsRead, deleteNotification,
     getPayrollRelease, releasePayroll,

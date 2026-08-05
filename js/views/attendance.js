@@ -162,8 +162,12 @@ window.Views.attendance = (function () {
 
   function renderDailyTab(body, main) {
     const employees = Store.listEmployees().filter(e => e.status !== 'Terminated').sort((a, b) => a.name.localeCompare(b.name));
-    const admins = employees.filter(e => e.category === 'Admin');
-    const technicians = employees.filter(e => e.category === 'Technician');
+    // Grouped generically off the shared CATEGORIES list (js/store.js) rather than two
+    // hardcoded Admin/Technician buckets, so any staff in a newer category (e.g.
+    // "Executive / Management") still gets their own section instead of silently
+    // disappearing from this table.
+    const groups = CATEGORIES.map(c => ({ category: c, list: employees.filter(e => e.category === c) }))
+      .filter(g => filterCategory === 'All' || filterCategory === g.category);
     const records = Store.attendanceForDate(selectedDate);
     const recByEmp = {};
     records.forEach(r => { recByEmp[r.employeeId] = r; });
@@ -186,15 +190,10 @@ window.Views.attendance = (function () {
 
       <div class="page-sub" style="margin-bottom:10px;">${employees.length} staff members · ${present} on shift on ${fmtDate(selectedDate)}</div>
 
-      ${filterCategory === 'All' || filterCategory === 'Admin' ? `
-      <div class="section-title" style="margin-top:0;">Admins <span class="dim" style="font-weight:400;">(${admins.length})</span></div>
-      <div class="panel">${attendanceTable(admins, recByEmp)}</div>
-      ` : ''}
-
-      ${filterCategory === 'All' || filterCategory === 'Technician' ? `
-      <div class="section-title" ${filterCategory === 'Technician' ? 'style="margin-top:0;"' : ''}>Technicians <span class="dim" style="font-weight:400;">(${technicians.length})</span></div>
-      <div class="panel">${attendanceTable(technicians, recByEmp)}</div>
-      ` : ''}
+      ${groups.map((g, i) => `
+        <div class="section-title" ${i === 0 ? 'style="margin-top:0;"' : ''}>${escapeHtml(g.category)} <span class="dim" style="font-weight:400;">(${g.list.length})</span></div>
+        <div class="panel">${attendanceTable(g.list, recByEmp)}</div>
+      `).join('')}
     `;
 
     qsa('#seg-category button', body).forEach(b => b.addEventListener('click', () => { filterCategory = b.dataset.val; renderDailyTab(body, main); }));
