@@ -34,7 +34,10 @@ window.EssViews.profile = (function () {
       <button type="button" class="btn btn-ghost btn-sm" id="btn-edit-profile" style="width:100%; justify-content:center; margin-bottom:6px;">✏️ Edit Profile</button>
       <div class="ess-sub" style="text-align:center; margin-bottom:14px;">Employee ID, category, status, and pay details can only be changed by HR.</div>
 
-      <div class="ess-section-title">Employment History</div>
+      <div class="ess-section-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Employment History</span>
+        <button type="button" class="link-btn" id="btn-add-history" title="Add entry">✏️</button>
+      </div>
       ${history.length ? history.map(h => `
         <div class="ess-card" data-history-id="${h.id}">
           <div class="ess-row" style="align-items:flex-start;">
@@ -81,6 +84,7 @@ window.EssViews.profile = (function () {
     }
 
     qs('#btn-edit-profile', main).addEventListener('click', () => openEditProfile(main, emp));
+    qs('#btn-add-history', main).addEventListener('click', () => openEmploymentHistoryForm(main, emp));
     qsa('[data-edit-history]', main).forEach(b => b.addEventListener('click', () => {
       const h = history.find(x => x.id === b.dataset.editHistory);
       if (h) openEmploymentHistoryForm(main, emp, h);
