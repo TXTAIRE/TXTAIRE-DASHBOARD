@@ -52,6 +52,7 @@ window.EssViews.notifications = (function () {
     }));
     qsa('[data-delete-notif]', main).forEach(btn => btn.addEventListener('click', async (ev) => {
       ev.stopPropagation(); // don't also trigger the card's mark-as-read click
+      if (!confirm('Are you sure you want to delete this notification?')) return;
       await Store.deleteNotification(btn.dataset.deleteNotif);
       updateEssBellBadge();
       render(main, emp);
