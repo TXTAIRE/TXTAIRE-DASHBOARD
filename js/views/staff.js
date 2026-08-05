@@ -127,6 +127,7 @@ window.Views.staff = (function () {
           <div class="tl-title">${escapeHtml(h.position)}${h.rate ? ' — ' + fmtMoney(h.rate) + (h.payType === 'Daily' ? ' / day' : ' / cutoff') : ''}</div>
           <div class="tl-meta">${fmtDate(h.effectiveDate)}${h.reason ? ' · ' + escapeHtml(h.reason) : ''}</div>
           ${h.notes ? `<div class="page-sub" style="margin-top:2px;">${escapeHtml(h.notes)}</div>` : ''}
+          <button class="link-btn" data-edit-history="${h.id}" style="font-size:11px; margin-top:2px;">Edit</button>
           <button class="link-btn" data-del-history="${h.id}" style="font-size:11px; margin-top:2px;">Delete</button>
         </div></div>
       `).join('')}</div>` : '<div class="page-sub">No employment history logged yet — current position/rate above is all that\'s on file.</div>'}
@@ -199,6 +200,10 @@ window.Views.staff = (function () {
         }
       });
       qs('#btn-add-history', dr).addEventListener('click', () => openEmploymentHistoryForm(main, e));
+      qsa('[data-edit-history]', dr).forEach(b => b.addEventListener('click', () => {
+        const h = history.find(x => x.id === b.dataset.editHistory);
+        if (h) openEmploymentHistoryForm(main, e, h);
+      }));
       qsa('[data-del-history]', dr).forEach(b => b.addEventListener('click', async () => {
         if (!confirm('Delete this employment history entry?')) return;
         await Store.deleteEmploymentHistory(b.dataset.delHistory);
@@ -221,46 +226,54 @@ window.Views.staff = (function () {
     });
   }
 
-  // Position/salary change log -- purely additive (never edits the employee's current
-  // rate/position, which still lives on the employee record itself and is changed via the
-  // normal Edit Employee form) -- this is just the historical trail of how it got there.
-  function openEmploymentHistoryForm(main, e) {
+  // Position/salary change log. Entries are also created automatically (see
+  // openEmployeeModal's submit handler below, which detects a position/rate change and
+  // logs it here) whenever HR promotes/adjusts someone through the normal Edit Employee
+  // form -- this form is for adding an entry by hand (e.g. backfilling old history) or,
+  // via the drawer's "Edit" link, correcting an existing one. Never touches the
+  // employee's actual current record.
+  function openEmploymentHistoryForm(main, e, existing) {
+    const h = existing || { effectiveDate: todayISO(), reason: 'Promotion', position: e.position, payType: e.payType, rate: e.rate, notes: '' };
     openModal(`
-      <h2>Add Employment History Entry</h2>
+      <h2>${existing ? 'Edit' : 'Add'} Employment History Entry</h2>
       <div class="modal-sub">${escapeHtml(e.name)} — logs a position/salary change; doesn't affect the employee's current record above.</div>
       <form id="history-form">
         <div class="modal-grid">
-          <div class="field"><label>Effective date</label><input type="date" name="effectiveDate" value="${todayISO()}" required /></div>
+          <div class="field"><label>Effective date</label><input type="date" name="effectiveDate" value="${h.effectiveDate}" required /></div>
           <div class="field"><label>Reason</label>
-            <select name="reason">${['New Hire', 'Promotion', 'Salary Adjustment', 'Transfer', 'Other'].map(r => `<option>${r}</option>`).join('')}</select>
+            <select name="reason">${['New Hire', 'Promotion', 'Salary Adjustment', 'Transfer', 'Other'].map(r => `<option ${r === h.reason ? 'selected' : ''}>${r}</option>`).join('')}</select>
           </div>
-          <div class="field full"><label>Position</label><input name="position" required value="${escapeHtml(e.position)}" /></div>
+          <div class="field full"><label>Position</label><input name="position" required value="${escapeHtml(h.position)}" /></div>
           <div class="field"><label>Pay type</label>
-            <select name="payType">${['Monthly', 'Daily'].map(p => `<option ${p === e.payType ? 'selected' : ''}>${p}</option>`).join('')}</select>
+            <select name="payType">${['Monthly', 'Daily'].map(p => `<option ${p === h.payType ? 'selected' : ''}>${p}</option>`).join('')}</select>
           </div>
-          <div class="field"><label>Rate (PHP)</label><input type="number" name="rate" min="0" step="0.01" value="${e.rate || ''}" /></div>
-          <div class="field full"><label>Notes</label><textarea name="notes" rows="2"></textarea></div>
+          <div class="field"><label>Rate (PHP)</label><input type="number" name="rate" min="0" step="0.01" value="${h.rate || ''}" /></div>
+          <div class="field full"><label>Notes</label><textarea name="notes" rows="2">${escapeHtml(h.notes || '')}</textarea></div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
-          <button type="submit" class="btn btn-primary">Add entry</button>
+          <button type="submit" class="btn btn-primary">${existing ? 'Save changes' : 'Add entry'}</button>
         </div>
       </form>
     `, (bd) => {
       qs('#history-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
-        await Store.addEmploymentHistory({
-          employeeId: e.id,
+        const patch = {
           effectiveDate: fd.get('effectiveDate'),
           reason: fd.get('reason'),
           position: fd.get('position').trim(),
-          category: e.category,
           payType: fd.get('payType'),
           rate: Number(fd.get('rate')) || 0,
           notes: fd.get('notes').trim(),
-        });
-        toast('✔ Employment history entry added.');
+        };
+        if (existing) {
+          await Store.updateEmploymentHistory(existing.id, patch);
+          toast('✔ Employment history entry updated.');
+        } else {
+          await Store.addEmploymentHistory(Object.assign({ employeeId: e.id, category: e.category }, patch));
+          toast('✔ Employment history entry added.');
+        }
         closeModal();
         openEmployeeDetail(main, e.id);
       });
@@ -474,7 +487,28 @@ window.Views.staff = (function () {
           notes: fd.get('notes').trim(),
         };
         if (editing) {
+          // Auto-detect a promotion/salary adjustment: if position or rate actually
+          // changed, log it to Employment History automatically (with the previous
+          // position/rate for context) instead of requiring HR to separately remember to
+          // add an entry — the manual "+ Add entry" form still exists for backfilling or
+          // correcting old history.
+          const positionChanged = patch.position !== editing.position;
+          const rateChanged = Number(patch.rate) !== Number(editing.rate || 0);
+          const payTypeChanged = patch.payType !== editing.payType;
           await Store.updateEmployee(editing.id, patch);
+          if (positionChanged || rateChanged || payTypeChanged) {
+            const prevRateText = editing.rate ? fmtMoney(editing.rate) + (editing.payType === 'Daily' ? ' / day' : ' / cutoff') : 'no rate on file';
+            await Store.addEmploymentHistory({
+              employeeId: editing.id,
+              category: patch.category,
+              effectiveDate: todayISO(),
+              reason: positionChanged ? 'Promotion' : 'Salary Adjustment',
+              position: patch.position,
+              payType: patch.payType,
+              rate: patch.rate,
+              notes: `Auto-logged — previously ${editing.position} (${prevRateText}).`,
+            });
+          }
           toast('Employee updated.');
         } else {
           await Store.addEmployee(patch);

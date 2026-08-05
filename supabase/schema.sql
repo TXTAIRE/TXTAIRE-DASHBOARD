@@ -1776,3 +1776,12 @@ create policy "admin full access to 201 documents" on storage.objects
   for all to authenticated
   using (bucket_id = 'employee-201' and is_admin())
   with check (bucket_id = 'employee-201' and is_admin());
+
+-- =================================================================
+-- Let employees delete their own notifications -- incremental migration. Run once
+-- against a database that already has the migrations above applied. Safe to re-run.
+-- =================================================================
+
+drop policy if exists "employee deletes own notifications" on notifications;
+create policy "employee deletes own notifications" on notifications
+  for delete to authenticated using ("employeeId" = my_employee_id());

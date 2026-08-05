@@ -721,6 +721,9 @@ const Store = (function () {
     rec.id = genId('eh');
     return insertRow('employmentHistory', rec);
   }
+  async function updateEmploymentHistory(id, patch) {
+    await updateRow('employmentHistory', id, patch);
+  }
   async function deleteEmploymentHistory(id) {
     await deleteRow('employmentHistory', id);
   }
@@ -896,6 +899,9 @@ const Store = (function () {
   async function markAllNotificationsRead(employeeId) {
     const unread = state.notifications.filter(n => n.employeeId === employeeId && !n.readAt);
     await Promise.all(unread.map(n => markNotificationRead(n.id)));
+  }
+  async function deleteNotification(id) {
+    await deleteRow('notifications', id);
   }
 
   // ---- Payroll Releases (marks a pay-group cutoff as actually paid) ----
@@ -1084,14 +1090,14 @@ const Store = (function () {
     listDeductions, deductionsInRange, addDeduction, deleteDeduction,
     listBonuses, bonusesInRange, addBonus, deleteBonus,
     listProbations, getProbation, getProbationByEmployee, addProbation, updateProbation, deleteProbation,
-    employmentHistoryForEmployee, addEmploymentHistory, deleteEmploymentHistory,
+    employmentHistoryForEmployee, addEmploymentHistory, updateEmploymentHistory, deleteEmploymentHistory,
     getPayrollOverride, setPayrollOverride,
     listHolidays, getHoliday, holidaysInRange, addHoliday, updateHoliday, deleteHoliday,
     listPayCutoffSettings, getPayCutoffSetting, updatePayCutoffSetting,
     listLeaveRequests, getLeaveRequest, leaveRequestsForEmployee, addLeaveRequest, reviewLeaveRequest, updateLeaveRequestNotes, updateLeaveRequest, deleteLeaveRequest,
     listAttendanceCorrections, getAttendanceCorrection, attendanceCorrectionsForEmployee, addAttendanceCorrection, reviewAttendanceCorrection,
     listAuditLog, purgeOldAuditLog,
-    createNotification, listNotificationsForEmployee, unreadNotificationCount, markNotificationRead, markAllNotificationsRead,
+    createNotification, listNotificationsForEmployee, unreadNotificationCount, markNotificationRead, markAllNotificationsRead, deleteNotification,
     getPayrollRelease, releasePayroll,
     getAppSetting, setAppSetting,
     listExpenses, getExpense, expensesInRange, addExpense, updateExpense, deleteExpense,

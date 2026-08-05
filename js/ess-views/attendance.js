@@ -912,16 +912,26 @@ window.EssViews.attendance = (function () {
     toast('✔ You\'ve already completed today\'s attendance.');
   }
 
+  // GPS is mandatory for the actual Time In/Time Out clock action (not for replacing a
+  // photo on an existing record, see openReplaceCapture) -- the Capture button stays
+  // disabled until both the camera AND a real location fix (coordsText non-empty) are
+  // ready, with a Retry affordance if location fails/denies/times out. Reverse geocoding
+  // (locationInfo.text) is still just best-effort city/region -- only coordsText, the
+  // actual device GPS reading, gates capture.
   function openCameraCapture(main, emp, kind) {
     let stream = null;
+    let cameraReady = false;
+    let locationResult = null;
+    let locationFailed = false;
 
     openEssModal(`
       <h2>${kind === 'in' ? 'Time In' : 'Time Out'}</h2>
-      <div class="modal-sub">Center your face in the frame, then capture.</div>
+      <div class="modal-sub">Center your face in the frame, then capture. Location access is required to Time In/Out.</div>
       <div class="ess-cam-wrap">
         <video id="cam-video" autoplay playsinline muted></video>
         <canvas id="cam-canvas" style="display:none;"></canvas>
       </div>
+      <div id="loc-status" class="ess-sub" style="margin-bottom:10px;"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
         <button type="button" class="btn btn-primary" id="btn-capture" disabled>Starting camera…</button>
@@ -931,29 +941,58 @@ window.EssViews.attendance = (function () {
       const video = qs('#cam-video', bdEl);
       const canvas = qs('#cam-canvas', bdEl);
       const captureBtn = qs('#btn-capture', bdEl);
+      const locStatus = qs('#loc-status', bdEl);
 
-      const locPromise = bestEffortLocation();
+      function refreshCaptureButton() {
+        if (!cameraReady) { captureBtn.disabled = true; captureBtn.textContent = 'Starting camera…'; return; }
+        if (!locationResult) {
+          captureBtn.disabled = true;
+          captureBtn.textContent = locationFailed ? 'Location required' : 'Getting your location…';
+          return;
+        }
+        captureBtn.disabled = false;
+        captureBtn.textContent = 'Capture';
+      }
+
+      function tryGetLocation() {
+        locationFailed = false;
+        locationResult = null;
+        locStatus.innerHTML = '📍 Getting your location…';
+        refreshCaptureButton();
+        bestEffortLocation().then((loc) => {
+          if (loc && loc.coordsText) {
+            locationResult = loc;
+            locStatus.innerHTML = `📍 Location captured${loc.text ? ' — ' + escapeHtml(loc.text) : ''}`;
+          } else {
+            locationFailed = true;
+            locStatus.innerHTML = '⚠️ Location access is required to Time In/Out. Enable location services for this browser/device, then <button type="button" class="link-btn" id="btn-retry-location">Retry</button>.';
+            locStatus.style.color = 'var(--red)';
+            qs('#btn-retry-location', bdEl).addEventListener('click', tryGetLocation);
+          }
+          refreshCaptureButton();
+        });
+      }
+      tryGetLocation();
 
       navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false }).then((s) => {
         stream = s;
         video.srcObject = stream;
         fitCamWrapToStream(bdEl, video);
-        captureBtn.disabled = false;
-        captureBtn.textContent = 'Capture';
+        cameraReady = true;
+        refreshCaptureButton();
       }).catch(() => {
         captureBtn.textContent = 'Camera unavailable';
         toast('Could not access the camera — check your browser/device permissions.');
       });
 
-      captureBtn.addEventListener('click', async () => {
-        if (!stream) return;
-        const locationText = await locPromise;
+      captureBtn.addEventListener('click', () => {
+        if (!stream || !locationResult) return;
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
         drawMirroredVideoFrame(ctx, video, canvas.width, canvas.height);
-        drawOverlay(ctx, canvas.width, canvas.height, emp, locationText);
-        showPreview(bdEl, canvas, main, emp, kind, stream, locationText);
+        drawOverlay(ctx, canvas.width, canvas.height, emp, locationResult);
+        showPreview(bdEl, canvas, main, emp, kind, stream, locationResult);
       });
     });
   }

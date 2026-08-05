@@ -34,6 +34,7 @@ window.EssViews.notifications = (function () {
             <div style="font-size:13.5px; ${n.readAt ? '' : 'font-weight:700;'}">${escapeHtml(n.message)}</div>
             <div class="ess-sub" style="margin-top:4px;">${relativeTime(n.created_at)}</div>
           </span>
+          <button type="button" class="link-btn" data-delete-notif="${n.id}" title="Delete notification" style="color:var(--red); font-size:16px; line-height:1; padding:2px;">✕</button>
         </div>
       `).join('') : '<div class="ess-empty">No notifications yet.</div>'}
     `;
@@ -46,6 +47,12 @@ window.EssViews.notifications = (function () {
     });
     qsa('[data-notif-id]', main).forEach(el => el.addEventListener('click', async () => {
       await Store.markNotificationRead(el.dataset.notifId);
+      updateEssBellBadge();
+      render(main, emp);
+    }));
+    qsa('[data-delete-notif]', main).forEach(btn => btn.addEventListener('click', async (ev) => {
+      ev.stopPropagation(); // don't also trigger the card's mark-as-read click
+      await Store.deleteNotification(btn.dataset.deleteNotif);
       updateEssBellBadge();
       render(main, emp);
     }));
