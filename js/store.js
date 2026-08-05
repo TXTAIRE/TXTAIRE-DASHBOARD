@@ -125,6 +125,17 @@ const DOCUMENT_CATEGORIES = [
   'Birth Certificate', 'Resume/CV', 'Diploma/TOR', 'Other',
 ];
 
+// Government-recognized Philippine valid IDs -- shown as a second "ID Type" field only when
+// category === 'Valid ID', so the 201 File records which specific ID was submitted instead of
+// just the generic category. Same list on the admin Employees drawer and My Portal -> My Profile.
+const PH_VALID_ID_TYPES = [
+  'Philippine Passport', 'PhilSys National ID (ePhilID)', "Driver's License (LTO)",
+  'UMID', 'SSS ID', 'GSIS eCard', 'PRC ID', "Voter's ID / COMELEC Certificate",
+  'Postal ID', 'TIN ID', 'PhilHealth ID', 'Pag-IBIG Loyalty Card Plus',
+  'Senior Citizen ID', 'PWD ID', 'OFW ID', 'ACR I-Card (Alien Certificate of Registration)',
+  'Company ID', 'Other',
+];
+
 const DEFAULT_CUTOFF_SETTINGS = {
   '10-20': { cutoffAEndDay: 3, paydayADay: 5, cutoffBEndDay: 18, paydayBDay: 20 },
   '15-30': { cutoffAEndDay: 10, paydayADay: 15, cutoffBEndDay: 25, paydayBDay: 30 },
@@ -1051,13 +1062,14 @@ const Store = (function () {
   function employeeDocumentsForEmployee(employeeId) {
     return state.employeeDocuments.filter(d => d.employeeId === employeeId).slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   }
-  async function uploadEmployeeDocument(employeeId, file, category, uploadedBy) {
+  async function uploadEmployeeDocument(employeeId, file, category, uploadedBy, idType) {
     const ext = (file.name && file.name.split('.').pop()) || 'dat';
     const path = `${employeeId}/${genId('doc')}.${ext}`;
     const { error: upErr } = await sb.storage.from('employee-201').upload(path, file, { contentType: file.type || 'application/octet-stream' });
     if (upErr) { toast('File upload failed: ' + upErr.message); throw upErr; }
     return insertRow('employeeDocuments', {
       id: genId('ed'), employeeId, category: category || 'Other',
+      idType: category === 'Valid ID' ? (idType || null) : null,
       fileName: file.name, filePath: path,
       mimeType: file.type || null, fileSize: file.size || null,
       uploadedBy: uploadedBy || null, status: 'Pending',

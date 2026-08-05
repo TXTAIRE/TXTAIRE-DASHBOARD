@@ -1709,6 +1709,7 @@ create table if not exists "employeeDocuments" (
   id text primary key,
   "employeeId" text not null references employees(id) on delete cascade,
   category text not null default 'Other',      -- 'Valid ID' | 'SSS' | 'PhilHealth' | 'Pag-IBIG' | 'TIN' | 'NBI Clearance' | 'Birth Certificate' | 'Resume/CV' | 'Diploma/TOR' | 'Other'
+  "idType" text,                                -- only set when category = 'Valid ID' -- which PH government ID was submitted (Passport, UMID, Driver's License, etc.)
   "fileName" text not null,
   "filePath" text not null,
   "mimeType" text,
@@ -1803,3 +1804,11 @@ drop policy if exists "employee deletes own attendance" on attendance;
 create policy "employee deletes own attendance" on attendance
   for delete to authenticated
   using ("employeeId" = my_employee_id() and now() - created_at <= interval '24 hours');
+
+-- =================================================================
+-- Track which specific Philippine valid ID was submitted for a 201 File "Valid ID"
+-- upload (Passport, UMID, Driver's License, etc.) -- incremental migration. Run once
+-- against a database that already has the migrations above applied. Safe to re-run.
+-- =================================================================
+
+alter table "employeeDocuments" add column if not exists "idType" text;

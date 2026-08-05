@@ -51,7 +51,7 @@ window.EssViews.profile = (function () {
       <div class="ess-sub" style="margin-bottom:10px;">Valid ID, SSS, PhilHealth, Pag-IBIG, TIN, and other requirements. HR reviews each upload.</div>
       ${docs.length ? docs.map(d => `
         <div class="ess-card" data-doc-id="${d.id}">
-          <div class="ess-row"><span class="label">${escapeHtml(d.category)}</span>${documentStatusBadge(d.status)}</div>
+          <div class="ess-row"><span class="label">${escapeHtml(d.category)}${d.category === 'Valid ID' && d.idType ? ' — ' + escapeHtml(d.idType) : ''}</span>${documentStatusBadge(d.status)}</div>
           <div class="ess-row"><span class="value" style="font-size:12.5px;">${escapeHtml(d.fileName)}</span></div>
           ${d.verifyNotes ? `<div class="ess-sub" style="margin-top:4px;">HR: ${escapeHtml(d.verifyNotes)}</div>` : ''}
           <div class="modal-actions" style="justify-content:flex-start; margin-top:8px; padding-top:0;">
@@ -104,6 +104,9 @@ window.EssViews.profile = (function () {
           <div class="field full"><label>Category</label>
             <select name="category">${DOCUMENT_CATEGORIES.map(c => `<option>${c}</option>`).join('')}</select>
           </div>
+          <div class="field full" id="field-id-type" style="display:none;"><label>ID Type</label>
+            <select name="idType">${PH_VALID_ID_TYPES.map(t => `<option>${t}</option>`).join('')}</select>
+          </div>
           <div class="field full"><label>File</label><input type="file" name="file" required /></div>
         </div>
         <div class="modal-actions">
@@ -112,6 +115,11 @@ window.EssViews.profile = (function () {
         </div>
       </form>
     `, (bd) => {
+      const catSel = qs('select[name="category"]', bd);
+      const idTypeField = qs('#field-id-type', bd);
+      const toggleIdType = () => { idTypeField.style.display = catSel.value === 'Valid ID' ? '' : 'none'; };
+      catSel.addEventListener('change', toggleIdType);
+      toggleIdType();
       qs('#doc-upload-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
@@ -121,7 +129,7 @@ window.EssViews.profile = (function () {
         submitBtn.disabled = true;
         submitBtn.textContent = 'Uploading…';
         try {
-          await Store.uploadEmployeeDocument(emp.id, file, fd.get('category'), emp.email || emp.employeeCode);
+          await Store.uploadEmployeeDocument(emp.id, file, fd.get('category'), emp.email || emp.employeeCode, fd.get('idType'));
           toast('✔ Document uploaded — HR will review it.');
           closeEssModal();
           render(main, emp);

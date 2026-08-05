@@ -156,7 +156,7 @@ window.Views.staff = (function () {
           <tbody>
             ${docs.map(d => `
               <tr>
-                <td class="dim">${escapeHtml(d.category)}</td>
+                <td class="dim">${escapeHtml(d.category)}${d.category === 'Valid ID' && d.idType ? ' — ' + escapeHtml(d.idType) : ''}</td>
                 <td class="name">${escapeHtml(d.fileName)}</td>
                 <td>${documentStatusBadge(d.status)}</td>
                 <td style="white-space:nowrap;">
@@ -291,6 +291,9 @@ window.Views.staff = (function () {
           <div class="field full"><label>Category</label>
             <select name="category">${DOCUMENT_CATEGORIES.map(c => `<option>${c}</option>`).join('')}</select>
           </div>
+          <div class="field full" id="field-id-type" style="display:none;"><label>ID Type</label>
+            <select name="idType">${PH_VALID_ID_TYPES.map(t => `<option>${t}</option>`).join('')}</select>
+          </div>
           <div class="field full"><label>File</label><input type="file" name="file" required /></div>
         </div>
         <div class="modal-actions">
@@ -299,6 +302,11 @@ window.Views.staff = (function () {
         </div>
       </form>
     `, (bd) => {
+      const catSel = qs('select[name="category"]', bd);
+      const idTypeField = qs('#field-id-type', bd);
+      const toggleIdType = () => { idTypeField.style.display = catSel.value === 'Valid ID' ? '' : 'none'; };
+      catSel.addEventListener('change', toggleIdType);
+      toggleIdType();
       qs('#doc-upload-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
@@ -308,7 +316,7 @@ window.Views.staff = (function () {
         submitBtn.disabled = true;
         submitBtn.textContent = 'Uploading…';
         try {
-          await Store.uploadEmployeeDocument(e.id, file, fd.get('category'), currentUserEmail());
+          await Store.uploadEmployeeDocument(e.id, file, fd.get('category'), currentUserEmail(), fd.get('idType'));
           toast('✔ Document uploaded.');
           closeModal();
           openEmployeeDetail(main, e.id);
@@ -335,6 +343,9 @@ window.Views.staff = (function () {
           <div class="field"><label>Status</label>
             <select name="status">${['Pending', 'Verified', 'Rejected'].map(s => `<option ${s === d.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
           </div>
+          <div class="field full" id="field-id-type" style="display:none;"><label>ID Type</label>
+            <select name="idType">${PH_VALID_ID_TYPES.map(t => `<option ${t === d.idType ? 'selected' : ''}>${t}</option>`).join('')}</select>
+          </div>
           <div class="field full"><label>Verification Notes</label><textarea name="verifyNotes" rows="2">${escapeHtml(d.verifyNotes || '')}</textarea></div>
         </div>
         ${d.verifiedBy ? `<div class="page-sub">Last reviewed by ${escapeHtml(d.verifiedBy)} on ${fmtDate(d.verifiedDate)}</div>` : ''}
@@ -347,11 +358,17 @@ window.Views.staff = (function () {
         </div>
       </form>
     `, (bd) => {
+      const catSel = qs('select[name="category"]', bd);
+      const idTypeField = qs('#field-id-type', bd);
+      const toggleIdType = () => { idTypeField.style.display = catSel.value === 'Valid ID' ? '' : 'none'; };
+      catSel.addEventListener('change', toggleIdType);
+      toggleIdType();
       qs('#doc-manage-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
         const status = fd.get('status');
-        const patch = { category: fd.get('category'), status, verifyNotes: fd.get('verifyNotes').trim() };
+        const category = fd.get('category');
+        const patch = { category, idType: category === 'Valid ID' ? fd.get('idType') : null, status, verifyNotes: fd.get('verifyNotes').trim() };
         if (status !== d.status) {
           patch.verifiedBy = currentUserEmail();
           patch.verifiedDate = todayISO();
