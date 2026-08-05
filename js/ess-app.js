@@ -131,6 +131,9 @@ function openDTR(emp, from, to) {
 
   const workDays = workDaysInRange(from, to);
   const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (workDays > 0 ? emp.rate / workDays : 0);
+  // Same shared computeRow() My Payroll uses, so the DTR's total pay always matches --
+  // gross/net for the whole cutoff, not just the NSD/OT/Holiday premiums computed below.
+  const row = computeRow(emp, from, to);
 
   const days = [];
   let d = from;
@@ -211,7 +214,21 @@ function openDTR(emp, from, to) {
             <tr><td style="font-weight:700;">Total NSD + OT + Holiday</td><td></td><td class="num" style="font-weight:700;">${fmtMoney(totalNsdPay + totalOtPay + totalHolidayPay)}</td></tr>
           </tbody>
         </table>
-        <div class="page-sub" style="margin-top:6px;">Daily-rate equivalent used for these computations: ${fmtMoney(dailyRateEq)} / day (${fmtMoney(dailyRateEq / 8)} / hour). This excludes base pay, COLA, and housing allowance — see My Payroll for full gross and net pay.</div>
+        <div class="page-sub" style="margin-top:6px;">Daily-rate equivalent used for these computations: ${fmtMoney(dailyRateEq)} / day (${fmtMoney(dailyRateEq / 8)} / hour).</div>
+      </div>
+
+      <div class="dtr-summary">
+        <div class="dtr-summary-title">Total Pay — ${fmtDate(from)} to ${fmtDate(to)}</div>
+        <table class="dtr-table">
+          <thead><tr><th>Component</th><th class="num">Amount</th></tr></thead>
+          <tbody>
+            <tr><td>Gross Pay</td><td class="num">${fmtMoney(row.gross)}</td></tr>
+            <tr><td>Withholding Tax</td><td class="num">${row.tax ? '−' + fmtMoney(row.tax) : fmtMoney(0)}</td></tr>
+            <tr><td>Deductions</td><td class="num">${row.dedTotal ? '−' + fmtMoney(row.dedTotal) : fmtMoney(0)}</td></tr>
+            ${row.bonusTotal ? `<tr><td>Bonus</td><td class="num">+${fmtMoney(row.bonusTotal)}</td></tr>` : ''}
+            <tr><td style="font-weight:700;">Net Pay</td><td class="num" style="font-weight:700;">${fmtMoney(row.net)}</td></tr>
+          </tbody>
+        </table>
       </div>
 
       <div class="dtr-signatures">

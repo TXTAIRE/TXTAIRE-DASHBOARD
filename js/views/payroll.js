@@ -121,6 +121,12 @@ window.Views.payroll = (function () {
             <button data-val="15-30" class="${group === '15-30' ? 'active' : ''}">Technicians</button>
           </div>
         </div>
+        <div class="field">
+          <label>Payroll Status</label>
+          ${release
+            ? `<span class="badge badge-green" style="align-self:flex-start;">Released ${fmtDate(release.releasedAt.slice(0, 10))}${release.releasedBy ? ' by ' + escapeHtml(release.releasedBy) : ''}</span>`
+            : `<button class="btn btn-primary btn-sm" id="btn-release-payroll" title="Notifies every staff member on this schedule that their payroll for this cutoff is out">Mark as Released</button>`}
+        </div>
       </div>
 
       <div class="filters">
@@ -137,12 +143,7 @@ window.Views.payroll = (function () {
         <button class="btn btn-ghost btn-sm" id="btn-reset-absences" style="align-self:flex-end;" title="Sets Absent to 0 for every staff member shown below, for this cutoff only">Reset absences to 0</button>
       </div>
 
-      <div class="page-sub" style="margin-bottom:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        <span>${monthLabel} · ${selected.label} · payday ${fmtDate(selected.payDate)} · ${rows.length} staff on this schedule</span>
-        ${release
-          ? `<span class="badge badge-green">Released ${fmtDate(release.releasedAt.slice(0, 10))}${release.releasedBy ? ' by ' + escapeHtml(release.releasedBy) : ''}</span>`
-          : `<button class="btn btn-primary btn-sm" id="btn-release-payroll" title="Notifies every staff member on this schedule that their payroll for this cutoff is out">Mark as Released</button>`}
-      </div>
+      <div class="page-sub" style="margin-bottom:10px;">${monthLabel} · ${selected.label} · payday ${fmtDate(selected.payDate)} · ${rows.length} staff on this schedule</div>
 
       <div class="kpi-row">
         <div class="kpi-card"><div class="kpi-label">Total Gross</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(totalGross)}</div><div class="kpi-sub">incl. ${fmtMoney(totalCola)} COLA, ${fmtMoney(totalHousing)} housing allowance,${fmtMoney(totalNsd)} NSD, ${fmtMoney(totalOt)} OT, ${fmtMoney(totalHoliday)} holiday</div></div>
