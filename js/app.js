@@ -244,7 +244,7 @@ function employeeStatusDot(status) {
   return '<span class="status-dot ' + (map[status] || '') + '">' + escapeHtml(status) + '</span>';
 }
 
-const ROUTES = ['overview', 'staff', 'recruitment', 'probation', 'disciplinary', 'attendance', 'payroll', 'complaints', 'leaveRequests', 'attendanceCorrections', 'auditLog', 'finance'];
+const ROUTES = ['overview', 'staff', 'recruitment', 'probation', 'disciplinary', 'attendance', 'payroll', 'complaints', 'leaveRequests', 'attendanceCorrections', 'auditLog', 'finance', 'adminFiles'];
 
 function currentRoute() {
   const h = (location.hash || '').replace('#', '').split('/')[0];

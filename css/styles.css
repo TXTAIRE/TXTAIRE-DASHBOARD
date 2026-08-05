@@ -267,6 +267,29 @@ html, body {
 }
 .panel-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
 
+/* ---------- Admin Files (folder grid) ---------- */
+.file-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
+}
+.file-folder-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 18px 14px;
+  text-align: center;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.file-folder-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.file-folder-icon { font-size: 34px; line-height: 1; margin-bottom: 8px; }
+.file-folder-name { font-size: 13px; font-weight: 600; word-break: break-word; }
+.file-folder-count { font-size: 11.5px; color: var(--text-faint); margin-top: 4px; }
+
 /* ---------- Table ---------- */
 table { width: 100%; border-collapse: collapse; }
 thead th {
