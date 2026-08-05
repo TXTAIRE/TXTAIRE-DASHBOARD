@@ -981,10 +981,11 @@ update employees set "employeeCode" = 'TXT016' where id = 'e_alomia';
 update employees set "employeeCode" = 'TXT018' where id = 'e_francisco';
 update employees set "employeeCode" = 'TXT021' where id = 'e_dean';
 update employees set "employeeCode" = 'TXT022' where id = 'e_vargas';
--- Not yet in this system — TXT000 Joel M. Aviso (President), TXT005 Anie Lou A. Bangay
--- (Accounting & Finance Manager), and TXT017 Dino Dulfo (Service Technician) appear on
--- the roster sheet but have no employee record here yet. Ask HR for their rate/pay type/
--- category before adding them, so payroll numbers aren't guessed.
+-- Not yet in this system — TXT005 Anie Lou A. Bangay (Accounting & Finance Manager) and
+-- TXT017 Dino Dulfo (Service Technician) appear on the roster sheet but have no employee
+-- record here yet. Ask HR for their rate/pay type/category before adding them, so payroll
+-- numbers aren't guessed. Joel M. Aviso (TXT000, President) was also on the roster sheet
+-- but should NOT be added as an employee -- explicit instruction, do not create his record.
 
 -- =================================================================
 -- Self clock-in/out with photo proof — incremental migration. Run this once against a
