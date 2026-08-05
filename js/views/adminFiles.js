@@ -12,6 +12,58 @@ window.Views.adminFiles = (function () {
   let activeFolder = null; // null = folder grid
   let pasteListenerAttached = false;
 
+  // Recursively expands a dropped FileSystemEntry (from DataTransferItem.webkitGetAsEntry)
+  // into its underlying File objects -- lets dragging a whole folder from the desktop onto
+  // a dropzone upload everything inside it (including subfolders), not just top-level files.
+  function readEntryFiles(entry) {
+    return new Promise((resolve) => {
+      if (!entry) { resolve([]); return; }
+      if (entry.isFile) {
+        entry.file((file) => resolve([file]), () => resolve([]));
+      } else if (entry.isDirectory) {
+        const reader = entry.createReader();
+        const collected = [];
+        // readEntries only returns entries in batches (spec caps ~100 per call) --
+        // must keep calling it until it comes back empty.
+        const readBatch = () => {
+          reader.readEntries(async (entries) => {
+            if (!entries.length) {
+              const results = await Promise.all(collected.map(readEntryFiles));
+              resolve(results.flat());
+              return;
+            }
+            collected.push(...entries);
+            readBatch();
+          }, () => resolve([]));
+        };
+        readBatch();
+      } else {
+        resolve([]);
+      }
+    });
+  }
+
+  // Reads whatever was dropped -- individual files, or one or more whole folders -- into a
+  // flat array of File objects. Entries must be pulled out of `items` synchronously (before
+  // any await), since some browsers invalidate the DataTransfer once the drop handler yields.
+  // webkitGetAsEntry() can come back null for an item that's still a real file (seen with
+  // non-OS-drag sources) -- per-item fall back to getAsFile() rather than silently dropping
+  // it, and fall back to the plain file list wholesale if the entry API isn't usable at all.
+  async function filesFromDataTransfer(dataTransfer) {
+    const items = dataTransfer && dataTransfer.items;
+    if (items && items.length && typeof items[0].webkitGetAsEntry === 'function') {
+      const results = await Promise.all([...items].map((it) => {
+        const entry = it.webkitGetAsEntry();
+        if (entry) return readEntryFiles(entry);
+        const file = typeof it.getAsFile === 'function' ? it.getAsFile() : null;
+        return Promise.resolve(file ? [file] : []);
+      }));
+      const flat = results.flat();
+      if (flat.length) return flat;
+    }
+    return [...((dataTransfer && dataTransfer.files) || [])];
+  }
+
   // Shared by the Upload/Scan modal, drag-and-drop, and paste -- uploads a batch of files
   // into one folder sequentially (so one bad file doesn't block the rest), calling
   // onProgress(index, total, fileName) as it goes. Returns how many actually succeeded.
@@ -85,7 +137,7 @@ window.Views.adminFiles = (function () {
       b.addEventListener('drop', async (ev) => {
         ev.preventDefault();
         b.classList.remove('drag-over');
-        const files = [...(ev.dataTransfer.files || [])];
+        const files = await filesFromDataTransfer(ev.dataTransfer);
         if (!files.length) return;
         const folder = b.dataset.folder;
         toast(`Uploading ${files.length} file${files.length === 1 ? '' : 's'} to ${folder}…`);
@@ -111,10 +163,11 @@ window.Views.adminFiles = (function () {
         </div>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-ghost" id="btn-scan-doc">📷 Scan Document</button>
+          <button class="btn btn-ghost" id="btn-upload-folder">📁 Upload Folder</button>
           <button class="btn btn-primary" id="btn-upload-doc">+ Upload File</button>
         </div>
       </div>
-      <div class="page-sub" style="margin-bottom:8px;">Or drag files here, or paste (Ctrl/Cmd+V), to upload straight into this folder.</div>
+      <div class="page-sub" style="margin-bottom:8px;">Or drag files (or a whole folder) here, or paste (Ctrl/Cmd+V), to upload straight into this folder.</div>
       <div class="panel" id="folder-dropzone">
         ${rows.length ? `
         <table>
@@ -138,8 +191,9 @@ window.Views.adminFiles = (function () {
     `;
 
     qs('#btn-back-folders', main).addEventListener('click', () => { activeFolder = null; renderView(main); });
-    qs('#btn-upload-doc', main).addEventListener('click', () => openUploadModal(main, false));
-    qs('#btn-scan-doc', main).addEventListener('click', () => openUploadModal(main, true));
+    qs('#btn-upload-doc', main).addEventListener('click', () => openUploadModal(main, 'file'));
+    qs('#btn-scan-doc', main).addEventListener('click', () => openUploadModal(main, 'scan'));
+    qs('#btn-upload-folder', main).addEventListener('click', () => openUploadModal(main, 'folder'));
     qsa('[data-view-file]', main).forEach(b => b.addEventListener('click', async () => {
       const win = window.open('', '_blank');
       const url = await Store.getSignedOfficeFileUrl(b.dataset.viewFile);
@@ -158,7 +212,7 @@ window.Views.adminFiles = (function () {
     dropzone.addEventListener('drop', async (ev) => {
       ev.preventDefault();
       dropzone.classList.remove('drag-over');
-      const files = [...(ev.dataTransfer.files || [])];
+      const files = await filesFromDataTransfer(ev.dataTransfer);
       if (!files.length) return;
       toast(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}…`);
       const succeeded = await uploadBatch(files, activeFolder);
@@ -192,13 +246,28 @@ window.Views.adminFiles = (function () {
   // files at once (a scanner utility that saved a whole stack of pages as separate images,
   // or a phone gallery's multi-select) -- uploaded sequentially so progress can be shown
   // and one bad file doesn't abort the rest of the batch.
-  function openUploadModal(main, isScan) {
+  // mode: 'file' (pick one or more files) | 'scan' (camera capture on mobile) | 'folder'
+  // (pick a whole folder -- webkitdirectory hands back every file inside it, including
+  // subfolders, as a flat FileList; uploaded the same way as any other batch).
+  function openUploadModal(main, mode) {
+    const isScan = mode === 'scan';
+    const isFolder = mode === 'folder';
+    const title = isScan ? 'Scan Document(s)' : isFolder ? 'Upload Folder' : 'Upload File(s)';
+    const sub = isScan
+      ? 'On a phone or tablet this opens your camera. On desktop, or if your device allows picking more than one image at once, you can select multiple pages to upload together.'
+      : isFolder
+        ? 'Pick a folder from this computer -- every file inside it (including subfolders) uploads into this folder in one batch.'
+        : 'Select multiple files to upload them all at once -- e.g. every page a scanner saved as a separate image.';
     openModal(`
-      <h2>${isScan ? 'Scan Document(s)' : 'Upload File(s)'} — ${escapeHtml(activeFolder)}</h2>
-      <div class="modal-sub">${isScan ? 'On a phone or tablet this opens your camera. On desktop, or if your device allows picking more than one image at once, you can select multiple pages to upload together.' : 'Select multiple files to upload them all at once -- e.g. every page a scanner saved as a separate image.'}</div>
+      <h2>${title} — ${escapeHtml(activeFolder)}</h2>
+      <div class="modal-sub">${sub}</div>
       <form id="admin-file-form">
         <div class="modal-grid">
-          <div class="field full"><label>File(s)</label><input type="file" name="file" multiple required ${isScan ? 'accept="image/*" capture="environment"' : ''} /></div>
+          <div class="field full"><label>${isFolder ? 'Folder' : 'File(s)'}</label>
+            <input type="file" name="file" required
+              ${isFolder ? 'webkitdirectory directory' : 'multiple'}
+              ${isScan ? 'accept="image/*" capture="environment"' : ''} />
+          </div>
         </div>
         <div id="upload-progress" class="modal-sub hidden" style="margin-top:6px;"></div>
         <div class="modal-actions">
