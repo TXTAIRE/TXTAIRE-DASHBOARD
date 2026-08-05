@@ -54,19 +54,15 @@ window.EssViews.attendance = (function () {
     const pay = rec ? computeDayPay(dailyRateEq, rec, holiday) : null;
     const nsdRawHrs = rec ? nightOverlapHours(rec.timeIn, rec.timeOut) : 0;
     const holidayLabel = holiday ? `Holiday Pay — ${escapeHtml(holiday.name)} (${escapeHtml(holiday.type)} Holiday)` : 'Holiday Pay';
-    // The "Edit" affordance (Time In/Out/Status) only ever makes sense within the same
-    // 24-hour window the DB trigger enforces -- past that, this button still opens the same
-    // modal (Delete is always available, any day), just relabeled so it doesn't claim
-    // editability the record no longer has.
+    // Edit AND Delete only ever make sense within the same 24-hour window the DB enforces
+    // (both the update trigger and the delete RLS policy) -- past that, previous attendance
+    // is locked: no button at all, just "Report Attendance Concern" for corrections.
     const editable = rec ? withinEditWindow(rec) : false;
     return `
       <div class="ess-card">
         <div class="ess-card-label" style="display:flex; justify-content:space-between; align-items:center;">
           <span>${dow}</span>
-          ${rec ? (editable
-            ? `<button type="button" class="link-btn" data-edit-day="${rec.id}" title="Edit or delete this day's attendance">✏️ Edit</button>`
-            : `<button type="button" class="link-btn" data-edit-day="${rec.id}" title="More than 24 hours old — Time In/Out and Status can no longer be edited, but you can still delete this record">🗑 Delete</button>`
-          ) : ''}
+          ${rec && editable ? `<button type="button" class="link-btn" data-edit-day="${rec.id}" title="Edit or delete this day's attendance">✏️ Edit</button>` : ''}
         </div>
         ${rec ? `
         <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(rec.timeIn)} ✅ <button class="link-btn" data-manage-photo="in" data-rec-id="${rec.id}" title="Edit or delete photo">⋯</button></span></div>
@@ -243,10 +239,7 @@ window.EssViews.attendance = (function () {
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0; display:flex; justify-content:space-between; align-items:center;">
         <span>Today's Attendance</span>
-        ${todayRec ? (withinEditWindow(todayRec)
-          ? `<button type="button" class="link-btn" data-edit-day="${todayRec.id}" title="Edit or delete today's attendance">✏️ Edit</button>`
-          : `<button type="button" class="link-btn" data-edit-day="${todayRec.id}" title="More than 24 hours old — Time In/Out and Status can no longer be edited, but you can still delete this record">🗑 Delete</button>`
-        ) : ''}
+        ${todayRec && withinEditWindow(todayRec) ? `<button type="button" class="link-btn" data-edit-day="${todayRec.id}" title="Edit or delete today's attendance">✏️ Edit</button>` : ''}
       </div>
       <div class="ess-card">
         ${todayRec ? `
@@ -437,47 +430,47 @@ window.EssViews.attendance = (function () {
     return (Date.now() - new Date(rec.created_at).getTime()) < 24 * 3600000;
   }
 
+  // Only ever reachable via a data-edit-day button, which render()/dayCard() now only
+  // render when withinEditWindow(rec) is true -- so past attendance (>24h old) never
+  // gets here at all, not even a locked-down read-only view of this modal.
   function openEditDayModal(main, emp, rec) {
-    const editable = withinEditWindow(rec);
     openEssModal(`
       <h2>Edit Attendance</h2>
-      <div class="modal-sub">${fmtDate(rec.date)} — ${editable ? 'changes save immediately and are recorded in HR\'s audit log.' : 'this record is more than 24 hours old, so Time In/Out and Status can no longer be edited directly. Use Report Attendance Concern instead if something needs to be corrected.'}</div>
+      <div class="modal-sub">${fmtDate(rec.date)} — changes save immediately and are recorded in HR's audit log.</div>
       <form id="edit-day-form">
         <div class="modal-grid">
-          <div class="field"><label>Time In</label><input type="time" name="timeIn" value="${escapeHtml(rec.timeIn || '')}" ${editable ? 'required' : 'disabled'} /></div>
-          <div class="field"><label>Time Out</label><input type="time" name="timeOut" value="${escapeHtml(rec.timeOut || '')}" ${editable ? '' : 'disabled'} /></div>
+          <div class="field"><label>Time In</label><input type="time" name="timeIn" value="${escapeHtml(rec.timeIn || '')}" required /></div>
+          <div class="field"><label>Time Out</label><input type="time" name="timeOut" value="${escapeHtml(rec.timeOut || '')}" /></div>
           <div class="field full"><label>Status</label>
-            <select name="status" ${editable ? '' : 'disabled'}>${ATTENDANCE_STATUS_OPTIONS.map(s => `<option ${s === rec.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
+            <select name="status">${ATTENDANCE_STATUS_OPTIONS.map(s => `<option ${s === rec.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
           </div>
         </div>
         <div class="modal-actions" style="justify-content:space-between;">
           <button type="button" class="btn btn-danger" id="btn-delete-day">Delete</button>
           <div style="display:flex; gap:8px;">
             <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
-            ${editable ? '<button type="submit" class="btn btn-primary">Save</button>' : ''}
+            <button type="submit" class="btn btn-primary">Save</button>
           </div>
         </div>
       </form>
     `, (bd) => {
-      if (editable) {
-        qs('#edit-day-form', bd).addEventListener('submit', async (ev) => {
-          ev.preventDefault();
-          const fd = new FormData(ev.target);
-          const timeIn = fd.get('timeIn');
-          const timeOut = fd.get('timeOut') || null;
-          const status = fd.get('status');
-          const submitBtn = qs('button[type="submit"]', bd);
-          submitBtn.disabled = true;
-          submitBtn.textContent = 'Saving…';
-          await Store.updateAttendance(rec.id, {
-            timeIn, timeOut, status,
-            hours: timeOut ? hoursBetween(timeIn, timeOut) : 0,
-          });
-          toast('✔ Attendance updated.');
-          closeEssModal();
-          render(main, emp);
+      qs('#edit-day-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const timeIn = fd.get('timeIn');
+        const timeOut = fd.get('timeOut') || null;
+        const status = fd.get('status');
+        const submitBtn = qs('button[type="submit"]', bd);
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saving…';
+        await Store.updateAttendance(rec.id, {
+          timeIn, timeOut, status,
+          hours: timeOut ? hoursBetween(timeIn, timeOut) : 0,
         });
-      }
+        toast('✔ Attendance updated.');
+        closeEssModal();
+        render(main, emp);
+      });
       qs('#btn-delete-day', bd).addEventListener('click', async () => {
         if (!confirm(`Delete your attendance record for ${fmtDate(rec.date)}? This cannot be undone.`)) return;
         await Promise.all([

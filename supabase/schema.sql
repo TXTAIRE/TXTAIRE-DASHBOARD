@@ -1785,3 +1785,20 @@ create policy "admin full access to 201 documents" on storage.objects
 drop policy if exists "employee deletes own notifications" on notifications;
 create policy "employee deletes own notifications" on notifications
   for delete to authenticated using ("employeeId" = my_employee_id());
+
+-- =================================================================
+-- Restrict employee attendance delete to the same 24-hour window as editing --
+-- incremental migration. Run once against a database that already has the migrations
+-- above applied. Safe to re-run.
+--
+-- Previously an employee could delete their own attendance row from any day, any age.
+-- The My Portal UI now only ever shows a Delete/Edit action within 24 hours of the
+-- record's created_at (js/ess-views/attendance.js withinEditWindow) -- this makes that
+-- a real server-side boundary too, not just a hidden button, matching the existing
+-- update-side restriction (enforce_employee_attendance_update).
+-- =================================================================
+
+drop policy if exists "employee deletes own attendance" on attendance;
+create policy "employee deletes own attendance" on attendance
+  for delete to authenticated
+  using ("employeeId" = my_employee_id() and now() - created_at <= interval '24 hours');
