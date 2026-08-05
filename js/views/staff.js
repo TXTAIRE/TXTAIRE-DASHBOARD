@@ -119,7 +119,7 @@ window.Views.staff = (function () {
       </div>
       ${e.notes ? `<div class="section-title">Notes</div><div class="page-sub">${escapeHtml(e.notes)}</div>` : ''}
       <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
-        <span>Employment History <span class="dim" style="font-weight:400;">(position &amp; salary track record — also visible read-only to this employee on My Profile)</span></span>
+        <span>Employment History <span class="dim" style="font-weight:400;">(position &amp; salary track record — also editable by this employee on My Profile)</span></span>
         <button class="link-btn" id="btn-add-history">+ Add entry</button>
       </div>
       ${history.length ? `<div class="timeline">${history.map(h => `

@@ -1812,3 +1812,21 @@ create policy "employee deletes own attendance" on attendance
 -- =================================================================
 
 alter table "employeeDocuments" add column if not exists "idType" text;
+
+-- =================================================================
+-- Let employees edit/delete their own Employment History entries from My Portal, not
+-- just read them -- incremental migration. Run once against a database that already has
+-- the migrations above applied. Safe to re-run.
+--
+-- Previously only admins could write to this table (the "admin full access" policy
+-- below already covers admin update/delete); this adds the matching employee-scoped
+-- policies so an employee can maintain their own position/salary track record too.
+-- =================================================================
+
+drop policy if exists "employee updates own employment history" on "employmentHistory";
+create policy "employee updates own employment history" on "employmentHistory"
+  for update to authenticated
+  using ("employeeId" = my_employee_id()) with check ("employeeId" = my_employee_id());
+drop policy if exists "employee deletes own employment history" on "employmentHistory";
+create policy "employee deletes own employment history" on "employmentHistory"
+  for delete to authenticated using ("employeeId" = my_employee_id());

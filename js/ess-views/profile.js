@@ -35,14 +35,19 @@ window.EssViews.profile = (function () {
       <div class="ess-sub" style="text-align:center; margin-bottom:14px;">Employee ID, category, status, and pay details can only be changed by HR.</div>
 
       <div class="ess-section-title">Employment History</div>
-      <div class="ess-card">
-        ${history.length ? history.map(h => `
+      ${history.length ? history.map(h => `
+        <div class="ess-card" data-history-id="${h.id}">
           <div class="ess-row" style="align-items:flex-start;">
             <span class="label">${fmtDate(h.effectiveDate)}${h.reason ? ' · ' + escapeHtml(h.reason) : ''}</span>
             <span class="value" style="text-align:right;">${escapeHtml(h.position)}${h.rate ? '<br/>' + fmtMoney(h.rate) + (h.payType === 'Daily' ? ' / day' : ' / cutoff') : ''}</span>
           </div>
-        `).join('') : '<div class="ess-empty">No history logged yet.</div>'}
-      </div>
+          ${h.notes ? `<div class="ess-sub" style="margin-top:4px;">${escapeHtml(h.notes)}</div>` : ''}
+          <div class="modal-actions" style="justify-content:flex-start; margin-top:8px; padding-top:0;">
+            <button type="button" class="link-btn" data-edit-history="${h.id}">Edit</button>
+            <button type="button" class="link-btn" data-delete-history="${h.id}" style="color:var(--red);">Delete</button>
+          </div>
+        </div>
+      `).join('') : '<div class="ess-card"><div class="ess-empty">No history logged yet.</div></div>'}
 
       <div class="ess-section-title" style="display:flex; justify-content:space-between; align-items:center;">
         <span>201 File</span>
@@ -76,6 +81,16 @@ window.EssViews.profile = (function () {
     }
 
     qs('#btn-edit-profile', main).addEventListener('click', () => openEditProfile(main, emp));
+    qsa('[data-edit-history]', main).forEach(b => b.addEventListener('click', () => {
+      const h = history.find(x => x.id === b.dataset.editHistory);
+      if (h) openEmploymentHistoryForm(main, emp, h);
+    }));
+    qsa('[data-delete-history]', main).forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('Delete this employment history entry? This cannot be undone.')) return;
+      await Store.deleteEmploymentHistory(b.dataset.deleteHistory);
+      toast('✔ Entry deleted.');
+      render(main, emp);
+    }));
     qs('#btn-upload-doc', main).addEventListener('click', () => openUploadDocumentForm(main, emp));
     qsa('[data-view-doc]', main).forEach(b => b.addEventListener('click', () => {
       const win = window.open('', '_blank');
@@ -137,6 +152,56 @@ window.EssViews.profile = (function () {
           submitBtn.disabled = false;
           submitBtn.textContent = 'Upload';
         }
+      });
+    });
+  }
+
+  // Same fields/table as the admin Employees drawer's version -- an employee can correct
+  // or remove their own position/salary track record entries; edits never touch the
+  // employee's actual current record (position/rate above), only this log.
+  function openEmploymentHistoryForm(main, emp, existing) {
+    const h = existing || { effectiveDate: todayISO(), reason: 'Promotion', position: emp.position, payType: emp.payType, rate: emp.rate, notes: '' };
+    openEssModal(`
+      <h2>${existing ? 'Edit' : 'Add'} Employment History Entry</h2>
+      <form id="history-form">
+        <div class="modal-grid">
+          <div class="field"><label>Effective date</label><input type="date" name="effectiveDate" value="${h.effectiveDate}" required /></div>
+          <div class="field"><label>Reason</label>
+            <select name="reason">${['New Hire', 'Promotion', 'Salary Adjustment', 'Transfer', 'Other'].map(r => `<option ${r === h.reason ? 'selected' : ''}>${r}</option>`).join('')}</select>
+          </div>
+          <div class="field full"><label>Position</label><input name="position" required value="${escapeHtml(h.position)}" /></div>
+          <div class="field"><label>Pay type</label>
+            <select name="payType">${['Monthly', 'Daily'].map(p => `<option ${p === h.payType ? 'selected' : ''}>${p}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Rate (PHP)</label><input type="number" name="rate" min="0" step="0.01" value="${h.rate || ''}" /></div>
+          <div class="field full"><label>Notes</label><textarea name="notes" rows="2">${escapeHtml(h.notes || '')}</textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">${existing ? 'Save changes' : 'Add entry'}</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#history-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const patch = {
+          effectiveDate: fd.get('effectiveDate'),
+          reason: fd.get('reason'),
+          position: fd.get('position').trim(),
+          payType: fd.get('payType'),
+          rate: Number(fd.get('rate')) || 0,
+          notes: fd.get('notes').trim(),
+        };
+        if (existing) {
+          await Store.updateEmploymentHistory(existing.id, patch);
+          toast('✔ Employment history entry updated.');
+        } else {
+          await Store.addEmploymentHistory(Object.assign({ employeeId: emp.id, category: emp.category }, patch));
+          toast('✔ Employment history entry added.');
+        }
+        closeEssModal();
+        render(main, emp);
       });
     });
   }
