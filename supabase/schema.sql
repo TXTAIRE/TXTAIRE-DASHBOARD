@@ -1916,3 +1916,112 @@ $$;
 -- =================================================================
 
 alter table "payrollOverrides" add column if not exists "retroPay" numeric(12,2);
+
+-- =================================================================
+-- Employee request push notifications -- incremental migration. Run once against a
+-- database that already has the migrations above applied, AND after deploying the
+-- employee-request-notify Edge Function (supabase/functions/employee-request-notify --
+-- reuses the exact same VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT/CRON_SECRET
+-- secrets already set up for payroll-cutoff-reminder, nothing new to configure there).
+-- Safe to re-run.
+--
+-- Fires the moment an employee submits a Leave Request, Attendance Correction, or
+-- NSD/OT/Holiday pay request -- unlike the payroll cutoff reminder (a daily schedule),
+-- this is a real-time database trigger: the INSERT/UPDATE itself calls the Edge Function
+-- directly via pg_net, no cron involved. Sends to the exact same pushSubscriptions
+-- devices (Payroll page -> "Enable on this device") -- one enrollment now covers both
+-- kinds of alert.
+--
+-- IMPORTANT: replace the secret string below (in all three functions) with your actual
+-- CRON_SECRET value if it isn't the one this project already used for the payroll
+-- reminder's pg_cron job -- it must match the CRON_SECRET Edge Function secret exactly.
+-- =================================================================
+
+create extension if not exists pg_net;
+
+create or replace function notify_new_leave_request() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  emp_name text;
+begin
+  select name into emp_name from employees where id = NEW."employeeId";
+  perform net.http_post(
+    url := 'https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/employee-request-notify',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', '5f24f19fdf651e99db5d397158bda6a8a4c48f59c06df3cc'),
+    body := jsonb_build_object(
+      'employeeName', coalesce(emp_name, 'An employee'),
+      'detail', NEW."leaveType" || ' leave request (' || NEW."startDate" || ' to ' || NEW."endDate" || ')'
+    )
+  );
+  return NEW;
+end;
+$$;
+
+drop trigger if exists trg_notify_new_leave_request on "leaveRequests";
+create trigger trg_notify_new_leave_request
+  after insert on "leaveRequests"
+  for each row execute function notify_new_leave_request();
+
+create or replace function notify_new_attendance_correction() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  emp_name text;
+begin
+  select name into emp_name from employees where id = NEW."employeeId";
+  perform net.http_post(
+    url := 'https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/employee-request-notify',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', '5f24f19fdf651e99db5d397158bda6a8a4c48f59c06df3cc'),
+    body := jsonb_build_object(
+      'employeeName', coalesce(emp_name, 'An employee'),
+      'detail', 'Attendance correction request for ' || NEW.date
+    )
+  );
+  return NEW;
+end;
+$$;
+
+drop trigger if exists trg_notify_new_attendance_correction on "attendanceCorrections";
+create trigger trg_notify_new_attendance_correction
+  after insert on "attendanceCorrections"
+  for each row execute function notify_new_attendance_correction();
+
+-- Only fires when nsdStatus/otStatus/holidayStatus actually just transitioned TO
+-- 'Requested' this update -- not on every attendance edit, and not a second time if it
+-- was already 'Requested' before (e.g. some other field on the same row changed).
+create or replace function notify_new_attendance_pay_request() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  emp_name text;
+  kinds text[] := array[]::text[];
+begin
+  if NEW."nsdStatus" = 'Requested' and OLD."nsdStatus" is distinct from 'Requested' then
+    kinds := array_append(kinds, 'Night Shift Differential');
+  end if;
+  if NEW."otStatus" = 'Requested' and OLD."otStatus" is distinct from 'Requested' then
+    kinds := array_append(kinds, 'Overtime');
+  end if;
+  if NEW."holidayStatus" = 'Requested' and OLD."holidayStatus" is distinct from 'Requested' then
+    kinds := array_append(kinds, 'Holiday Pay');
+  end if;
+
+  if array_length(kinds, 1) is null then
+    return NEW;
+  end if;
+
+  select name into emp_name from employees where id = NEW."employeeId";
+  perform net.http_post(
+    url := 'https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/employee-request-notify',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', '5f24f19fdf651e99db5d397158bda6a8a4c48f59c06df3cc'),
+    body := jsonb_build_object(
+      'employeeName', coalesce(emp_name, 'An employee'),
+      'detail', array_to_string(kinds, ', ') || ' request for ' || NEW.date
+    )
+  );
+  return NEW;
+end;
+$$;
+
+drop trigger if exists trg_notify_new_attendance_pay_request on attendance;
+create trigger trg_notify_new_attendance_pay_request
+  after update on attendance
+  for each row execute function notify_new_attendance_pay_request();

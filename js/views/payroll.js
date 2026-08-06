@@ -62,7 +62,8 @@ window.Views.payroll = (function () {
     card.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
         <div>
-          <div style="font-weight:700;">🔔 Payroll Cutoff Reminders</div>
+          <div style="font-weight:700;">🔔 Push Notifications</div>
+          <div class="dim" style="font-size:11px; margin-top:1px;">Payroll cutoff reminders + instant alerts when an employee submits a request</div>
           <div class="dim" id="push-status-text" style="font-size:13px; margin-top:2px;">Checking this device…</div>
         </div>
         <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
@@ -97,7 +98,7 @@ window.Views.payroll = (function () {
       if (subscribed) {
         btn.textContent = '🔕 Disable on this device';
         btn.className = 'btn btn-ghost btn-sm';
-        statusText.textContent = 'Enabled on this device — you\'ll get a push (and this device\'s ringtone, if the dashboard is open) before each cutoff.';
+        statusText.textContent = 'Enabled on this device — you\'ll get a push (and this device\'s ringtone, if the dashboard is open) before each cutoff, and instantly whenever an employee submits a request.';
       } else {
         btn.textContent = '🔔 Enable on this device';
         btn.className = 'btn btn-primary btn-sm';
