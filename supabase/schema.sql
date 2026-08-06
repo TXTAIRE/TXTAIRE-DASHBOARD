@@ -1869,3 +1869,36 @@ create policy "admin full access" on "pushSubscriptions"
 -- before each cutoff if this row is never inserted (see js/store.js getAppSetting call).
 insert into "appSettings" (key, value) values ('payrollReminderDaysBefore', '2')
   on conflict (key) do nothing;
+
+-- =================================================================
+-- Require two-factor authentication (TOTP) for admin accounts that have enrolled a
+-- factor -- incremental migration. Run once against a database that already has the
+-- migrations above applied. Safe to re-run.
+--
+-- Redefines is_admin() (the single function every "admin full access" policy in this
+-- whole file already calls) to additionally require an aal2 session -- i.e. the second
+-- factor was actually verified this session -- for any admin account that has a
+-- verified TOTP factor enrolled. Accounts that have never enrolled MFA are completely
+-- unaffected (this never locks anyone out on its own; each admin opts in individually
+-- from the dashboard's new "Security" panel). This is Supabase's own documented pattern
+-- for "enforce MFA once enrolled, not before" -- see
+-- https://supabase.com/docs/guides/auth/auth-mfa#enforce-rules-for-mfa-logins.
+--
+-- Because every existing admin policy already calls is_admin(), this one change retrofits
+-- MFA enforcement onto all of them -- no need to touch the ~25 individual policies.
+-- =================================================================
+
+create or replace function is_admin() returns boolean
+language sql stable security definer set search_path = public as $$
+  select
+    not exists (select 1 from employees where "authUserId" = auth.uid())
+    and (
+      select
+        case
+          when count(id) > 0 then coalesce((select auth.jwt() ->> 'aal'), 'aal1') = 'aal2'
+          else true
+        end
+      from auth.mfa_factors
+      where user_id = auth.uid() and status = 'verified'
+    );
+$$;

@@ -418,6 +418,109 @@ function playReminderTone() {
   }
 }
 
+// ---- Two-factor authentication (TOTP) -- Settings -> Security ----
+// Enrolling here is what actually turns on enforcement: the database's is_admin()
+// requires an aal2 session once any verified TOTP factor exists on the account (see the
+// "Require two-factor authentication" migration in supabase/schema.sql), so this isn't
+// just a profile toggle -- it changes what the account can do without the second factor.
+async function openSecurityModal() {
+  openModal(`<h2>Security</h2><div class="modal-sub">Checking your account…</div>`);
+  const { data: factorsData } = await sb.auth.mfa.listFactors();
+  const verified = factorsData && factorsData.totp && factorsData.totp.find(f => f.status === 'verified');
+  if (verified) renderSecurityEnabled(verified);
+  else renderSecurityDisabled();
+}
+
+function renderSecurityEnabled(factor) {
+  openModal(`
+    <h2>Security</h2>
+    <div class="modal-sub">Two-factor authentication (TOTP) is enabled on this account.</div>
+    <div class="page-sub" style="margin:10px 0;">Every sign-in now requires a code from your authenticator app, in addition to your password.</div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-close-modal>Close</button>
+      <button type="button" class="btn btn-danger" id="btn-mfa-disable">Disable Two-Factor Authentication</button>
+    </div>
+  `, (bd) => {
+    qs('#btn-mfa-disable', bd).addEventListener('click', async () => {
+      if (!confirm('Disable two-factor authentication? Your account will only need a password to sign in.')) return;
+      const { error } = await sb.auth.mfa.unenroll({ factorId: factor.id });
+      if (error) { toast('Could not disable: ' + error.message); return; }
+      toast('Two-factor authentication disabled.');
+      closeModal();
+    });
+  });
+}
+
+function renderSecurityDisabled() {
+  openModal(`
+    <h2>Security</h2>
+    <div class="modal-sub">Two-factor authentication (TOTP) is not enabled on this account.</div>
+    <div class="page-sub" style="margin:10px 0;">Adds a code from an authenticator app (Google Authenticator, Authy, etc.) as a second requirement on top of your password.</div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+      <button type="button" class="btn btn-primary" id="btn-mfa-enable">Enable Two-Factor Authentication</button>
+    </div>
+  `, (bd) => {
+    qs('#btn-mfa-enable', bd).addEventListener('click', async () => {
+      const btn = qs('#btn-mfa-enable', bd);
+      btn.disabled = true;
+      btn.textContent = 'Setting up…';
+      const { data, error } = await sb.auth.mfa.enroll({ factorType: 'totp' });
+      if (error) { toast('Could not start setup: ' + error.message); btn.disabled = false; btn.textContent = 'Enable Two-Factor Authentication'; return; }
+      renderSecurityEnroll(data);
+    });
+  });
+}
+
+function renderSecurityEnroll(enrollData) {
+  const factorId = enrollData.id;
+  const qrSrc = enrollData.totp.qr_code; // already a data: URI (SVG) from Supabase
+  openModal(`
+    <h2>Set Up Two-Factor Authentication</h2>
+    <div class="modal-sub">Scan this with an authenticator app (Google Authenticator, Authy, 1Password, etc.), then enter the 6-digit code it shows.</div>
+    <div style="text-align:center; margin:14px 0;">
+      <img src="${qrSrc}" alt="QR code for authenticator app" style="width:180px; height:180px; background:#fff; padding:8px; border-radius:8px;" />
+      <div class="page-sub" style="margin-top:8px;">Can't scan? Enter this code manually:</div>
+      <code style="font-size:12px; word-break:break-all;">${escapeHtml(enrollData.totp.secret)}</code>
+    </div>
+    <form id="mfa-enroll-form">
+      <div class="modal-grid">
+        <div class="field full"><label>6-digit code</label>
+          <input name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" required autofocus />
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="submit" class="btn btn-primary">Verify &amp; Enable</button>
+      </div>
+    </form>
+  `, (bd) => {
+    // Enrolling (above) creates the factor immediately but it stays 'unverified' -- and
+    // useless for enforcement -- until a real code from the app is verified here. If the
+    // admin cancels/closes without verifying, the factor is left behind unverified; clean
+    // it up so it doesn't linger or confuse a later listFactors() call.
+    let verified = false;
+    qsa('[data-close-modal]', bd).forEach(el => el.addEventListener('click', () => { if (!verified) sb.auth.mfa.unenroll({ factorId }); }));
+    qs('#mfa-enroll-form', bd).addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const code = new FormData(ev.target).get('code').trim();
+      const btn = qs('button[type="submit"]', bd);
+      btn.disabled = true;
+      btn.textContent = 'Verifying…';
+      const { error } = await sb.auth.mfa.challengeAndVerify({ factorId, code });
+      if (error) {
+        toast('Incorrect code — try again.');
+        btn.disabled = false;
+        btn.textContent = 'Verify & Enable';
+        return;
+      }
+      verified = true;
+      toast('✔ Two-factor authentication enabled.');
+      closeModal();
+    });
+  });
+}
+
 async function startApp(session) {
   if (appStarted) return;
   appStarted = true;
@@ -438,6 +541,7 @@ async function startApp(session) {
   hideAuthScreen();
   qs('#user-email').textContent = session.user.email;
   qs('#btn-logout').addEventListener('click', () => sb.auth.signOut());
+  qs('#btn-security').addEventListener('click', () => openSecurityModal());
 
   qsa('.nav-item').forEach(a => {
     a.addEventListener('click', function () {
@@ -479,18 +583,32 @@ async function startApp(session) {
   render();
 }
 
+// A password-only session is "aal1". Once an admin has enrolled a TOTP factor (see the
+// Security panel), is_admin() in the database requires "aal2" -- i.e. the second factor
+// was actually verified this session -- so a signed-in-but-not-yet-challenged session
+// must be routed to the MFA challenge screen before startApp()'s is_admin() check, or
+// they'd be incorrectly told "this dashboard is for HR/Admin accounts only."
+async function routeSession(session) {
+  const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
+    await showMfaChallengeScreen();
+  } else {
+    await startApp(session);
+  }
+}
+
 async function boot() {
   try {
     const { data: { session } } = await sb.auth.getSession();
     if (session) {
-      await startApp(session);
+      await routeSession(session);
     } else {
       showAuthScreen();
     }
 
     sb.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        await startApp(session);
+        await routeSession(session);
       } else if (event === 'SIGNED_OUT') {
         location.reload();
       }
