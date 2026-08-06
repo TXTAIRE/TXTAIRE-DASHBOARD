@@ -1,14 +1,20 @@
 window.Views.adminFiles = (function () {
-  // Same taxonomy as the company's existing shared drive, so this mirrors what the office
-  // already organizes documents into. Files are just officeFiles rows (js/store.js) with
-  // one of these as their category -- "folder" is purely a client-side grouping, no new
-  // table/bucket needed.
-  const FOLDERS = [
+  // Starting taxonomy, mirroring what the office's existing shared drive already used --
+  // admins can add/remove folders from here at runtime (see getFolders/saveFolders below).
+  // Files are just officeFiles rows (js/store.js) with a folder name as their category --
+  // "folder" is purely a label, no new table/bucket needed. The actual live list is stored
+  // in appSettings (key 'adminFileFolders', admin-only, already realtime-synced) so it
+  // persists and stays in sync across every admin's browser; this array is only the
+  // fallback used the very first time, before anyone has customized it.
+  const DEFAULT_FOLDERS = [
     'Billing Invoice', 'Billing Statements', 'Bills', 'Delivery Receipt', 'Excel Encoded',
     'Gate Pass', 'HR', 'Materials Request', 'Office', 'Plant Activity Report',
     'Quarterly Self-Monitoring Report', 'Receipts', 'Sales Invoice', 'Service Report',
     'Start-Up and Commissioning Report', 'Trouble Call Report', 'TxTAIRE Logo & Org Chart', 'Other',
   ];
+  function getFolders() { return Store.getAppSetting('adminFileFolders', DEFAULT_FOLDERS); }
+  async function saveFolders(list) { await Store.setAppSetting('adminFileFolders', list); }
+
   let activeFolder = null; // null = folder grid
   let pasteListenerAttached = false;
   let selectedFileIds = new Set(); // ids checked in the currently open folder's table
@@ -95,10 +101,11 @@ window.Views.adminFiles = (function () {
   // if nothing in the path matches (file sits directly in the picked/dropped root, or under
   // a folder name we don't recognize) -- callers fall back to 'Other'.
   function categoryForPath(relPath) {
+    const folders = getFolders();
     const parts = (relPath || '').split('/').filter(Boolean);
     parts.pop(); // drop the filename itself
     for (let i = parts.length - 1; i >= 0; i--) {
-      const match = FOLDERS.find(f => f.toLowerCase() === parts[i].toLowerCase());
+      const match = folders.find(f => f.toLowerCase() === parts[i].toLowerCase());
       if (match) return match;
     }
     return null;
@@ -178,6 +185,7 @@ window.Views.adminFiles = (function () {
 
   function renderFolderGrid(main) {
     const all = Store.listOfficeFiles();
+    const folders = getFolders();
     main.innerHTML = `
       <div class="crumb">Admin</div>
       <div class="page-head">
@@ -185,11 +193,14 @@ window.Views.adminFiles = (function () {
           <h1 class="page-title">Admin Files</h1>
           <div class="page-sub">Company document library, organized by folder. Open a folder to upload a file or scan one straight from this device, or upload a whole exported folder below and it'll sort itself into the matching folders.</div>
         </div>
-        <button class="btn btn-ghost" id="btn-upload-folder-autosort">📁 Upload Folder (auto-sort)</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-ghost" id="btn-new-folder">+ New Folder</button>
+          <button class="btn btn-ghost" id="btn-upload-folder-autosort">📁 Upload Folder (auto-sort)</button>
+        </div>
       </div>
       <div class="page-sub" style="margin-bottom:8px;">Or drag a folder from your computer here — if it has subfolders named after these categories (e.g. "HR", "Billing Invoice"), each file sorts into the matching one automatically; anything else goes to Other.</div>
       <div class="file-folder-grid" id="folder-grid-dropzone">
-        ${FOLDERS.map(f => {
+        ${folders.map(f => {
           const count = all.filter(x => (x.category || 'Other') === f).length;
           return `
             <button type="button" class="file-folder-card" data-folder="${escapeHtml(f)}">
@@ -201,6 +212,7 @@ window.Views.adminFiles = (function () {
         }).join('')}
       </div>
     `;
+    qs('#btn-new-folder', main).addEventListener('click', () => openNewFolderModal(main));
     qsa('[data-folder]', main).forEach(b => {
       b.addEventListener('click', () => { activeFolder = b.dataset.folder; selectedFileIds = new Set(); renderView(main); });
       // Drop files straight onto a folder card to upload into it without opening it first
@@ -286,6 +298,82 @@ window.Views.adminFiles = (function () {
           submitBtn.textContent = 'Upload';
           progress.classList.add('hidden');
         }
+      });
+    });
+  }
+
+  function openNewFolderModal(main) {
+    openModal(`
+      <h2>New Folder</h2>
+      <form id="new-folder-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Folder name</label><input name="name" required maxlength="60" placeholder="e.g. Warranty Claims" /></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Folder</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#new-folder-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const name = new FormData(ev.target).get('name').trim();
+        if (!name) { toast('Enter a folder name.'); return; }
+        const folders = getFolders();
+        if (folders.some(f => f.toLowerCase() === name.toLowerCase())) {
+          toast('A folder with that name already exists.');
+          return;
+        }
+        // Keep 'Other' as the last entry, matching its role as the catch-all fallback.
+        const otherIndex = folders.findIndex(f => f.toLowerCase() === 'other');
+        const updated = otherIndex >= 0 ? [...folders.slice(0, otherIndex), name, ...folders.slice(otherIndex)] : [...folders, name];
+        await saveFolders(updated);
+        toast('✔ Folder created.');
+        closeModal();
+        renderView(main);
+      });
+    });
+  }
+
+  // Shared by the per-file "Move to..." menu item and the bulk-selection bar's "Move to..."
+  // button -- a one-step alternative to Cut + navigate + Paste for the common case of just
+  // relocating something to a specific folder right now. files is an array (one file for
+  // the per-row action, several for the bulk one).
+  function openMoveToModal(main, files) {
+    const destinations = getFolders().filter(f => f !== activeFolder);
+    openModal(`
+      <h2>Move ${files.length} file${files.length === 1 ? '' : 's'}</h2>
+      <div class="modal-sub">${files.length === 1 ? escapeHtml(files[0].fileName) : files.length + ' files selected'}</div>
+      <form id="move-to-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Destination folder</label>
+            <select name="folder">${destinations.map(f => `<option>${escapeHtml(f)}</option>`).join('')}</select>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Move</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#move-to-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const dest = new FormData(ev.target).get('folder');
+        let succeeded = 0;
+        for (const f of files) {
+          try {
+            await Store.updateOfficeFile(f.id, { category: dest });
+            succeeded++;
+          } catch (err) {
+            // Keep going -- one failed file shouldn't block the rest of the batch.
+          }
+        }
+        selectedFileIds = new Set();
+        toast(succeeded === files.length
+          ? `✔ Moved to ${dest}.`
+          : `⚠ ${succeeded} of ${files.length} moved — some failed. Try the rest again.`);
+        closeModal();
+        renderView(main);
       });
     });
   }
@@ -379,6 +467,7 @@ window.Views.adminFiles = (function () {
           <div class="page-sub">${rows.length} file${rows.length === 1 ? '' : 's'} in this folder.</div>
         </div>
         <div style="display:flex; gap:8px;">
+          <button class="btn btn-ghost" id="btn-delete-folder" ${rows.length || activeFolder === 'Other' ? 'disabled' : ''} title="${activeFolder === 'Other' ? '\'Other\' is the built-in fallback folder and can\'t be deleted' : rows.length ? 'Move or delete every file in this folder first' : 'Delete this empty folder'}">🗑 Delete Folder</button>
           <button class="btn btn-ghost" id="btn-scan-doc">📷 Scan Document</button>
           <button class="btn btn-ghost" id="btn-upload-folder">📁 Upload Folder</button>
           <button class="btn btn-primary" id="btn-upload-doc">+ Upload File</button>
@@ -394,6 +483,7 @@ window.Views.adminFiles = (function () {
       ${selectedCount ? `
       <div class="panel" style="margin-bottom:8px; padding:10px 14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
         <strong>${selectedCount} selected</strong>
+        <button class="btn btn-ghost btn-sm" id="btn-move-selected">📂 Move to...</button>
         <button class="btn btn-ghost btn-sm" id="btn-copy-selected">📋 Copy</button>
         <button class="btn btn-ghost btn-sm" id="btn-cut-selected">✂️ Cut</button>
         <button class="btn btn-danger btn-sm" id="btn-delete-selected">🗑 Delete Selected</button>
@@ -421,6 +511,7 @@ window.Views.adminFiles = (function () {
                       <button type="button" data-view-file="${f.filePath}">View</button>
                       <button type="button" data-info-file="${f.id}">Info</button>
                       <button type="button" data-rename-file="${f.id}">Rename</button>
+                      <button type="button" data-move-file="${f.id}">Move to...</button>
                       <button type="button" data-toggle-select="${f.id}">${selectedFileIds.has(f.id) ? 'Deselect' : 'Select'}</button>
                       <button type="button" class="danger" data-delete-file="${f.id}" data-path="${f.filePath}">Delete</button>
                     </div>
@@ -437,6 +528,14 @@ window.Views.adminFiles = (function () {
     qs('#btn-upload-doc', main).addEventListener('click', () => openUploadModal(main, 'file'));
     qs('#btn-scan-doc', main).addEventListener('click', () => openUploadModal(main, 'scan'));
     qs('#btn-upload-folder', main).addEventListener('click', () => openUploadModal(main, 'folder'));
+    const btnDeleteFolder = qs('#btn-delete-folder', main);
+    if (btnDeleteFolder && !btnDeleteFolder.disabled) btnDeleteFolder.addEventListener('click', async () => {
+      if (!confirm('Delete the "' + activeFolder + '" folder? This cannot be undone.')) return;
+      await saveFolders(getFolders().filter(f => f !== activeFolder));
+      toast('✔ Folder deleted.');
+      activeFolder = null;
+      renderView(main);
+    });
     qsa('[data-menu-toggle]', main).forEach(b => b.addEventListener('click', (ev) => {
       ev.stopPropagation();
       openMenuId = openMenuId === b.dataset.menuToggle ? null : b.dataset.menuToggle;
@@ -467,6 +566,11 @@ window.Views.adminFiles = (function () {
       const f = rows.find(x => x.id === b.dataset.renameFile);
       if (f) openRenameFileModal(main, f);
     }));
+    qsa('[data-move-file]', main).forEach(b => b.addEventListener('click', () => {
+      closeAllRowMenus();
+      const f = rows.find(x => x.id === b.dataset.moveFile);
+      if (f) openMoveToModal(main, [f]);
+    }));
     qsa('[data-toggle-select]', main).forEach(b => b.addEventListener('click', () => {
       const id = b.dataset.toggleSelect;
       if (selectedFileIds.has(id)) selectedFileIds.delete(id); else selectedFileIds.add(id);
@@ -486,6 +590,10 @@ window.Views.adminFiles = (function () {
     const btnClearClipboard = qs('#btn-clear-clipboard', main);
     if (btnClearClipboard) btnClearClipboard.addEventListener('click', () => { clipboard = null; renderFolderDetail(main); });
 
+    const btnMoveSelected = qs('#btn-move-selected', main);
+    if (btnMoveSelected) btnMoveSelected.addEventListener('click', () => {
+      openMoveToModal(main, rows.filter(f => selectedFileIds.has(f.id)));
+    });
     const btnCopySelected = qs('#btn-copy-selected', main);
     if (btnCopySelected) btnCopySelected.addEventListener('click', () => {
       const files = rows.filter(f => selectedFileIds.has(f.id));
