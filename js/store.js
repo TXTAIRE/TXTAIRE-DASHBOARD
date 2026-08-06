@@ -385,13 +385,19 @@ function computeRow(emp, from, to) {
   const isHolidayOverridden = !!(override && override.holiday != null);
   if (isHolidayOverridden) holidayPay = Number(override.holiday);
 
+  // Retroactive/previous pay -- back pay owed from a prior period (a delayed raise, a
+  // correction, etc.). Purely manual, no computed baseline to override -- defaults to 0
+  // until HR enters it directly on the Payroll tab. Real wages, so it's taxed like base
+  // pay (folded into gross below), unlike a bonus which is added after tax.
+  const retroPay = override && override.retroPay != null ? Number(override.retroPay) : 0;
+
   let lateUndertimeDed = 0;
   presentRecords.forEach(r => {
     const hrs = Number(r.hours) || 0;
     lateUndertimeDed += Math.max(0, 8 - hrs) * hourlyRate;
   });
 
-  const gross = basePay + colaPay + housingPay + nsdPay + otPay + holidayPay;
+  const gross = basePay + colaPay + housingPay + nsdPay + otPay + holidayPay + retroPay;
 
   const manualDed = Store.deductionsInRange(from, to).filter(d => d.employeeId === emp.id).reduce((s, d) => s + Number(d.amount), 0);
   const attendanceDed = emp.payType === 'Monthly' && ordinaryWorkDays > 0 ? (emp.rate / ordinaryWorkDays) * daysAbsent : 0;
@@ -414,7 +420,7 @@ function computeRow(emp, from, to) {
   return {
     emp, daysPresent, isOverridden, workDays, daysAbsent, isAbsentOverridden, basePay, isBasePayOverridden,
     colaPay, isColaOverridden, housingPay, isHousingOverridden, nsdPay, isNsdOverridden,
-    otPay, isOtOverridden, holidayPay, isHolidayOverridden,
+    otPay, isOtOverridden, holidayPay, isHolidayOverridden, retroPay,
     gross, tax, manualDed, attendanceDed, lateUndertimeDed, dedTotal, bonusTotal, net,
   };
 }

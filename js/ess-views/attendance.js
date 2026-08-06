@@ -738,12 +738,21 @@ window.EssViews.attendance = (function () {
     } else {
       const rec = Store.attendanceForDate(date).find(r => r.employeeId === emp.id);
       if (!rec) { toast('No Time In found for today.'); return; }
-      await Store.updateAttendance(rec.id, {
+      const hours = hoursBetween(rec.timeIn, timeStr);
+      const patch = {
         timeOut: timeStr,
-        hours: hoursBetween(rec.timeIn, timeStr),
+        hours,
         timeOutPhotoPath: photoPath,
         timeOutLocation: location,
-      });
+      };
+      // Time In/Time Out photo shows the employee actually worked past the standard
+      // 8-hour shift -- automatically files the OT request for HR instead of making the
+      // employee remember to click Request separately. Still just a request: js/store.js
+      // computeDayPay never counts OT toward pay until HR reviews and sets otStatus to
+      // 'Approved' (Attendance -> Requests) -- same as the reminder that travel time past
+      // the designated timeout doesn't count as OT unless HR approves it.
+      if (hours > 8) patch.otStatus = 'Requested';
+      await Store.updateAttendance(rec.id, patch);
     }
   }
 

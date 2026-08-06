@@ -176,6 +176,7 @@ create table "payrollOverrides" (
   nsd numeric(12,2),
   ot numeric(12,2),
   holiday numeric(12,2),
+  "retroPay" numeric(12,2),
   unique("employeeId", "cutoffFrom")
 );
 
@@ -1902,3 +1903,16 @@ language sql stable security definer set search_path = public as $$
       where user_id = auth.uid() and status = 'verified'
     );
 $$;
+
+-- =================================================================
+-- Retroactive/previous pay -- incremental migration. Run once against a database that
+-- already has the migrations above applied. Safe to re-run.
+--
+-- One more manually-entered figure per employee per cutoff, same pattern as the existing
+-- cola/housing/nsd/ot/holiday override columns -- back pay owed from a prior period
+-- (a delayed raise, a correction, etc.), entered directly on the Payroll tab. Treated as
+-- real taxable wages (folded into gross, taxed like base pay), not an after-tax add-on
+-- like a bonus -- see computeRow() in js/store.js.
+-- =================================================================
+
+alter table "payrollOverrides" add column if not exists "retroPay" numeric(12,2);

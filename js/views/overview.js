@@ -232,7 +232,7 @@ function openEmployeeRecordsExportModal() {
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
-        <button type="submit" class="btn btn-primary">Download CSV</button>
+        <button type="submit" class="btn btn-primary">Download Excel</button>
       </div>
     </form>
   `, (bd) => {
@@ -265,7 +265,7 @@ function openEmployeeRecordsExportModal() {
       renderPicker();
     }));
 
-    qs('#records-export-form', bd).addEventListener('submit', (ev) => {
+    qs('#records-export-form', bd).addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const fd = new FormData(ev.target);
       let months, label;
@@ -284,55 +284,96 @@ function openEmployeeRecordsExportModal() {
         months = Array.from({ length: 12 }, (_, i) => ({ year: y, month: i + 1 }));
         label = String(y);
       }
-      downloadEmployeeRecordsCsv(months, label);
+      const submitBtn = qs('button[type="submit"]', bd);
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Generating…';
+      await downloadEmployeeRecordsWorkbook(months, label);
       closeModal();
     });
   });
 }
 
-function downloadEmployeeRecordsCsv(months, label) {
-  const employees = Store.listEmployees();
-  const header = [
-    'Employee Code', 'Name', 'Category', 'Position', 'Pay Type',
-    'Days Present', 'Days Absent', 'Base Pay', 'COLA', 'Housing Allowance', 'NSD', 'OT',
-    'Holiday Pay', 'Gross Pay', 'Withholding Tax', 'Deductions', 'Bonuses', 'Net Pay',
-  ];
-  const rows = [header];
+const RECORDS_EXPORT_COLUMNS = [
+  'Employee Code', 'Name', 'Category', 'Position', 'Pay Type',
+  'Days Present', 'Days Absent', 'Base Pay', 'COLA', 'Housing Allowance', 'NSD', 'OT',
+  'Holiday Pay', 'Gross Pay', 'Withholding Tax', 'Deductions', 'Bonuses', 'Net Pay',
+];
+const RECORDS_EXPORT_MONEY_COLUMNS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]; // 1-based
+const RECORDS_EXPORT_NET_PAY_COLUMN = 18;
+const RECORDS_EXPORT_BLUE = 'FF2F6FED'; // matches css/styles.css --accent
+const RECORDS_EXPORT_GREEN = 'FF15803D'; // matches css/styles.css --green
+
+function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
+// One row per employee per sheet, summing the exact same computeRow() figures the
+// Payroll page shows -- but per actual payroll cutoff, then totaled across every cutoff
+// whose END date falls in that sheet's month, never by calling computeRow() across the
+// whole month in one shot. Withholding tax uses semi-monthly (per-cutoff) BIR brackets,
+// so taxing a full month's combined gross at once would apply those brackets to a bigger
+// number and come out wrong -- computing and summing cutoff by cutoff keeps every figure
+// correct, it's just added up afterward.
+function addRecordsMonthSheet(workbook, employees, year, month) {
+  const monthLabel = new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  const sheet = workbook.addWorksheet(monthLabel);
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+  const headerRow = sheet.addRow(RECORDS_EXPORT_COLUMNS);
+  headerRow.eachCell((cell) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: RECORDS_EXPORT_BLUE } };
+    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+  });
 
   employees.forEach((emp) => {
     const t = {
       daysPresent: 0, daysAbsent: 0, basePay: 0, colaPay: 0, housingPay: 0, nsdPay: 0,
       otPay: 0, holidayPay: 0, gross: 0, tax: 0, dedTotal: 0, bonusTotal: 0, net: 0,
     };
-    months.forEach(({ year, month }) => {
-      payCutoffs(emp.payCycle, year, month).forEach((c) => {
-        const row = computeRow(emp, c.from, c.to);
-        Object.keys(t).forEach((k) => { t[k] += row[k]; });
-      });
+    payCutoffs(emp.payCycle, year, month).forEach((c) => {
+      const row = computeRow(emp, c.from, c.to);
+      Object.keys(t).forEach((k) => { t[k] += row[k]; });
     });
-    rows.push([
+    const dataRow = sheet.addRow([
       emp.employeeCode || '', emp.name, emp.category, emp.position || '', emp.payType,
       t.daysPresent, t.daysAbsent,
-      t.basePay.toFixed(2), t.colaPay.toFixed(2), t.housingPay.toFixed(2),
-      t.nsdPay.toFixed(2), t.otPay.toFixed(2), t.holidayPay.toFixed(2),
-      t.gross.toFixed(2), t.tax.toFixed(2), t.dedTotal.toFixed(2),
-      t.bonusTotal.toFixed(2), t.net.toFixed(2),
+      round2(t.basePay), round2(t.colaPay), round2(t.housingPay),
+      round2(t.nsdPay), round2(t.otPay), round2(t.holidayPay),
+      round2(t.gross), round2(t.tax), round2(t.dedTotal), round2(t.bonusTotal), round2(t.net),
     ]);
+    // Net Pay stands out in green, same as every other Net Pay figure across this
+    // dashboard (Payroll page, DTR, ESS My Payroll) -- consistent color language.
+    const netCell = dataRow.getCell(RECORDS_EXPORT_NET_PAY_COLUMN);
+    netCell.font = { color: { argb: RECORDS_EXPORT_GREEN }, bold: true };
   });
 
-  const csv = rows.map(row => row.map((cell) => {
-    const s = String(cell == null ? '' : cell);
-    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-  }).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
+  RECORDS_EXPORT_MONEY_COLUMNS.forEach((colNum) => {
+    sheet.getColumn(colNum).numFmt = '#,##0.00';
+  });
+  sheet.columns.forEach((col, i) => {
+    col.width = Math.max(RECORDS_EXPORT_COLUMNS[i].length + 2, 12);
+  });
+}
+
+async function downloadEmployeeRecordsWorkbook(months, label) {
+  const employees = Store.listEmployees();
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'TxTAIRE Dashboard';
+  workbook.created = new Date();
+  // Always one sheet per calendar month -- a Monthly export is naturally just one sheet;
+  // Quarterly/Yearly split into their 3 or 12 months instead of one giant combined sheet,
+  // so each month's figures stay easy to read on their own tab.
+  months.forEach(({ year, month }) => addRecordsMonthSheet(workbook, employees, year, month));
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `employee-records-${label.replace(/[\s,()–]+/g, '-').replace(/-+$/, '')}.csv`;
+  a.download = `employee-records-${label.replace(/[\s,()–]+/g, '-').replace(/-+$/, '')}.xlsx`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  Store.logAudit('records.export', 'employees', null, { period: label, employees: employees.length });
+  Store.logAudit('records.export', 'employees', null, { period: label, employees: employees.length, sheets: months.length });
   toast('✔ Employee records downloaded.');
 }
