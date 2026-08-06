@@ -19,6 +19,13 @@ window.Views.adminFiles = (function () {
   // explicit Cancel, or automatically after a Cut is pasted (a Copy can be pasted into
   // several folders in a row, same as a real file manager).
   let clipboard = null;
+  let openMenuId = null; // id of the file whose "..." row menu is currently open (one at a time)
+  let menuOutsideClickAttached = false;
+
+  function closeAllRowMenus() {
+    qsa('.row-menu').forEach(m => m.classList.add('hidden'));
+    openMenuId = null;
+  }
 
   // Recursively expands a dropped FileSystemEntry (from DataTransferItem.webkitGetAsEntry)
   // into its underlying files -- lets dragging a whole folder from the desktop onto a
@@ -407,11 +414,17 @@ window.Views.adminFiles = (function () {
                 <td class="dim">${fmtFileSize(f.fileSize)}</td>
                 <td class="dim">${fmtWhen(f.created_at)}</td>
                 <td class="dim">${escapeHtml(f.uploadedBy || '—')}</td>
-                <td style="white-space:nowrap;">
-                  <button class="link-btn" data-view-file="${f.filePath}">View</button>
-                  <button class="link-btn" data-info-file="${f.id}">Info</button>
-                  <button class="link-btn" data-rename-file="${f.id}">Rename</button>
-                  <button class="link-btn" data-delete-file="${f.id}" data-path="${f.filePath}" style="color:var(--red);">Delete</button>
+                <td>
+                  <div class="row-menu-wrap">
+                    <button type="button" class="row-menu-btn" data-menu-toggle="${f.id}" title="More actions">⋯</button>
+                    <div class="row-menu ${openMenuId === f.id ? '' : 'hidden'}" data-menu="${f.id}">
+                      <button type="button" data-view-file="${f.filePath}">View</button>
+                      <button type="button" data-info-file="${f.id}">Info</button>
+                      <button type="button" data-rename-file="${f.id}">Rename</button>
+                      <button type="button" data-toggle-select="${f.id}">${selectedFileIds.has(f.id) ? 'Deselect' : 'Select'}</button>
+                      <button type="button" class="danger" data-delete-file="${f.id}" data-path="${f.filePath}">Delete</button>
+                    </div>
+                  </div>
                 </td>
               </tr>
             `).join('')}
@@ -424,20 +437,44 @@ window.Views.adminFiles = (function () {
     qs('#btn-upload-doc', main).addEventListener('click', () => openUploadModal(main, 'file'));
     qs('#btn-scan-doc', main).addEventListener('click', () => openUploadModal(main, 'scan'));
     qs('#btn-upload-folder', main).addEventListener('click', () => openUploadModal(main, 'folder'));
+    qsa('[data-menu-toggle]', main).forEach(b => b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      openMenuId = openMenuId === b.dataset.menuToggle ? null : b.dataset.menuToggle;
+      renderFolderDetail(main);
+    }));
+    if (!menuOutsideClickAttached) {
+      menuOutsideClickAttached = true;
+      // Attached once, document-level -- clicking anywhere outside a "..." menu (including
+      // switching folders/tabs) closes whichever one is open. Clicks on the menu's own
+      // items are handled by closeAllRowMenus() inside each item's own handler below.
+      document.addEventListener('click', (ev) => {
+        if (!ev.target.closest('.row-menu-wrap')) closeAllRowMenus();
+      });
+    }
     qsa('[data-view-file]', main).forEach(b => b.addEventListener('click', async () => {
+      closeAllRowMenus();
       const win = window.open('', '_blank');
       const url = await Store.getSignedOfficeFileUrl(b.dataset.viewFile);
       if (url && win) win.location.href = url; else if (win) win.close();
     }));
     qsa('[data-info-file]', main).forEach(b => b.addEventListener('click', () => {
+      closeAllRowMenus();
       const f = rows.find(x => x.id === b.dataset.infoFile);
       if (f) openFileInfoModal(f);
     }));
     qsa('[data-rename-file]', main).forEach(b => b.addEventListener('click', () => {
+      closeAllRowMenus();
       const f = rows.find(x => x.id === b.dataset.renameFile);
       if (f) openRenameFileModal(main, f);
     }));
+    qsa('[data-toggle-select]', main).forEach(b => b.addEventListener('click', () => {
+      const id = b.dataset.toggleSelect;
+      if (selectedFileIds.has(id)) selectedFileIds.delete(id); else selectedFileIds.add(id);
+      openMenuId = null;
+      renderFolderDetail(main);
+    }));
     qsa('[data-delete-file]', main).forEach(b => b.addEventListener('click', async () => {
+      closeAllRowMenus();
       if (!confirm('Delete this file? This cannot be undone.')) return;
       await Store.deleteOfficeFile(b.dataset.deleteFile, b.dataset.path);
       toast('✔ File deleted.');

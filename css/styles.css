@@ -219,6 +219,25 @@ html, body {
   font-size: 12.5px; font-weight: 600; padding: 0;
 }
 
+/* ---------- Row "..." action menu (e.g. Admin Files table rows) ---------- */
+.row-menu-wrap { position: relative; display: inline-block; }
+.row-menu-btn {
+  background: none; border: none; cursor: pointer; font-size: 16px; line-height: 1;
+  padding: 4px 8px; border-radius: 6px; color: var(--text-faint);
+}
+.row-menu-btn:hover { background: var(--bg-elevated); }
+.row-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 30;
+  background: var(--bg-elevated); border: 1px solid var(--border-soft); border-radius: 8px;
+  box-shadow: var(--shadow-card); min-width: 130px; padding: 4px; display: flex; flex-direction: column;
+}
+.row-menu button {
+  background: none; border: none; text-align: left; cursor: pointer;
+  padding: 7px 10px; border-radius: 6px; font-size: 13px; color: var(--text);
+}
+.row-menu button:hover { background: var(--bg-card); }
+.row-menu button.danger { color: var(--red); }
+
 /* ---------- Cards / KPI ---------- */
 .kpi-row {
   display: grid;
