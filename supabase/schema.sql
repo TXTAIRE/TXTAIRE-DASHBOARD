@@ -1834,3 +1834,38 @@ create policy "employee updates own employment history" on "employmentHistory"
 drop policy if exists "employee deletes own employment history" on "employmentHistory";
 create policy "employee deletes own employment history" on "employmentHistory"
   for delete to authenticated using ("employeeId" = my_employee_id());
+
+-- =================================================================
+-- Payroll cutoff reminder push notifications -- incremental migration. Run once against a
+-- database that already has the migrations above applied. Safe to re-run.
+--
+-- Each row is one HR/admin browser's Web Push subscription (Settings -> "Enable Payroll
+-- Reminders" on the Payroll page registers it). A scheduled Supabase Edge Function
+-- (supabase/functions/payroll-cutoff-reminder) reads these and sends a push a
+-- configurable number of days before each pay cycle's cutoff date -- see that function's
+-- own comments for the full setup (VAPID keys, pg_cron schedule). HR-only: employees
+-- never see or manage these, same "admin full access, no employee policy at all" pattern
+-- as disciplinaryCases.
+-- =================================================================
+
+create table if not exists "pushSubscriptions" (
+  id text primary key,
+  "adminEmail" text not null,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  "userAgent" text,
+  created_at timestamptz not null default now()
+);
+
+alter table "pushSubscriptions" enable row level security;
+
+drop policy if exists "admin full access" on "pushSubscriptions";
+create policy "admin full access" on "pushSubscriptions"
+  for all to authenticated using (is_admin()) with check (is_admin());
+
+-- appSettings already exists (generic admin-only key/value store) -- the reminder
+-- threshold is just a new key in it, no schema change needed there. Defaults to 2 days
+-- before each cutoff if this row is never inserted (see js/store.js getAppSetting call).
+insert into "appSettings" (key, value) values ('payrollReminderDaysBefore', '2')
+  on conflict (key) do nothing;

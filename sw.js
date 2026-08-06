@@ -1,7 +1,7 @@
 // App-shell cache for the TxTAIRE admin dashboard and ESS portal, so both are installable
 // and open instantly offline. Only same-origin static files are cached — Supabase/CDN/
 // geolocation requests are always left to the network untouched, so data is never stale.
-const CACHE_NAME = 'txtaire-shell-v45';
+const CACHE_NAME = 'txtaire-shell-v47';
 
 const PRECACHE_URLS = [
   'index.html',
@@ -53,6 +53,50 @@ self.addEventListener('activate', (event) => {
     caches.keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
+  );
+});
+
+// Payroll cutoff reminder push notifications -- the payload is sent by the scheduled
+// Supabase Edge Function (supabase/functions/payroll-cutoff-reminder). A service worker
+// has no audio output of its own, so a custom "ringtone" can only play while a dashboard
+// tab is actually open (js/app.js listens for the 'payroll-reminder-push' message below
+// and plays a tone via the Web Audio API); with the app fully closed, only the OS's own
+// default notification sound plays -- a real platform limitation of background push, not
+// something this app can work around.
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try { payload = event.data ? event.data.json() : {}; } catch (err) {
+    payload = { title: 'Payroll Reminder', body: event.data ? event.data.text() : '' };
+  }
+  const title = payload.title || 'Payroll Reminder';
+  const options = {
+    body: payload.body || 'A payroll cutoff is coming up.',
+    icon: 'assets/icon-192.png',
+    badge: 'assets/icon-192.png',
+    tag: payload.tag || 'payroll-cutoff-reminder',
+    vibrate: [200, 100, 200, 100, 200],
+    data: { url: payload.url || './index.html' },
+  };
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsArr) => {
+        clientsArr.forEach((c) => c.postMessage({ type: 'payroll-reminder-push', title, body: options.body }));
+      }),
+    ])
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || './index.html';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsArr) => {
+      for (const c of clientsArr) {
+        if ('focus' in c) return c.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
+    })
   );
 });
 

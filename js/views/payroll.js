@@ -50,6 +50,83 @@ window.Views.payroll = (function () {
   // computeRow(emp, from, to) now lives in js/store.js — shared with the Employee
   // Self-Service "My Payroll" page so both always show identical figures.
 
+  // Web Push subscription is per-device (registered with the browser's push service, not
+  // stored anywhere we can synchronously read), so the card first renders a "Checking…"
+  // placeholder and fills in the real Enable/Disable state once getCurrentPushSubscription()
+  // resolves (js/app.js). currentUserEmail()/enablePushReminders()/disablePushReminders()/
+  // playReminderTone() all live there too — admin-app-shell-only, not shared with ess.html.
+  function renderPushReminderCard(main) {
+    const card = qs('#push-reminder-card', main);
+    if (!card) return;
+    const days = Store.getAppSetting('payrollReminderDaysBefore', 2);
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div style="font-weight:700;">🔔 Payroll Cutoff Reminders</div>
+          <div class="dim" id="push-status-text" style="font-size:13px; margin-top:2px;">Checking this device…</div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+          <div class="field" style="margin:0;">
+            <label style="font-size:11px;">Remind (days before cutoff)</label>
+            <input type="number" id="push-days-before" min="0" max="15" step="1" style="width:70px;" value="${days}" />
+          </div>
+          <button class="btn btn-ghost btn-sm" id="btn-test-sound" title="Preview the ringtone this device will play">🔊 Test Sound</button>
+          <button class="btn btn-primary btn-sm" id="btn-toggle-push" disabled>…</button>
+        </div>
+      </div>
+    `;
+
+    qs('#btn-test-sound', card).addEventListener('click', () => playReminderTone());
+    qs('#push-days-before', card).addEventListener('change', async (ev) => {
+      const n = Math.max(0, Math.min(15, Number(ev.target.value) || 0));
+      ev.target.value = n;
+      await Store.setAppSetting('payrollReminderDaysBefore', n);
+      toast(`✔ Will remind ${n} day${n === 1 ? '' : 's'} before each cutoff.`);
+    });
+
+    function setToggleState(subscribed) {
+      const btn = qs('#btn-toggle-push', card);
+      const statusText = qs('#push-status-text', card);
+      btn.disabled = false;
+      if (Notification.permission === 'denied') {
+        btn.textContent = 'Blocked';
+        btn.disabled = true;
+        statusText.textContent = 'Notifications are blocked for this site — enable them in your browser\'s site settings, then reload.';
+        return;
+      }
+      if (subscribed) {
+        btn.textContent = '🔕 Disable on this device';
+        btn.className = 'btn btn-ghost btn-sm';
+        statusText.textContent = 'Enabled on this device — you\'ll get a push (and this device\'s ringtone, if the dashboard is open) before each cutoff.';
+      } else {
+        btn.textContent = '🔔 Enable on this device';
+        btn.className = 'btn btn-primary btn-sm';
+        statusText.textContent = 'Not enabled on this device yet.';
+      }
+      btn.onclick = async () => {
+        btn.disabled = true;
+        btn.textContent = subscribed ? 'Disabling…' : 'Enabling…';
+        try {
+          if (subscribed) await disablePushReminders();
+          else await enablePushReminders();
+          toast(subscribed ? 'Reminders disabled on this device.' : '✔ Reminders enabled on this device.');
+        } catch (err) {
+          toast('Something went wrong — try again.');
+        }
+        renderPushReminderCard(main);
+      };
+    }
+
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      const btn = qs('#btn-toggle-push', card);
+      btn.textContent = 'Not supported';
+      btn.disabled = true;
+      qs('#push-status-text', card).textContent = 'Push notifications aren\'t supported on this browser/device.';
+      return;
+    }
+    getCurrentPushSubscription().then((sub) => setToggleState(!!sub));
+  }
+
   function renderView(main) {
     main.innerHTML = `
       <div class="crumb">HR</div>
@@ -63,6 +140,8 @@ window.Views.payroll = (function () {
         ${activeTab === 'holidays' ? '<button class="btn btn-primary" id="btn-new-holiday">+ Add holiday</button>' : ''}
       </div>
 
+      <div class="panel" id="push-reminder-card" style="margin-bottom:14px; padding:14px 16px;"></div>
+
       <div class="tabs">
         <div class="tab ${activeTab === 'payroll' ? 'active' : ''}" data-tab="payroll">Payroll</div>
         <div class="tab ${activeTab === 'deductions' ? 'active' : ''}" data-tab="deductions">Deductions</div>
@@ -73,6 +152,7 @@ window.Views.payroll = (function () {
       <div id="tab-body"></div>
     `;
 
+    renderPushReminderCard(main);
     qsa('.tab', main).forEach(t => t.addEventListener('click', () => { activeTab = t.dataset.tab; renderView(main); }));
     const btnNewDed = qs('#btn-new-deduction', main);
     if (btnNewDed) btnNewDed.addEventListener('click', () => openDeductionForm(main));

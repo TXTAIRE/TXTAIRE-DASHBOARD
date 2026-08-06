@@ -334,6 +334,90 @@ let appStarted = false;
 let signedInEmail = null;
 function currentUserEmail() { return signedInEmail; }
 
+// ---- Payroll cutoff reminder push notifications (this device only) ----
+// pushManager.subscribe() needs the VAPID public key as a raw byte array, not the
+// base64url string it's stored/transmitted as.
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
+async function getCurrentPushSubscription() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  // Guards against the status card getting stuck on "Checking this device…" forever if
+  // the browser's push backend is ever slow/unreachable (e.g. no network) — falls back to
+  // "not enabled" rather than hanging the UI.
+  const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 6000));
+  const lookup = (async () => {
+    const reg = await navigator.serviceWorker.ready;
+    return reg.pushManager.getSubscription();
+  })();
+  return Promise.race([lookup, timeout]);
+}
+
+async function enablePushReminders() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    toast('Push notifications aren\'t supported on this browser/device.');
+    return false;
+  }
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    toast(permission === 'denied'
+      ? 'Notifications are blocked for this site — enable them in your browser\'s site settings.'
+      : 'Notification permission was not granted.');
+    return false;
+  }
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+  });
+  await Store.savePushSubscription(sub, currentUserEmail());
+  return true;
+}
+
+async function disablePushReminders() {
+  const sub = await getCurrentPushSubscription();
+  if (!sub) return;
+  const endpoint = sub.endpoint;
+  await sub.unsubscribe();
+  await Store.deletePushSubscriptionByEndpoint(endpoint);
+}
+
+// Plays a short "ringtone" tone via the Web Audio API — used both as a live preview
+// (Test Sound button) and when a push notification arrives while a dashboard tab is
+// actually open (see the service worker 'message' relay wired in startApp below). A
+// service worker itself can't play audio, so with the app fully closed only the OS's own
+// default notification sound plays — that's a platform limitation, not something fixable
+// from here.
+function playReminderTone() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const notes = [880, 1108.73, 1318.51]; // A5, C#6, E6 -- a simple three-note chime
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const start = ctx.currentTime + i * 0.16;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.25, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.5);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.55);
+    });
+    setTimeout(() => ctx.close(), 1200);
+  } catch (err) {
+    // Autoplay/audio can be blocked by the browser until the user interacts with the
+    // page — silently skip the tone rather than throwing; the visual toast still shows.
+  }
+}
+
 async function startApp(session) {
   if (appStarted) return;
   appStarted = true;
@@ -365,6 +449,19 @@ async function startApp(session) {
   qs('#main-content').innerHTML = '<div class="empty">Loading…</div>';
   preserveScrollAcrossRerenders(qs('#main-content'));
   await Store.init();
+
+  // Relayed from the service worker's 'push' handler (sw.js) whenever a payroll cutoff
+  // reminder arrives while this tab is open — plays the ringtone here, since a service
+  // worker has no audio output of its own. The OS's own notification (with its default
+  // sound/vibration) is shown regardless, by the service worker itself.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'payroll-reminder-push') {
+        playReminderTone();
+        toast('🔔 ' + event.data.title);
+      }
+    });
+  }
 
   // Live updates from other devices: any remote change refetches that table and
   // re-renders the current view. Debounced, and skipped while a modal/drawer is open

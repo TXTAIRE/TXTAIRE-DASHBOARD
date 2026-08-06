@@ -10,6 +10,13 @@
 const SUPABASE_URL = 'https://fmgqqrmsxleyeiadnhyd.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtZ3Fxcm1zeGxleWVpYWRuaHlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4MzA0MTYsImV4cCI6MjEwMDQwNjQxNn0.vNUkDTBxZQ4qTzxVPo03-x1jNoTV_O19UsyqMhy4E8A';
 
+// VAPID "application server" public key for Web Push (payroll cutoff reminders, admin
+// dashboard only — see js/views/payroll.js and supabase/functions/payroll-cutoff-reminder).
+// Safe to be public, same as the anon key above — it identifies this app to the push
+// service, it doesn't authorize anything by itself. The matching PRIVATE key must never
+// appear in any client file; it only lives as a Supabase Edge Function secret.
+const VAPID_PUBLIC_KEY = 'BEl_r1Ap1nFd7_UM7D4HUyidqjhKVSskcpty7kleiNuSJ5549Oju650xKCWpYvLSGD1lVXV6razAqWvucpPNw9k';
+
 // ess.html and index.html share this file but must not share one signed-in session
 // (e.g. HR signed into the admin dashboard on the same shared office PC an employee
 // later opens the portal on) — give each its own storage key. `#ess-login` only

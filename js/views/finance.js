@@ -11,17 +11,15 @@ window.Views.finance = (function () {
       <div class="page-head">
         <div>
           <h1 class="page-title">Office &amp; Finance</h1>
-          <div class="page-sub">Expense/receipt log, bill reminders, and office file storage. Admin-only -- not part of the employee portal.</div>
+          <div class="page-sub">Expense/receipt log and bill reminders. Admin-only -- not part of the employee portal. Office file storage moved to Admin Files, on the sidebar below.</div>
         </div>
         ${activeTab === 'expenses' ? '<button class="btn btn-primary" id="btn-new-expense">+ Add expense</button>' : ''}
         ${activeTab === 'bills' ? '<button class="btn btn-primary" id="btn-new-bill">+ Add bill</button>' : ''}
-        ${activeTab === 'files' ? '<button class="btn btn-primary" id="btn-upload-file">+ Upload file</button>' : ''}
       </div>
 
       <div class="tabs">
         <div class="tab ${activeTab === 'expenses' ? 'active' : ''}" data-tab="expenses">Expenses &amp; Receipts</div>
         <div class="tab ${activeTab === 'bills' ? 'active' : ''}" data-tab="bills">Bill Reminders</div>
-        <div class="tab ${activeTab === 'files' ? 'active' : ''}" data-tab="files">Office Files</div>
       </div>
 
       <div id="tab-body"></div>
@@ -32,12 +30,9 @@ window.Views.finance = (function () {
     if (btnNewExp) btnNewExp.addEventListener('click', () => openExpenseForm(main));
     const btnNewBill = qs('#btn-new-bill', main);
     if (btnNewBill) btnNewBill.addEventListener('click', () => openBillForm(main));
-    const btnUpload = qs('#btn-upload-file', main);
-    if (btnUpload) btnUpload.addEventListener('click', () => openFileUpload(main));
 
     if (activeTab === 'expenses') renderExpensesTab(qs('#tab-body', main), main);
-    else if (activeTab === 'bills') renderBillsTab(qs('#tab-body', main), main);
-    else renderFilesTab(qs('#tab-body', main), main);
+    else renderBillsTab(qs('#tab-body', main), main);
   }
 
   // ---------------- Expenses & Receipts ----------------
@@ -306,98 +301,6 @@ window.Views.finance = (function () {
         }
         closeModal();
         renderView(main);
-      });
-    });
-  }
-
-  // ---------------- Office Files ----------------
-
-  function fmtFileSize(bytes) {
-    if (!bytes) return '—';
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  }
-
-  function renderFilesTab(body, main) {
-    const rows = Store.listOfficeFiles().slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-
-    body.innerHTML = `
-      <div class="page-sub" style="margin-bottom:10px;">Scanned documents and other office files. Since a browser can't drive a physical scanner directly, scan on the printer's own software first, then upload the resulting file here.</div>
-      <div class="panel">
-        ${rows.length ? `
-        <table>
-          <thead><tr><th>File</th><th>Category</th><th>Size</th><th>Uploaded</th><th>By</th><th></th></tr></thead>
-          <tbody>
-            ${rows.map(f => `
-              <tr>
-                <td class="name">${escapeHtml(f.fileName)}</td>
-                <td><span class="badge badge-gray">${escapeHtml(f.category || 'Other')}</span></td>
-                <td class="dim">${fmtFileSize(f.fileSize)}</td>
-                <td class="dim">${fmtWhen(f.created_at)}</td>
-                <td class="dim">${escapeHtml(f.uploadedBy || '—')}</td>
-                <td style="white-space:nowrap;">
-                  <button class="link-btn" data-view-file="${f.filePath}">View</button>
-                  <button class="link-btn" data-delete-file="${f.id}" data-path="${f.filePath}" style="color:var(--red);">Delete</button>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>` : '<div class="empty">No office files uploaded yet.</div>'}
-      </div>
-    `;
-
-    qsa('[data-view-file]', body).forEach(b => b.addEventListener('click', async () => {
-      const win = window.open('', '_blank');
-      const url = await Store.getSignedOfficeFileUrl(b.dataset.viewFile);
-      if (url && win) win.location.href = url; else if (win) win.close();
-    }));
-    qsa('[data-delete-file]', body).forEach(b => b.addEventListener('click', async () => {
-      if (!confirm('Delete this file? This cannot be undone.')) return;
-      await Store.deleteOfficeFile(b.dataset.deleteFile, b.dataset.path);
-      toast('✔ File deleted.');
-      renderFilesTab(body, main);
-    }));
-  }
-
-  function fmtWhen(iso) {
-    if (!iso) return '—';
-    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
-  }
-
-  function openFileUpload(main) {
-    openModal(`
-      <h2>Upload Office File</h2>
-      <form id="file-upload-form">
-        <div class="modal-grid">
-          <div class="field full"><label>File</label><input type="file" name="file" required /></div>
-          <div class="field full"><label>Category</label>
-            <select name="category">${['Scanned Document', 'Contract', 'Invoice', 'Other'].map(c => `<option>${c}</option>`).join('')}</select>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
-          <button type="submit" class="btn btn-primary">Upload</button>
-        </div>
-      </form>
-    `, (bd) => {
-      qs('#file-upload-form', bd).addEventListener('submit', async (ev) => {
-        ev.preventDefault();
-        const fd = new FormData(ev.target);
-        const file = fd.get('file');
-        if (!file || !file.size) { toast('Choose a file first.'); return; }
-        const submitBtn = qs('button[type="submit"]', bd);
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Uploading…';
-        try {
-          await Store.uploadOfficeFile(file, fd.get('category'), currentUserEmail());
-          toast('✔ File uploaded.');
-          closeModal();
-          renderView(main);
-        } catch (err) {
-          submitBtn.disabled = false;
-          submitBtn.textContent = 'Upload';
-        }
       });
     });
   }

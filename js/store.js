@@ -443,6 +443,7 @@ const Store = (function () {
     officeFiles: 'officeFiles',
     employmentHistory: 'employmentHistory',
     employeeDocuments: 'employeeDocuments',
+    pushSubscriptions: 'pushSubscriptions',
   };
 
   const state = {
@@ -453,6 +454,7 @@ const Store = (function () {
     notifications: [], payrollReleases: [], appSettings: [],
     expenses: [], bills: [], officeFiles: [],
     employmentHistory: [], employeeDocuments: [],
+    pushSubscriptions: [],
   };
 
   let remoteChangeCallback = null;
@@ -1053,6 +1055,31 @@ const Store = (function () {
     }
     await deleteRow('officeFiles', id);
   }
+  // Rename (fileName) and Move-to-folder (category) both just patch the row -- storage
+  // paths are flat/random (see uploadOfficeFile above), never derived from fileName or
+  // category, so neither operation ever needs to touch the underlying storage object.
+  async function updateOfficeFile(id, patch) {
+    await updateRow('officeFiles', id, patch);
+  }
+  // Copy-to-folder: actually duplicates the underlying storage object (download the
+  // signed URL, re-upload as a new blob) and inserts a new row, so the original is left
+  // untouched -- unlike a Move, both copies exist independently afterward.
+  async function duplicateOfficeFile(file, newCategory, uploadedBy) {
+    const url = await getSignedOfficeFileUrl(file.filePath);
+    if (!url) throw new Error('Could not read the original file to copy it.');
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Could not read the original file to copy it.');
+    const blob = await res.blob();
+    const ext = (file.fileName && file.fileName.split('.').pop()) || 'dat';
+    const path = `${genId('file')}.${ext}`;
+    const { error: upErr } = await sb.storage.from('office-files').upload(path, blob, { contentType: file.mimeType || 'application/octet-stream' });
+    if (upErr) { toast('Copy failed: ' + upErr.message); throw upErr; }
+    return insertRow('officeFiles', {
+      id: genId('of'), fileName: file.fileName, filePath: path,
+      mimeType: file.mimeType || null, fileSize: file.fileSize || null,
+      category: newCategory || file.category || 'Other', uploadedBy: uploadedBy || null,
+    });
+  }
 
   // ---- 201 File (employee documents/requirements) ----
   // Both the employee (My Portal -> My Profile) and admins can upload; every upload
@@ -1094,6 +1121,28 @@ const Store = (function () {
     await deleteRow('employeeDocuments', id);
   }
 
+  // ---- Payroll cutoff reminder push subscriptions (HR/admin devices only) ----
+  function listPushSubscriptions() { return state.pushSubscriptions.slice(); }
+  // sub is a PushSubscription (from pushManager.subscribe()) -- stores its endpoint/keys so
+  // the scheduled Edge Function (supabase/functions/payroll-cutoff-reminder) can send to it
+  // later. Keyed by endpoint (unique) so re-enabling on the same browser/device just
+  // upserts instead of creating duplicate rows.
+  async function savePushSubscription(sub, adminEmail) {
+    const json = sub.toJSON ? sub.toJSON() : sub;
+    const { error } = await sb.from(TABLES.pushSubscriptions).upsert(sanitize({
+      id: genId('push'), endpoint: json.endpoint,
+      p256dh: json.keys && json.keys.p256dh, auth: json.keys && json.keys.auth,
+      adminEmail: adminEmail || null, userAgent: navigator.userAgent || null,
+    }), { onConflict: 'endpoint' });
+    if (error) { toast('Could not save this device: ' + error.message); throw error; }
+    await refetch('pushSubscriptions');
+  }
+  async function deletePushSubscriptionByEndpoint(endpoint) {
+    const { error } = await sb.from(TABLES.pushSubscriptions).delete().eq('endpoint', endpoint);
+    if (error) { toast('Could not remove this device: ' + error.message); throw error; }
+    await refetch('pushSubscriptions');
+  }
+
   // ---- Backup: a full snapshot of every table currently loaded in memory. The free
   // Supabase tier has no automatic backups/point-in-time recovery, so this is what backs
   // the admin "Download Backup" button — a plain JSON export HR can save wherever they like.
@@ -1124,8 +1173,9 @@ const Store = (function () {
     listExpenses, getExpense, expensesInRange, addExpense, updateExpense, deleteExpense,
     uploadReceiptPhoto, getSignedReceiptUrl, deleteReceiptPhoto,
     listBills, getBill, addBill, updateBill, deleteBill, payBill,
-    listOfficeFiles, uploadOfficeFile, getSignedOfficeFileUrl, deleteOfficeFile,
+    listOfficeFiles, uploadOfficeFile, getSignedOfficeFileUrl, deleteOfficeFile, updateOfficeFile, duplicateOfficeFile,
     employeeDocumentsForEmployee, uploadEmployeeDocument, getSignedEmployeeDocumentUrl, updateEmployeeDocument, deleteEmployeeDocument,
+    listPushSubscriptions, savePushSubscription, deletePushSubscriptionByEndpoint,
     exportAllData, logAudit,
   };
 })();
