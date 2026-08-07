@@ -45,6 +45,16 @@ function openEssModal(innerHtml, onMount) {
   return bd;
 }
 
+// Captured as early as possible (top-level, not inside a function) -- Chrome/Edge/Android
+// only ever fire 'beforeinstallprompt' once, before any user interaction, and only if
+// nothing else on the page has already called preventDefault() on it. Held onto until
+// startEss() decides whether to actually show the install nudge.
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+});
+
 const ESS_ROUTES = ['attendance', 'payroll', 'leave', 'profile', 'notifications', 'settings'];
 let essRoute = 'attendance';
 let myEmployee = null;
@@ -370,6 +380,64 @@ function preserveScrollAcrossRerenders(container) {
   observer.observe(container, { childList: true });
 }
 
+// ---- "Add to Home Screen" nudge, shown once per login (throttled) ----
+// This is what actually makes push notifications reachable on iPhone/iPad -- iOS only
+// exposes the Push API to an installed home-screen app, never a normal Safari tab (see
+// pushUnsupportedReason() above) -- so prompting for this right after login gives
+// employees the single step that unlocks notifications there, instead of leaving it
+// buried in Settings for them to discover on their own.
+const INSTALL_PROMPT_DISMISS_KEY = 'essInstallPromptDismissedAt';
+const INSTALL_PROMPT_REASK_DAYS = 14;
+
+function shouldShowInstallPrompt() {
+  if (isStandaloneDisplay()) return false; // already installed and running as an app
+  const dismissedAt = Number(localStorage.getItem(INSTALL_PROMPT_DISMISS_KEY) || 0);
+  if (dismissedAt && (Date.now() - dismissedAt) < INSTALL_PROMPT_REASK_DAYS * 86400000) return false;
+  // Only worth interrupting the employee for if there's something they can actually do:
+  // a real one-tap install (Chrome/Edge/Android) or iOS's manual Share -> Add to Home
+  // Screen steps. Browsers with neither (e.g. desktop Firefox) get no popup at all.
+  return !!deferredInstallPrompt || isIosDevice();
+}
+
+function dismissInstallPrompt() {
+  localStorage.setItem(INSTALL_PROMPT_DISMISS_KEY, String(Date.now()));
+  closeEssModal();
+}
+
+function maybeShowInstallPrompt() {
+  if (!shouldShowInstallPrompt()) return;
+  const isIos = isIosDevice();
+  openEssModal(`
+    <h2>📲 Add My Portal to Your Home Screen</h2>
+    <div class="modal-sub">${isIos
+      ? 'Tap the Share button below, then "Add to Home Screen." This gives you one-tap access and is required on iPhone/iPad to receive notifications.'
+      : 'Get one-tap access from your home screen, and enable notifications for approvals, payroll releases, and request updates.'}</div>
+    ${isIos ? `
+    <div class="ess-card" style="text-align:center; margin:14px 0;">
+      <div style="font-size:13px;">1. Tap <strong>Share</strong> ⬆️ in Safari's toolbar</div>
+      <div style="font-size:13px; margin-top:6px;">2. Scroll down and tap <strong>"Add to Home Screen"</strong></div>
+    </div>` : ''}
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="btn-install-later">Maybe Later</button>
+      ${isIos
+        ? '<button type="button" class="btn btn-primary" id="btn-install-got-it">Got it</button>'
+        : '<button type="button" class="btn btn-primary" id="btn-install-now">Add to Home Screen</button>'}
+    </div>
+  `, (bd) => {
+    qs('#btn-install-later', bd).addEventListener('click', dismissInstallPrompt);
+    const gotItBtn = qs('#btn-install-got-it', bd);
+    if (gotItBtn) gotItBtn.addEventListener('click', dismissInstallPrompt);
+    const installNowBtn = qs('#btn-install-now', bd);
+    if (installNowBtn) installNowBtn.addEventListener('click', async () => {
+      if (!deferredInstallPrompt) { dismissInstallPrompt(); return; }
+      deferredInstallPrompt.prompt();
+      try { await deferredInstallPrompt.userChoice; } catch (err) { /* ignore */ }
+      deferredInstallPrompt = null; // a captured prompt event can only ever be used once
+      dismissInstallPrompt();
+    });
+  });
+}
+
 let essStarted = false;
 async function startEss(session) {
   if (essStarted) return;
@@ -416,6 +484,8 @@ async function startEss(session) {
   });
 
   renderEssRoute();
+  // Deferred a beat so it doesn't compete with the login->portal transition/initial render.
+  setTimeout(maybeShowInstallPrompt, 1200);
 }
 
 async function bootEss() {
