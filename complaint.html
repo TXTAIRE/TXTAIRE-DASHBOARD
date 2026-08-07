@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';" />
+<title>TxTAIRE · Submit a Complaint</title>
+<link rel="icon" href="assets/icon-192.png" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<div id="auth-screen">
+  <div class="auth-card" id="complaint-card">
+    <img src="assets/logo.svg" alt="TxTAIRE" class="auth-logo" />
+    <h1>Submit a Complaint</h1>
+    <div class="page-sub" style="margin-bottom:18px;">Let us know what happened — our team will follow up with you directly.</div>
+    <div id="complaint-error"></div>
+    <form id="complaint-public-form">
+      <div class="field full" style="margin-bottom:12px;">
+        <label>Your name</label>
+        <input type="text" name="customerName" required autocomplete="name" />
+      </div>
+      <div class="field full" style="margin-bottom:12px;">
+        <label>Phone or email</label>
+        <input type="text" name="contact" required autocomplete="tel" placeholder="So we can reach you back" />
+      </div>
+      <div class="field full" style="margin-bottom:18px;">
+        <label>What happened?</label>
+        <textarea name="description" rows="4" required></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Submit Complaint</button>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.9/dist/umd/supabase.js"
+  integrity="sha384-6foGJ1oz/y3anEo0BXRtTgBK1GvpnR0GbJZb0ijG+nBAJ4rYT+VqlD/9e3CSiFIA"
+  crossorigin="anonymous"></script>
+<script src="js/complaint-form.js"></script>
+</body>
+</html>

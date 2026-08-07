@@ -2116,3 +2116,31 @@ create policy "admin full access" on "materialRequests"
   for all to authenticated using (is_admin()) with check (is_admin());
 
 alter publication supabase_realtime add table "materialRequests";
+
+-- =================================================================
+-- Public complaint link -- incremental migration. Safe to re-run.
+--
+-- A shareable, unauthenticated URL (complaint.html) HR can hand or text directly to a
+-- customer so they can submit a complaint themselves, landing in the same "complaints"
+-- table/queue admins already work from -- no separate inbox to check.
+--
+-- This is the first table in the whole schema to grant the `anon` role anything at all
+-- (every other table denies anon entirely -- see the comment in js/supabase-config.js).
+-- Scoped as narrowly as possible: insert-only, and the with check clause below forces
+-- every anonymous submission to start as a fresh 'Open' complaint with no assignee/
+-- resolution already set, so a public submitter can never insert a row that looks
+-- already handled or claim it for a specific staff member.
+-- =================================================================
+
+grant insert on complaints to anon;
+
+drop policy if exists "public can submit complaints" on complaints;
+create policy "public can submit complaints" on complaints
+  for insert to anon
+  with check (
+    status = 'Open'
+    and "assignedTo" is null
+    and "resolvedDate" is null
+    and "resolutionNotes" = ''
+    and priority in ('Low', 'Medium', 'High')
+  );

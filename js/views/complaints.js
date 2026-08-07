@@ -1,4 +1,9 @@
 window.Views.complaints = (function () {
+  // 'Open' is the underlying stored status value (existing data, existing detail-drawer
+  // dropdown) -- only its displayed label changed, to "Waiting Queue" so the default view
+  // reads as the queue of complaints HR hasn't gotten to yet, same idea as Leave Requests
+  // opening on Pending.
+  const STATUS_FILTER_LABELS = { Open: 'Waiting Queue', All: 'All', Resolved: 'Resolved', Closed: 'Closed' };
   let filterStatus = 'Open';
 
   function renderList(main) {
@@ -13,16 +18,19 @@ window.Views.complaints = (function () {
       <div class="page-head">
         <div>
           <h1 class="page-title">Customer Complaints</h1>
-          <div class="page-sub">Log, assign, and track customer complaints through to resolution.</div>
+          <div class="page-sub">Log, assign, and track customer complaints through to resolution. Share the public link so customers can submit their own.</div>
         </div>
-        <button class="btn btn-primary" id="btn-log-complaint">+ Log complaint</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-ghost" id="btn-copy-complaint-link">🔗 Copy public link</button>
+          <button class="btn btn-primary" id="btn-log-complaint">+ Log complaint</button>
+        </div>
       </div>
 
       <div class="filters">
         <div class="field">
           <label>Status</label>
           <div class="seg" id="seg-status">
-            ${['Open', 'All', 'Resolved', 'Closed'].map(s => `<button data-val="${s}" class="${filterStatus === s ? 'active' : ''}">${s}</button>`).join('')}
+            ${['Open', 'All', 'Resolved', 'Closed'].map(s => `<button data-val="${s}" class="${filterStatus === s ? 'active' : ''}">${STATUS_FILTER_LABELS[s]}</button>`).join('')}
           </div>
         </div>
       </div>
@@ -37,7 +45,11 @@ window.Views.complaints = (function () {
                 <td class="name row-link" data-open="${c.id}">${escapeHtml(c.customerName)}</td>
                 <td class="dim" style="max-width:280px;">${escapeHtml(c.description.length > 60 ? c.description.slice(0, 60) + '…' : c.description)}</td>
                 <td class="dim">${c.assignedTo ? escapeHtml(employeeName(c.assignedTo)) : '—'}</td>
-                <td>${priorityBadge(c.priority)}</td>
+                <td>
+                  <div class="seg priority-seg" data-priority-for="${c.id}">
+                    ${['High', 'Medium', 'Low'].map(p => `<button type="button" data-priority="${p}" class="${c.priority === p ? 'active' : ''}">${PRIORITY_LABELS[p]}</button>`).join('')}
+                  </div>
+                </td>
                 <td>${complaintStatusBadge(c.status)}</td>
                 <td class="dim">${fmtDate(c.dateReceived)}</td>
               </tr>
@@ -48,8 +60,33 @@ window.Views.complaints = (function () {
     `;
 
     qs('#btn-log-complaint', main).addEventListener('click', () => openComplaintForm(main));
+    qs('#btn-copy-complaint-link', main).addEventListener('click', () => copyPublicComplaintLink());
     qsa('#seg-status button', main).forEach(b => b.addEventListener('click', () => { filterStatus = b.dataset.val; renderList(main); }));
     qsa('[data-open]', main).forEach(el => el.addEventListener('click', () => openComplaintDetail(main, el.dataset.open)));
+    qsa('[data-priority-for]', main).forEach(seg => {
+      qsa('button', seg).forEach(btn => btn.addEventListener('click', async () => {
+        await Store.updateComplaint(seg.dataset.priorityFor, { priority: btn.dataset.priority });
+        toast('✔ Priority set to ' + PRIORITY_LABELS[btn.dataset.priority] + '.');
+        renderList(main);
+      }));
+    });
+  }
+
+  // The shareable link customers use to submit a complaint themselves (complaint.html --
+  // a small, unauthenticated page, separate from this admin dashboard). Resolved relative
+  // to the current page so it still works whichever path/subpath this app is served from.
+  async function copyPublicComplaintLink() {
+    const url = new URL('complaint.html', location.href).href;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('✔ Link copied — share it with the customer.');
+    } catch (err) {
+      openModal(`
+        <h2>Public complaint link</h2>
+        <div class="page-sub" style="margin-bottom:10px;">Copy this link to share with a customer:</div>
+        <input type="text" value="${escapeHtml(url)}" readonly onclick="this.select()" style="width:100%;" />
+      `);
+    }
   }
 
   function openComplaintDetail(main, id) {
@@ -111,7 +148,7 @@ window.Views.complaints = (function () {
           <div class="field"><label>Contact</label><input name="contact" placeholder="Phone or email" /></div>
           <div class="field"><label>Date received</label><input type="date" name="dateReceived" value="${todayISO()}" /></div>
           <div class="field"><label>Priority</label>
-            <select name="priority">${['Low', 'Medium', 'High'].map(p => `<option ${p === 'Medium' ? 'selected' : ''}>${p}</option>`).join('')}</select>
+            <select name="priority">${['Low', 'Medium', 'High'].map(p => `<option value="${p}" ${p === 'Medium' ? 'selected' : ''}>${PRIORITY_LABELS[p]}</option>`).join('')}</select>
           </div>
           <div class="field"><label>Assign to</label><select name="assignedTo"><option value="">Unassigned</option>${employeeOptions()}</select></div>
           <div class="field full"><label>Description</label><textarea name="description" rows="3" required></textarea></div>

@@ -421,6 +421,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   border-radius: 999px; font-size: 12px; cursor: pointer; font-weight: 600;
 }
 .seg button.active { background: var(--accent); color: var(--accent-text); }
+/* Compact variant for inline per-row quick-actions (Customer Complaints priority) --
+   same pill styling as .seg, just tighter so three buttons fit in a table cell. */
+.priority-seg { display: inline-flex; }
+.priority-seg button { padding: 4px 9px; font-size: 10.5px; white-space: nowrap; }
 
 /* ---------- Kanban (recruitment) ---------- */
 .kanban {

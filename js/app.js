@@ -227,9 +227,13 @@ function complaintStatusBadge(status) {
   return '<span class="badge ' + (map[status] || 'badge-gray') + '">' + escapeHtml(status) + '</span>';
 }
 
+// Stored values stay Low/Medium/High (existing data, existing form option values) --
+// only the displayed wording changed, to something more specific than a bare "High".
+const PRIORITY_LABELS = { High: 'Urgent', Medium: 'Standard', Low: 'Low Priority' };
+
 function priorityBadge(priority) {
   const map = { High: 'badge-red', Medium: 'badge-yellow', Low: 'badge-gray' };
-  return '<span class="badge ' + (map[priority] || 'badge-gray') + '">' + escapeHtml(priority) + '</span>';
+  return '<span class="badge ' + (map[priority] || 'badge-gray') + '">' + escapeHtml(PRIORITY_LABELS[priority] || priority) + '</span>';
 }
 
 function employmentStatusBadge(status) {
