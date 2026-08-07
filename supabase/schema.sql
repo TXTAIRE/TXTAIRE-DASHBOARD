@@ -2025,3 +2025,68 @@ drop trigger if exists trg_notify_new_attendance_pay_request on attendance;
 create trigger trg_notify_new_attendance_pay_request
   after update on attendance
   for each row execute function notify_new_attendance_pay_request();
+
+-- =================================================================
+-- Employee-side push notifications -- incremental migration. Run once against a database
+-- that already has the migrations above applied, AND after deploying the
+-- employee-notification-push Edge Function (reuses the exact same
+-- VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT/CRON_SECRET secrets already set up for
+-- the other two functions -- nothing new to configure there). Safe to re-run.
+--
+-- Every event this covers (a leave/attendance-correction/NSD/OT/holiday request approved
+-- or rejected, payroll released, an NTE issued) already creates a row in the shared
+-- "notifications" table via js/store.js createNotification() -- that's what feeds the
+-- ESS notification bell today. Rather than one trigger per event type (like the HR-side
+-- employee-request-notify migration needed), ONE trigger on notifications itself covers
+-- all of them, since they already funnel through that single insert point. Only pushes
+-- for the specific types the employee explicitly asked to be alerted about outside the
+-- portal (approved/released/NTE) -- a rejection still creates the in-app notification as
+-- before, it just doesn't also push.
+-- =================================================================
+
+create table if not exists "employeePushSubscriptions" (
+  id text primary key,
+  "employeeId" text not null references employees(id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  "userAgent" text,
+  created_at timestamptz not null default now()
+);
+
+alter table "employeePushSubscriptions" enable row level security;
+
+drop policy if exists "employee manages own push subscription" on "employeePushSubscriptions";
+create policy "employee manages own push subscription" on "employeePushSubscriptions"
+  for all to authenticated
+  using ("employeeId" = my_employee_id()) with check ("employeeId" = my_employee_id());
+drop policy if exists "admin reads employee push subscriptions" on "employeePushSubscriptions";
+create policy "admin reads employee push subscriptions" on "employeePushSubscriptions"
+  for select to authenticated using (is_admin());
+
+-- Employees have never had any read access to their own NTE record -- the notification
+-- below references it (relatedTable/relatedId), so this is a safety net for if a future
+-- "My Discipline" ESS page is ever built; nothing reads it yet.
+drop policy if exists "employee reads own disciplinary cases" on "disciplinaryCases";
+create policy "employee reads own disciplinary cases" on "disciplinaryCases"
+  for select to authenticated using ("employeeId" = my_employee_id());
+
+create or replace function notify_employee_push() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if NEW.type not in ('leave_approved', 'correction_approved', 'nsd_approved', 'ot_approved', 'holiday_approved', 'payroll_released', 'nte_issued') then
+    return NEW;
+  end if;
+  perform net.http_post(
+    url := 'https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/employee-notification-push',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', '5f24f19fdf651e99db5d397158bda6a8a4c48f59c06df3cc'),
+    body := jsonb_build_object('employeeId', NEW."employeeId", 'type', NEW.type, 'message', NEW.message)
+  );
+  return NEW;
+end;
+$$;
+
+drop trigger if exists trg_notify_employee_push on notifications;
+create trigger trg_notify_employee_push
+  after insert on notifications
+  for each row execute function notify_employee_push();

@@ -53,6 +53,86 @@ function essEmailFor(employeeCode) {
   return employeeCode.trim().toLowerCase() + '@employees.txtaire.local';
 }
 
+// ---- Push notifications outside the portal (approvals, payroll released, NTE issued) ----
+// Mirrors js/app.js's admin-side equivalents exactly -- duplicated rather than shared
+// since ess.html and index.html are deliberately separate script bundles that don't load
+// each other's files. See supabase/functions/employee-notification-push and the
+// notify_employee_push trigger in supabase/schema.sql for the server side.
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
+async function getCurrentEssPushSubscription() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 6000));
+  const lookup = (async () => {
+    const reg = await navigator.serviceWorker.ready;
+    return reg.pushManager.getSubscription();
+  })();
+  return Promise.race([lookup, timeout]);
+}
+
+async function enableEssPushNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    toast('Push notifications aren\'t supported on this browser/device.');
+    return false;
+  }
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    toast(permission === 'denied'
+      ? 'Notifications are blocked for this site — enable them in your browser\'s site settings.'
+      : 'Notification permission was not granted.');
+    return false;
+  }
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+  });
+  await Store.saveEmployeePushSubscription(sub, myEmployee.id);
+  return true;
+}
+
+async function disableEssPushNotifications() {
+  const sub = await getCurrentEssPushSubscription();
+  if (!sub) return;
+  const endpoint = sub.endpoint;
+  await sub.unsubscribe();
+  await Store.deleteEmployeePushSubscriptionByEndpoint(endpoint);
+}
+
+// Same three-note chime as the admin dashboard's playReminderTone -- a service worker
+// can't play audio itself, so this only ever plays while a portal tab is actually open;
+// closed/backgrounded devices get the OS's own default notification sound instead.
+function playEssNotificationTone() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const notes = [880, 1108.73, 1318.51];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const start = ctx.currentTime + i * 0.16;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.25, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.5);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.55);
+    });
+    setTimeout(() => ctx.close(), 1200);
+  } catch (err) {
+    // Autoplay/audio can be blocked until the user interacts with the page — silently
+    // skip the tone rather than throwing; the visual toast still shows.
+  }
+}
+
 function showEssLogin(errorMessage) {
   qs('#ess-app').classList.add('hidden');
   const screen = qs('#ess-login');
@@ -296,6 +376,18 @@ async function startEss(session) {
     if (view && view.quickClock) view.quickClock(qs('#ess-main'), myEmployee);
   });
   preserveScrollAcrossRerenders(qs('#ess-main'));
+
+  // Relayed from the service worker's 'push' handler (sw.js, shared with the admin
+  // dashboard) whenever an approval/payroll-release/NTE push arrives while this tab is
+  // open -- plays the tone here since a service worker has no audio output of its own.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'payroll-reminder-push') {
+        playEssNotificationTone();
+        toast('🔔 ' + event.data.title);
+      }
+    });
+  }
 
   Store.onRemoteChange(() => {
     if (qs('.modal-backdrop')) { updateEssBellBadge(); return; }

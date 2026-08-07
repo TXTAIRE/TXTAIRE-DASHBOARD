@@ -1,4 +1,63 @@
 window.EssViews.settings = (function () {
+  // Push subscription state is per-device and can't be read synchronously, so the card
+  // first renders a "Checking…" placeholder and fills in the real state once
+  // getCurrentEssPushSubscription() resolves (js/ess-app.js) -- same pattern as the
+  // admin dashboard's Payroll -> Push Notifications card.
+  function renderNotificationsCard(main, emp) {
+    const card = qs('#ess-push-card', main);
+    if (!card) return;
+    card.innerHTML = `
+      <div class="ess-sub" id="ess-push-status">Checking this device…</div>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-ess-test-sound">🔊 Test Sound</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btn-ess-toggle-push" disabled>…</button>
+      </div>
+    `;
+    qs('#btn-ess-test-sound', card).addEventListener('click', () => playEssNotificationTone());
+
+    function setState(subscribed) {
+      const btn = qs('#btn-ess-toggle-push', card);
+      const statusEl = qs('#ess-push-status', card);
+      btn.disabled = false;
+      if (Notification.permission === 'denied') {
+        btn.textContent = 'Blocked';
+        btn.disabled = true;
+        statusEl.textContent = 'Notifications are blocked for this device — enable them in your browser\'s site settings, then reload.';
+        return;
+      }
+      if (subscribed) {
+        btn.textContent = '🔕 Disable on this device';
+        btn.className = 'btn btn-ghost btn-sm';
+        statusEl.textContent = 'Enabled on this device — you\'ll get a push (and this device\'s ringtone, if My Portal is open) the moment a request is approved, payroll is released, or an NTE is issued.';
+      } else {
+        btn.textContent = '🔔 Enable on this device';
+        btn.className = 'btn btn-primary btn-sm';
+        statusEl.textContent = 'Not enabled on this device yet.';
+      }
+      btn.onclick = async () => {
+        btn.disabled = true;
+        btn.textContent = subscribed ? 'Disabling…' : 'Enabling…';
+        try {
+          if (subscribed) await disableEssPushNotifications();
+          else await enableEssPushNotifications();
+          toast(subscribed ? 'Notifications disabled on this device.' : '✔ Notifications enabled on this device.');
+        } catch (err) {
+          toast('Something went wrong — try again.');
+        }
+        renderNotificationsCard(main, emp);
+      };
+    }
+
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      const btn = qs('#btn-ess-toggle-push', card);
+      btn.textContent = 'Not supported';
+      btn.disabled = true;
+      qs('#ess-push-status', card).textContent = 'Push notifications aren\'t supported on this browser/device.';
+      return;
+    }
+    getCurrentEssPushSubscription().then((sub) => setState(!!sub));
+  }
+
   function render(main, emp) {
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0;">Settings</div>
@@ -6,6 +65,9 @@ window.EssViews.settings = (function () {
         <div class="ess-row"><span class="label">Employee ID</span><span class="value">${escapeHtml(emp.employeeCode || '—')}</span></div>
         <div class="ess-row"><span class="label">Name</span><span class="value">${escapeHtml(emp.name)}</span></div>
       </div>
+
+      <div class="ess-section-title">🔔 Notifications</div>
+      <div class="ess-card" id="ess-push-card"></div>
 
       <div class="ess-section-title">Change Password</div>
       <div class="ess-card">
@@ -25,6 +87,8 @@ window.EssViews.settings = (function () {
 
       <button type="button" class="btn btn-ghost btn-sm" id="btn-ess-sign-out" style="width:100%; justify-content:center; margin-top:6px;">Sign out</button>
     `;
+
+    renderNotificationsCard(main, emp);
 
     qs('#pw-form', main).addEventListener('submit', async (ev) => {
       ev.preventDefault();

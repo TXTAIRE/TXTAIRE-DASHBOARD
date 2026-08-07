@@ -1,7 +1,7 @@
 // App-shell cache for the TxTAIRE admin dashboard and ESS portal, so both are installable
 // and open instantly offline. Only same-origin static files are cached — Supabase/CDN/
 // geolocation requests are always left to the network untouched, so data is never stale.
-const CACHE_NAME = 'txtaire-shell-v56';
+const CACHE_NAME = 'txtaire-shell-v57';
 
 const PRECACHE_URLS = [
   'index.html',
@@ -56,12 +56,17 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Payroll cutoff reminder push notifications -- the payload is sent by the scheduled
-// Supabase Edge Function (supabase/functions/payroll-cutoff-reminder). A service worker
-// has no audio output of its own, so a custom "ringtone" can only play while a dashboard
-// tab is actually open (js/app.js listens for the 'payroll-reminder-push' message below
-// and plays a tone via the Web Audio API); with the app fully closed, only the OS's own
-// default notification sound plays -- a real platform limitation of background push, not
+// Push notifications -- shared by every push source in this app: the scheduled payroll
+// cutoff reminder, the instant "employee submitted a request" alert to HR, and the
+// instant "your request was approved / payroll released / NTE issued" alert to the
+// employee (supabase/functions/payroll-cutoff-reminder, employee-request-notify,
+// employee-notification-push). All three just show a system notification the same way,
+// so one handler covers all of them -- the 'payroll-reminder-push' message name below is
+// a holdover from when only the first one existed; both js/app.js (admin) and
+// js/ess-app.js (ESS) listen for that same name to play their ringtone. A service worker
+// has no audio output of its own, so a custom "ringtone" can only play while a dashboard/
+// portal tab is actually open; with the app fully closed, only the OS's own default
+// notification sound plays -- a real platform limitation of background push, not
 // something this app can work around.
 self.addEventListener('push', (event) => {
   let payload = {};

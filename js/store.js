@@ -450,6 +450,7 @@ const Store = (function () {
     employmentHistory: 'employmentHistory',
     employeeDocuments: 'employeeDocuments',
     pushSubscriptions: 'pushSubscriptions',
+    employeePushSubscriptions: 'employeePushSubscriptions',
   };
 
   const state = {
@@ -460,7 +461,7 @@ const Store = (function () {
     notifications: [], payrollReleases: [], appSettings: [],
     expenses: [], bills: [], officeFiles: [],
     employmentHistory: [], employeeDocuments: [],
-    pushSubscriptions: [],
+    pushSubscriptions: [], employeePushSubscriptions: [],
   };
 
   let remoteChangeCallback = null;
@@ -592,7 +593,14 @@ const Store = (function () {
     nte.id = genId('d');
     nte.status = 'Notice Issued';
     nte.history = [{ date: nte.dateIssued, action: 'Notice Issued', note: nte.violation }];
-    return insertRow('disciplinaryCases', nte);
+    const row = await insertRow('disciplinaryCases', nte);
+    await createNotification({
+      employeeId: nte.employeeId,
+      type: 'nte_issued',
+      message: `You have been issued a Notice to Explain (NTE) regarding: ${nte.violation || 'a workplace matter'}. Please coordinate with HR.`,
+      relatedTable: 'disciplinaryCases', relatedId: nte.id,
+    });
+    return row;
   }
   async function updateCase(id, patch, historyEntry) {
     const c = getCase(id);
@@ -1149,6 +1157,27 @@ const Store = (function () {
     await refetch('pushSubscriptions');
   }
 
+  // ---- Employee-side push subscriptions (My Portal -> Settings -> Notifications) ----
+  // Same shape/pattern as the admin pushSubscriptions above, just employee-scoped -- kept
+  // as a separate table (rather than reusing the admin one) so the two RLS models never
+  // have to overlap: admins can read every admin subscription, employees can only ever
+  // touch their own.
+  async function saveEmployeePushSubscription(sub, employeeId) {
+    const json = sub.toJSON ? sub.toJSON() : sub;
+    const { error } = await sb.from(TABLES.employeePushSubscriptions).upsert(sanitize({
+      id: genId('epush'), endpoint: json.endpoint,
+      p256dh: json.keys && json.keys.p256dh, auth: json.keys && json.keys.auth,
+      employeeId, userAgent: navigator.userAgent || null,
+    }), { onConflict: 'endpoint' });
+    if (error) { toast('Could not save this device: ' + error.message); throw error; }
+    await refetch('employeePushSubscriptions');
+  }
+  async function deleteEmployeePushSubscriptionByEndpoint(endpoint) {
+    const { error } = await sb.from(TABLES.employeePushSubscriptions).delete().eq('endpoint', endpoint);
+    if (error) { toast('Could not remove this device: ' + error.message); throw error; }
+    await refetch('employeePushSubscriptions');
+  }
+
   // ---- Backup: a full snapshot of every table currently loaded in memory. The free
   // Supabase tier has no automatic backups/point-in-time recovery, so this is what backs
   // the admin "Download Backup" button — a plain JSON export HR can save wherever they like.
@@ -1182,6 +1211,7 @@ const Store = (function () {
     listOfficeFiles, uploadOfficeFile, getSignedOfficeFileUrl, deleteOfficeFile, updateOfficeFile, duplicateOfficeFile,
     employeeDocumentsForEmployee, uploadEmployeeDocument, getSignedEmployeeDocumentUrl, updateEmployeeDocument, deleteEmployeeDocument,
     listPushSubscriptions, savePushSubscription, deletePushSubscriptionByEndpoint,
+    saveEmployeePushSubscription, deleteEmployeePushSubscriptionByEndpoint,
     exportAllData, logAudit,
   };
 })();
