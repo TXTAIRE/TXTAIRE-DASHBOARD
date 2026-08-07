@@ -391,7 +391,12 @@ const INSTALL_PROMPT_REASK_DAYS = 14;
 
 function shouldShowInstallPrompt() {
   if (isStandaloneDisplay()) return false; // already installed and running as an app
-  const dismissedAt = Number(localStorage.getItem(INSTALL_PROMPT_DISMISS_KEY) || 0);
+  // Safari in Private Browsing (and some MDM-locked-down iPhones) can throw on
+  // localStorage access instead of just returning null -- if that throw isn't caught
+  // here, it silently kills this whole feature with zero visible symptom, since it's
+  // called from inside a setTimeout callback. Treat a throw as "never dismissed."
+  let dismissedAt = 0;
+  try { dismissedAt = Number(localStorage.getItem(INSTALL_PROMPT_DISMISS_KEY) || 0); } catch (err) { dismissedAt = 0; }
   if (dismissedAt && (Date.now() - dismissedAt) < INSTALL_PROMPT_REASK_DAYS * 86400000) return false;
   // Only worth interrupting the employee for if there's something they can actually do:
   // a real one-tap install (Chrome/Edge/Android) or iOS's manual Share -> Add to Home
@@ -400,7 +405,7 @@ function shouldShowInstallPrompt() {
 }
 
 function dismissInstallPrompt() {
-  localStorage.setItem(INSTALL_PROMPT_DISMISS_KEY, String(Date.now()));
+  try { localStorage.setItem(INSTALL_PROMPT_DISMISS_KEY, String(Date.now())); } catch (err) { /* ignore */ }
   closeEssModal();
 }
 
@@ -485,7 +490,12 @@ async function startEss(session) {
 
   renderEssRoute();
   // Deferred a beat so it doesn't compete with the login->portal transition/initial render.
-  setTimeout(maybeShowInstallPrompt, 1200);
+  // Wrapped defensively -- a setTimeout callback that throws fails completely silently
+  // (no visible error, nothing in the console the user could report), which would look
+  // exactly like "nothing happens." try/catch here turns that into a visible signal.
+  setTimeout(() => {
+    try { maybeShowInstallPrompt(); } catch (err) { toast('Install prompt error: ' + (err && err.message ? err.message : err)); }
+  }, 1200);
 }
 
 async function bootEss() {
