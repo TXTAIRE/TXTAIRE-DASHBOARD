@@ -118,11 +118,12 @@ window.Views.payroll = (function () {
       };
     }
 
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    const unsupportedReason = pushUnsupportedReason();
+    if (unsupportedReason) {
       const btn = qs('#btn-toggle-push', card);
-      btn.textContent = 'Not supported';
+      btn.textContent = 'Not available here';
       btn.disabled = true;
-      qs('#push-status-text', card).textContent = 'Push notifications aren\'t supported on this browser/device.';
+      qs('#push-status-text', card).textContent = unsupportedReason;
       return;
     }
     getCurrentPushSubscription().then((sub) => setToggleState(!!sub));

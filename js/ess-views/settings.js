@@ -48,11 +48,12 @@ window.EssViews.settings = (function () {
       };
     }
 
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    const unsupportedReason = pushUnsupportedReason();
+    if (unsupportedReason) {
       const btn = qs('#btn-ess-toggle-push', card);
-      btn.textContent = 'Not supported';
+      btn.textContent = 'Not available here';
       btn.disabled = true;
-      qs('#ess-push-status', card).textContent = 'Push notifications aren\'t supported on this browser/device.';
+      qs('#ess-push-status', card).textContent = unsupportedReason;
       return;
     }
     getCurrentEssPushSubscription().then((sub) => setState(!!sub));

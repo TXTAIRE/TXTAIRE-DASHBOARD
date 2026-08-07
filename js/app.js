@@ -335,6 +335,33 @@ let signedInEmail = null;
 function currentUserEmail() { return signedInEmail; }
 
 // ---- Payroll cutoff reminder push notifications (this device only) ----
+// iPadOS reports itself as "MacIntel" with no "iPad" in the UA string once desktop-class
+// Safari became the default, so the classic UA sniff alone misses it -- the touch-points
+// check catches that case (a real Mac never reports maxTouchPoints > 1).
+function isIosDevice() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function isStandaloneDisplay() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+// iOS/iPadOS Safari only exposes the Push API to a site that's been "Added to Home
+// Screen" and opened from there (iOS 16.4+) -- opening it as a normal Safari tab, no
+// matter how recent the device, will never have PushManager at all. Every other modern
+// browser (Chrome, Firefox, Edge, desktop Safari 16+, Samsung Internet, ...) supports
+// push in a plain tab, no install required -- this only special-cases iOS specifically,
+// with an actionable next step, instead of a flat "not supported."
+function pushUnsupportedReason() {
+  if ('serviceWorker' in navigator && 'PushManager' in window) return null;
+  if (isIosDevice() && !isStandaloneDisplay()) {
+    return 'On iPhone/iPad: tap the Share button, then "Add to Home Screen." Open it from that icon (not from Safari) to enable notifications — iOS only allows this for installed apps.';
+  }
+  if (isIosDevice()) {
+    return 'Push notifications need iOS/iPadOS 16.4 or later. Update iOS to enable this.';
+  }
+  return 'Push notifications aren\'t supported on this browser — try Chrome, Firefox, or Edge.';
+}
+
 // pushManager.subscribe() needs the VAPID public key as a raw byte array, not the
 // base64url string it's stored/transmitted as.
 function urlBase64ToUint8Array(base64String) {

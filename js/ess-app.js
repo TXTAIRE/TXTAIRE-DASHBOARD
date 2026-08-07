@@ -58,6 +58,27 @@ function essEmailFor(employeeCode) {
 // since ess.html and index.html are deliberately separate script bundles that don't load
 // each other's files. See supabase/functions/employee-notification-push and the
 // notify_employee_push trigger in supabase/schema.sql for the server side.
+function isIosDevice() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function isStandaloneDisplay() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+// iOS/iPadOS Safari only exposes the Push API to a site "Added to Home Screen" and
+// opened from there (iOS 16.4+) -- a plain Safari tab never has PushManager, on any iOS
+// version. Every other modern browser supports push in a normal tab, no install needed.
+function pushUnsupportedReason() {
+  if ('serviceWorker' in navigator && 'PushManager' in window) return null;
+  if (isIosDevice() && !isStandaloneDisplay()) {
+    return 'On iPhone/iPad: tap the Share button, then "Add to Home Screen." Open My Portal from that icon (not from Safari) to enable notifications — iOS only allows this for installed apps.';
+  }
+  if (isIosDevice()) {
+    return 'Push notifications need iOS/iPadOS 16.4 or later. Update iOS to enable this.';
+  }
+  return 'Push notifications aren\'t supported on this browser — try Chrome, Firefox, or Edge.';
+}
+
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
