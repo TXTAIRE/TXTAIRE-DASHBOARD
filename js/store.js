@@ -451,6 +451,7 @@ const Store = (function () {
     employeeDocuments: 'employeeDocuments',
     pushSubscriptions: 'pushSubscriptions',
     employeePushSubscriptions: 'employeePushSubscriptions',
+    materialRequests: 'materialRequests',
   };
 
   const state = {
@@ -462,6 +463,7 @@ const Store = (function () {
     expenses: [], bills: [], officeFiles: [],
     employmentHistory: [], employeeDocuments: [],
     pushSubscriptions: [], employeePushSubscriptions: [],
+    materialRequests: [],
   };
 
   let remoteChangeCallback = null;
@@ -1095,6 +1097,23 @@ const Store = (function () {
     });
   }
 
+  // ---- Materials Request (Admin, admin-only) ----
+  // One editable running list -- no approval workflow, just an always-current list of
+  // what needs to be ordered/picked up, replacing an ad-hoc paper or messaging-app
+  // request. Quantity is expected to be edited often (as stock comes in / needs change),
+  // so it's a plain patch rather than anything more structured.
+  function listMaterialRequests() { return state.materialRequests.slice(); }
+  async function addMaterialRequest(m) {
+    m.id = genId('mat');
+    return insertRow('materialRequests', m);
+  }
+  async function updateMaterialRequest(id, patch) {
+    await updateRow('materialRequests', id, patch);
+  }
+  async function deleteMaterialRequest(id) {
+    await deleteRow('materialRequests', id);
+  }
+
   // ---- 201 File (employee documents/requirements) ----
   // Both the employee (My Portal -> My Profile) and admins can upload; every upload
   // starts 'Pending' -- the trigger-enforced RLS policy (enforce_employee_document_insert
@@ -1209,6 +1228,7 @@ const Store = (function () {
     uploadReceiptPhoto, getSignedReceiptUrl, deleteReceiptPhoto,
     listBills, getBill, addBill, updateBill, deleteBill, payBill,
     listOfficeFiles, uploadOfficeFile, getSignedOfficeFileUrl, deleteOfficeFile, updateOfficeFile, duplicateOfficeFile,
+    listMaterialRequests, addMaterialRequest, updateMaterialRequest, deleteMaterialRequest,
     employeeDocumentsForEmployee, uploadEmployeeDocument, getSignedEmployeeDocumentUrl, updateEmployeeDocument, deleteEmployeeDocument,
     listPushSubscriptions, savePushSubscription, deletePushSubscriptionByEndpoint,
     saveEmployeePushSubscription, deleteEmployeePushSubscriptionByEndpoint,

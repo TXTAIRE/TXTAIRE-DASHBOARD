@@ -2090,3 +2090,29 @@ drop trigger if exists trg_notify_employee_push on notifications;
 create trigger trg_notify_employee_push
   after insert on notifications
   for each row execute function notify_employee_push();
+
+-- =================================================================
+-- Materials Request -- incremental migration. Safe to re-run.
+--
+-- An admin-maintained, editable running list of materials/supplies needed (name +
+-- quantity + optional notes/supplier), replacing an ad-hoc paper or messaging-app
+-- request. Admin-only, no employee submission/approval workflow -- same access model as
+-- Office & Finance and Admin Files.
+-- =================================================================
+
+create table if not exists "materialRequests" (
+  id text primary key,
+  "materialName" text not null,
+  quantity numeric(12,2) not null default 1,
+  notes text default '',
+  "requestedBy" text,
+  created_at timestamptz not null default now()
+);
+
+alter table "materialRequests" enable row level security;
+
+drop policy if exists "admin full access" on "materialRequests";
+create policy "admin full access" on "materialRequests"
+  for all to authenticated using (is_admin()) with check (is_admin());
+
+alter publication supabase_realtime add table "materialRequests";
