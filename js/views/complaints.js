@@ -11,6 +11,17 @@ window.Views.complaints = (function () {
     let rows = all.slice();
     if (filterStatus === 'Open') rows = rows.filter(c => c.status === 'Open' || c.status === 'In Progress');
     else if (filterStatus !== 'All') rows = rows.filter(c => c.status === filterStatus);
+
+    // Queue position -- same number the customer sees on the public form's "Thank you"
+    // screen (js/complaint-form.js): 1 = has been waiting longest. Ranked in true arrival
+    // order (oldest first) independent of the table's own newest-first display sort below,
+    // and only meaningful for complaints that are actually still waiting.
+    const queuePosition = {};
+    if (filterStatus === 'Open') {
+      rows.slice().sort((a, b) => (a.created_at || a.dateReceived).localeCompare(b.created_at || b.dateReceived))
+        .forEach((c, i) => { queuePosition[c.id] = i + 1; });
+    }
+
     rows.sort((a, b) => b.dateReceived.localeCompare(a.dateReceived));
 
     main.innerHTML = `
@@ -38,10 +49,11 @@ window.Views.complaints = (function () {
       <div class="panel">
         ${rows.length ? `
         <table>
-          <thead><tr><th>Customer</th><th>Description</th><th>Assigned</th><th>Priority</th><th>Status</th><th>Received</th></tr></thead>
+          <thead><tr>${filterStatus === 'Open' ? '<th>#</th>' : ''}<th>Customer</th><th>Description</th><th>Assigned</th><th>Priority</th><th>Status</th><th>Received</th></tr></thead>
           <tbody>
             ${rows.map(c => `
               <tr>
+                ${filterStatus === 'Open' ? `<td class="dim">${queuePosition[c.id]}</td>` : ''}
                 <td class="name row-link" data-open="${c.id}">${escapeHtml(c.customerName)}</td>
                 <td class="dim" style="max-width:280px;">${escapeHtml(c.description.length > 60 ? c.description.slice(0, 60) + '…' : c.description)}</td>
                 <td class="dim">${c.assignedTo ? escapeHtml(employeeName(c.assignedTo)) : '—'}</td>

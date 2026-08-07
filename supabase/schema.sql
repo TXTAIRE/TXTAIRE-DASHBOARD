@@ -2144,3 +2144,38 @@ create policy "public can submit complaints" on complaints
     and "resolutionNotes" = ''
     and priority in ('Low', 'Medium', 'High')
   );
+
+-- =================================================================
+-- Public complaint link -- queue position. Incremental migration, safe to re-run.
+-- Supersedes the direct-insert grant/policy above: anon now gets zero direct table
+-- access to complaints at all (tighter than before) -- complaint.html instead calls this
+-- one security-definer function, which does the insert itself and hands back only a
+-- plain integer (how many complaints are currently unresolved, i.e. this submitter's
+-- position in the queue) -- never any row data, never another customer's details.
+-- =================================================================
+
+revoke insert on complaints from anon;
+drop policy if exists "public can submit complaints" on complaints;
+
+create or replace function public.submit_public_complaint(
+  p_customer_name text, p_contact text, p_description text
+) returns integer
+language plpgsql security definer set search_path = public as $$
+declare
+  new_id text := 'cp_' || substr(md5(random()::text || clock_timestamp()::text), 1, 16);
+  queue_position integer;
+begin
+  if coalesce(trim(p_customer_name), '') = '' or coalesce(trim(p_description), '') = '' then
+    raise exception 'Name and description are required.';
+  end if;
+
+  insert into complaints (id, "customerName", contact, description, "dateReceived", priority, status, "assignedTo", "resolutionNotes", "resolvedDate")
+  values (new_id, trim(p_customer_name), nullif(trim(p_contact), ''), trim(p_description), current_date, 'Medium', 'Open', null, '', null);
+
+  select count(*) into queue_position from complaints where status in ('Open', 'In Progress');
+  return queue_position;
+end;
+$$;
+
+revoke all on function public.submit_public_complaint(text, text, text) from public;
+grant execute on function public.submit_public_complaint(text, text, text) to anon;
