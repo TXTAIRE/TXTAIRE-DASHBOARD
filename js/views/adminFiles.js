@@ -18,6 +18,7 @@ window.Views.adminFiles = (function () {
   let activeFolder = null; // null = folder grid
   let pasteListenerAttached = false;
   let selectedFileIds = new Set(); // ids checked in the currently open folder's table
+  let selectedFolders = new Set(); // folder names checked on the "All Folders" grid
 
   // ---- Watch a local folder for new scans (File System Access API, Chrome/Edge only) ----
   // Lets IJ Scan Utility (or any scanner software) save straight into a fixed folder on
@@ -280,6 +281,45 @@ window.Views.adminFiles = (function () {
     openMenuId = null;
   }
 
+  // ---- Generic right-click context menu -- same actions as the existing "..." buttons,
+  // just reachable faster via right-click too (folder cards on the grid, file rows in a
+  // folder). items: [{ label, danger, onClick }]. Only one open at a time; closes on any
+  // outside click, matching the "..." row-menu's own behavior.
+  let contextMenuEl = null;
+  function closeContextMenu() {
+    if (contextMenuEl) { contextMenuEl.remove(); contextMenuEl = null; }
+  }
+  function showContextMenu(x, y, items) {
+    closeAllRowMenus();
+    closeContextMenu();
+    const menu = document.createElement('div');
+    menu.className = 'row-menu context-menu';
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.innerHTML = items.map((it, i) => `<button type="button" data-idx="${i}" class="${it.danger ? 'danger' : ''}">${escapeHtml(it.label)}</button>`).join('');
+    document.body.appendChild(menu);
+    contextMenuEl = menu;
+    qsa('button[data-idx]', menu).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const it = items[Number(btn.dataset.idx)];
+        closeContextMenu();
+        if (it.onClick) it.onClick();
+      });
+    });
+    // Nudge back on-screen if the cursor was near the right/bottom edge.
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) menu.style.left = Math.max(4, window.innerWidth - rect.width - 8) + 'px';
+    if (rect.bottom > window.innerHeight) menu.style.top = Math.max(4, window.innerHeight - rect.height - 8) + 'px';
+  }
+  // Closes on a later left click anywhere. Deliberately NOT also closing on a later
+  // contextmenu event: the very right-click that OPENS a menu always bubbles up to
+  // document too, with ev.target still the row/card that was clicked (never inside the
+  // menu, since it didn't exist yet when the event started) -- listening for
+  // 'contextmenu' here would immediately close every menu the instant it opens. Right-
+  // clicking a DIFFERENT row/card while one is already open still works correctly, since
+  // showContextMenu() itself closes the previous one before opening the next.
+  document.addEventListener('click', closeContextMenu);
+
   // Recursively expands a dropped FileSystemEntry (from DataTransferItem.webkitGetAsEntry)
   // into its underlying files -- lets dragging a whole folder from the desktop onto a
   // dropzone upload everything inside it (including subfolders), not just top-level files.
@@ -434,12 +474,15 @@ window.Views.adminFiles = (function () {
   function renderFolderGrid(main) {
     const all = Store.listOfficeFiles();
     const folders = getFolders();
+    // Drop any selected names that no longer exist (renamed/deleted elsewhere) so the
+    // "N selected" count is never stale.
+    selectedFolders = new Set([...selectedFolders].filter(f => folders.includes(f)));
     main.innerHTML = `
       <div class="crumb">Admin</div>
       <div class="page-head">
         <div>
           <h1 class="page-title">Admin Files</h1>
-          <div class="page-sub">Company document library, organized by folder. Open a folder to upload a file or scan one straight from this device, or upload a whole exported folder below and it'll sort itself into the matching folders.</div>
+          <div class="page-sub">Company document library, organized by folder. Open a folder to upload a file or scan one straight from this device, or upload a whole exported folder below and it'll sort itself into the matching folders. Right-click a folder for quick actions.</div>
         </div>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-ghost" id="btn-new-folder">+ New Folder</button>
@@ -447,16 +490,27 @@ window.Views.adminFiles = (function () {
         </div>
       </div>
       ${watchBannerHtml()}
+      ${selectedFolders.size ? `
+      <div class="panel" style="margin-bottom:8px; padding:10px 14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <strong>${selectedFolders.size} folder${selectedFolders.size === 1 ? '' : 's'} selected</strong>
+        <button class="btn btn-danger btn-sm" id="btn-delete-selected-folders">🗑 Delete Selected</button>
+        <button type="button" class="link-btn" id="btn-clear-folder-selection">Clear</button>
+      </div>` : ''}
       <div class="page-sub" style="margin-bottom:8px;">Or drag a folder from your computer here — if it has subfolders named after these categories (e.g. "HR", "Billing Invoice"), each file sorts into the matching one automatically; anything else goes to Other.</div>
       <div class="file-folder-grid" id="folder-grid-dropzone">
         ${folders.map(f => {
           const count = all.filter(x => (x.category || 'Other') === f).length;
+          const isOther = f.toLowerCase() === 'other';
           return `
-            <button type="button" class="file-folder-card" data-folder="${escapeHtml(f)}">
-              <div class="file-folder-icon">📁</div>
-              <div class="file-folder-name">${escapeHtml(f)}</div>
-              <div class="file-folder-count">${count} file${count === 1 ? '' : 's'}</div>
-            </button>
+            <div class="file-folder-card" data-folder-card="${escapeHtml(f)}">
+              <input type="checkbox" class="file-folder-select" data-folder-select="${escapeHtml(f)}" ${selectedFolders.has(f) ? 'checked' : ''} ${isOther ? 'disabled title="The Other folder can\'t be deleted"' : 'title="Select folder"'} />
+              ${!isOther ? `<button type="button" class="file-folder-rename-btn" data-folder-rename="${escapeHtml(f)}" title="Rename folder">✏️</button>` : ''}
+              <button type="button" class="file-folder-open" data-folder="${escapeHtml(f)}">
+                <div class="file-folder-icon">📁</div>
+                <div class="file-folder-name">${escapeHtml(f)}</div>
+                <div class="file-folder-count">${count} file${count === 1 ? '' : 's'}</div>
+              </button>
+            </div>
           `;
         }).join('')}
       </div>
@@ -464,22 +518,52 @@ window.Views.adminFiles = (function () {
     qs('#btn-new-folder', main).addEventListener('click', () => openNewFolderModal(main));
     qsa('[data-folder]', main).forEach(b => {
       b.addEventListener('click', () => { activeFolder = b.dataset.folder; selectedFileIds = new Set(); renderView(main); });
+    });
+    qsa('[data-folder-select]', main).forEach(cb => {
+      cb.addEventListener('click', (ev) => ev.stopPropagation());
+      cb.addEventListener('change', () => {
+        const name = cb.dataset.folderSelect;
+        if (cb.checked) selectedFolders.add(name); else selectedFolders.delete(name);
+        renderFolderGrid(main);
+      });
+    });
+    qsa('[data-folder-rename]', main).forEach(b => b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      openRenameFolderModal(main, b.dataset.folderRename);
+    }));
+    const btnDeleteSelectedFolders = qs('#btn-delete-selected-folders', main);
+    if (btnDeleteSelectedFolders) btnDeleteSelectedFolders.addEventListener('click', () => deleteSelectedFolders(main));
+    const btnClearFolderSelection = qs('#btn-clear-folder-selection', main);
+    if (btnClearFolderSelection) btnClearFolderSelection.addEventListener('click', () => { selectedFolders = new Set(); renderFolderGrid(main); });
+
+    qsa('[data-folder-card]', main).forEach(card => {
+      const folderName = card.dataset.folderCard;
       // Drop files straight onto a folder card to upload into it without opening it first
       // -- same drag-and-drop convention as dropping files onto a folder in File Explorer.
       // stopPropagation so this doesn't also trigger the grid's own auto-sort dropzone below.
-      b.addEventListener('dragover', (ev) => { ev.preventDefault(); ev.stopPropagation(); b.classList.add('drag-over'); });
-      b.addEventListener('dragleave', () => b.classList.remove('drag-over'));
-      b.addEventListener('drop', async (ev) => {
+      card.addEventListener('dragover', (ev) => { ev.preventDefault(); ev.stopPropagation(); card.classList.add('drag-over'); });
+      card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+      card.addEventListener('drop', async (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
-        b.classList.remove('drag-over');
+        card.classList.remove('drag-over');
         const files = await filesFromDataTransfer(ev.dataTransfer);
         if (!files.length) return;
-        const folder = b.dataset.folder;
-        toast(`Uploading ${files.length} file${files.length === 1 ? '' : 's'} to ${folder}…`);
-        const succeeded = await uploadBatch(files, folder);
+        toast(`Uploading ${files.length} file${files.length === 1 ? '' : 's'} to ${folderName}…`);
+        const succeeded = await uploadBatch(files, folderName);
         reportBatchResult(succeeded, files.length);
         if (activeFolder === null) renderView(main); // still on the grid -- refresh counts
+      });
+      card.addEventListener('contextmenu', (ev) => {
+        ev.preventDefault();
+        const items = [
+          { label: 'Open', onClick: () => { activeFolder = folderName; selectedFileIds = new Set(); renderView(main); } },
+        ];
+        if (folderName.toLowerCase() !== 'other') {
+          items.push({ label: 'Rename', onClick: () => openRenameFolderModal(main, folderName) });
+          items.push({ label: 'Delete', danger: true, onClick: () => { selectedFolders = new Set([folderName]); deleteSelectedFolders(main); } });
+        }
+        showContextMenu(ev.clientX, ev.clientY, items);
       });
     });
 
@@ -583,6 +667,75 @@ window.Views.adminFiles = (function () {
         renderView(main);
       });
     });
+  }
+
+  // Renaming a folder is really renaming every file's category to match -- "folder" is
+  // just a label on officeFiles rows (see the module comment up top), so nothing would
+  // point at the new name otherwise and every file inside would silently vanish from view.
+  function openRenameFolderModal(main, oldName) {
+    openModal(`
+      <h2>Rename Folder</h2>
+      <form id="rename-folder-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Folder name</label><input name="name" value="${escapeHtml(oldName)}" required maxlength="60" /></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Rename</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#rename-folder-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const newName = new FormData(ev.target).get('name').trim();
+        if (!newName || newName === oldName) { closeModal(); return; }
+        const folders = getFolders();
+        if (folders.some(f => f.toLowerCase() === newName.toLowerCase() && f.toLowerCase() !== oldName.toLowerCase())) {
+          toast('A folder with that name already exists.');
+          return;
+        }
+        const submitBtn = qs('button[type="submit"]', bd);
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Renaming…';
+        await saveFolders(folders.map(f => (f === oldName ? newName : f)));
+        const affected = Store.listOfficeFiles().filter(x => (x.category || 'Other') === oldName);
+        for (const file of affected) {
+          try { await Store.updateOfficeFile(file.id, { category: newName }); } catch (err) { /* keep going -- one failed file shouldn't block the rest */ }
+        }
+        if (activeFolder === oldName) activeFolder = newName;
+        toast(`✔ Renamed to "${newName}"${affected.length ? ` (${affected.length} file${affected.length === 1 ? '' : 's'} moved with it)` : ''}.`);
+        closeModal();
+        renderView(main);
+      });
+    });
+  }
+
+  // Bulk delete from the "All Folders" grid -- deliberately more capable than the single
+  // "Delete Folder" button inside a folder (which stays empty-only, unchanged): this one
+  // deletes the files inside too, since the actual use case (clearing out folders that
+  // came from test scans, a bad auto-sort, etc.) usually isn't empty. Always confirms with
+  // an exact count first since this can't be undone.
+  async function deleteSelectedFolders(main) {
+    const names = [...selectedFolders].filter(f => f.toLowerCase() !== 'other');
+    if (!names.length) return;
+    const all = Store.listOfficeFiles();
+    const filesByFolder = names.map(name => ({ name, files: all.filter(x => (x.category || 'Other') === name) }));
+    const totalFiles = filesByFolder.reduce((s, f) => s + f.files.length, 0);
+    const msg = totalFiles
+      ? `Delete ${names.length} folder${names.length === 1 ? '' : 's'} AND all ${totalFiles} file${totalFiles === 1 ? '' : 's'} inside ${names.length === 1 ? 'it' : 'them'}? This cannot be undone.`
+      : `Delete ${names.length} empty folder${names.length === 1 ? '' : 's'}? This cannot be undone.`;
+    if (!confirm(msg)) return;
+
+    for (const { files } of filesByFolder) {
+      for (const f of files) {
+        try { await Store.deleteOfficeFile(f.id, f.filePath); } catch (err) { /* keep going -- one failed delete shouldn't block the rest */ }
+      }
+    }
+    await saveFolders(getFolders().filter(f => !names.includes(f)));
+    if (names.includes(activeFolder)) activeFolder = null;
+    selectedFolders = new Set();
+    toast(`✔ Deleted ${names.length} folder${names.length === 1 ? '' : 's'}${totalFiles ? ` and ${totalFiles} file${totalFiles === 1 ? '' : 's'}` : ''}.`);
+    renderView(main);
   }
 
   // Shared by the per-file "Move to..." menu item and the bulk-selection bar's "Move to..."
@@ -750,7 +903,7 @@ window.Views.adminFiles = (function () {
           </tr></thead>
           <tbody>
             ${rows.map(f => `
-              <tr>
+              <tr data-file-row="${f.id}">
                 <td><input type="checkbox" data-select-file="${f.id}" ${selectedFileIds.has(f.id) ? 'checked' : ''} /></td>
                 <td class="name">${escapeHtml(f.fileName)}</td>
                 <td class="dim">${fmtFileSize(f.fileSize)}</td>
@@ -838,6 +991,33 @@ window.Views.adminFiles = (function () {
       await Store.deleteOfficeFile(b.dataset.deleteFile, b.dataset.path);
       toast('✔ File deleted.');
       renderFolderDetail(main);
+    }));
+
+    // Right-click a file row -- same actions as its "..." menu, just reachable faster.
+    qsa('[data-file-row]', main).forEach(tr => tr.addEventListener('contextmenu', (ev) => {
+      ev.preventDefault();
+      const f = rows.find(x => x.id === tr.dataset.fileRow);
+      if (!f) return;
+      showContextMenu(ev.clientX, ev.clientY, [
+        { label: 'View', onClick: async () => {
+          const win = window.open('', '_blank');
+          const url = await Store.getSignedOfficeFileUrl(f.filePath);
+          if (url && win) win.location.href = url; else if (win) win.close();
+        } },
+        { label: 'Info', onClick: () => openFileInfoModal(f) },
+        { label: 'Rename', onClick: () => openRenameFileModal(main, f) },
+        { label: 'Move to...', onClick: () => openMoveToModal(main, [f]) },
+        { label: selectedFileIds.has(f.id) ? 'Deselect' : 'Select', onClick: () => {
+          if (selectedFileIds.has(f.id)) selectedFileIds.delete(f.id); else selectedFileIds.add(f.id);
+          renderFolderDetail(main);
+        } },
+        { label: 'Delete', danger: true, onClick: async () => {
+          if (!confirm('Delete this file? This cannot be undone.')) return;
+          await Store.deleteOfficeFile(f.id, f.filePath);
+          toast('✔ File deleted.');
+          renderFolderDetail(main);
+        } },
+      ]);
     }));
 
     const btnPaste = qs('#btn-paste', main);
