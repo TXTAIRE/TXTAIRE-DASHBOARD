@@ -1,6 +1,14 @@
 window.Views.finance = (function () {
   let activeTab = 'expenses';
-  const EXPENSE_CATEGORIES = ['Rent', 'Utilities', 'Supplies', 'Fuel', 'Repairs', 'Other'];
+  // Matches the office's existing Google Sheets expense register exactly -- both the
+  // entity tabs and the short "Particulars/Items" labels actually used in that sheet.
+  // Particulars is a free-text field (not a locked dropdown, since the real register has
+  // used all sorts of labels over time) with these as autocomplete suggestions only.
+  const ENTITY_OPTIONS = ['TXTAIRE OPC', 'TXTAIRE REF', 'AVISO'];
+  const PARTICULARS_SUGGESTIONS = [
+    'MATERIALS', 'MEALS', 'TRANSPORTATION', 'GASOLINE', 'PARKING', 'DRINKS',
+    'UTILITIES', 'OFFICE SUPPLIES', 'ELECTRONICS', 'APPAREL', 'ESSENTIALS', 'RENT', 'OTHER',
+  ];
   const BILL_CATEGORIES = ['Rent', 'Utilities', 'Other'];
 
   let expenseMonth = todayISO().slice(0, 7); // 'YYYY-MM'
@@ -37,17 +45,107 @@ window.Views.finance = (function () {
 
   // ---------------- Expenses & Receipts ----------------
 
-  function downloadCsv(filename, rows) {
-    const csv = rows.map(row => row.map(cell => {
-      const s = String(cell == null ? '' : cell);
-      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-    }).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+  // Matches the office's existing Google Sheets expense register exactly: one sheet per
+  // entity (always all 3, even if empty this month, same as the template), same column
+  // headers/order. ExcelJS is already loaded globally (index.html) for the Overview
+  // page's employee-records export, same styling convention reused here.
+  const EXPENSE_EXPORT_COLUMNS = ['Date Issued', 'Service/Sales Invoice Number', 'Vendor Name', 'TIN Number', 'Location', 'Particulars/Items', 'Amount'];
+  const EXPENSE_EXPORT_BLUE = 'FF2F6FED'; // matches css/styles.css --accent
+
+  function addExpenseEntitySheet(workbook, entityName, rows) {
+    const sheet = workbook.addWorksheet(entityName);
+    sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    const headerRow = sheet.addRow(EXPENSE_EXPORT_COLUMNS);
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXPENSE_EXPORT_BLUE } };
+      cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+
+    rows.forEach((r) => {
+      sheet.addRow([
+        new Date(r.date + 'T00:00:00'), r.invoiceNumber || '', r.vendor,
+        r.tinNumber || '', r.location || '', r.category, Number(r.amount) || 0,
+      ]);
+    });
+
+    sheet.getColumn(1).numFmt = 'mm/dd/yyyy';
+    sheet.getColumn(7).numFmt = '#,##0.00';
+    sheet.columns.forEach((col, i) => {
+      col.width = Math.max(EXPENSE_EXPORT_COLUMNS[i].length + 2, 16);
+    });
+  }
+
+  async function downloadExpensesWorkbook(rows, monthLabel) {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'TxTAIRE Dashboard';
+    workbook.created = new Date();
+    ENTITY_OPTIONS.forEach((entity) => {
+      addExpenseEntitySheet(workbook, entity, rows.filter(r => (r.entity || ENTITY_OPTIONS[0]) === entity));
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); a.remove();
+    a.href = url;
+    a.download = `expenses-${monthLabel.replace(/[\s,]+/g, '-')}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
     URL.revokeObjectURL(url);
+    Store.logAudit('expenses.export', 'expenses', null, { period: monthLabel, count: rows.length });
+    toast('✔ Expenses downloaded.');
+  }
+
+  function sheetsBackupCard(main) {
+    const url = Store.getAppSetting('expenseSheetWebhookUrl', '');
+    return `
+      <div class="panel" style="margin-bottom:8px; padding:10px 14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <span>🔗 Google Sheets Backup: ${url ? '<span class="badge badge-green">Connected</span>' : '<span class="badge badge-gray">Not connected</span>'}</span>
+        <span class="dim" style="font-size:12px;">${url ? 'Every add/edit/delete is mirrored live to your Google Sheet.' : 'Not saving a live copy to Google Sheets yet.'}</span>
+        <button type="button" class="link-btn" id="btn-sheets-backup-settings">${url ? 'Manage' : 'Connect'}</button>
+      </div>
+    `;
+  }
+
+  function openSheetsBackupSettingsModal(main) {
+    const url = Store.getAppSetting('expenseSheetWebhookUrl', '');
+    const secret = Store.getAppSetting('expenseSheetWebhookSecret', '');
+    openModal(`
+      <h2>🔗 Google Sheets Backup</h2>
+      <div class="modal-sub" style="margin-bottom:10px;">Every expense added, edited, or deleted here is also sent live to a Google Sheet as a real-time backup — separate from Supabase, which stays the actual source of truth. Set this up once: deploy the provided Apps Script as a Web App in your target Google Sheet, then paste its URL and the shared secret you set inside it below.</div>
+      <form id="sheets-backup-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Web App URL</label><input name="url" value="${escapeHtml(url)}" placeholder="https://script.google.com/macros/s/.../exec" /></div>
+          <div class="field full"><label>Shared secret</label><input name="secret" value="${escapeHtml(secret)}" placeholder="A password only this app and the script know" /></div>
+        </div>
+        <div class="modal-actions">
+          ${url ? '<button type="button" class="btn btn-ghost" id="btn-disconnect-sheets" style="margin-right:auto;">Disconnect</button>' : ''}
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#sheets-backup-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        await Store.setAppSetting('expenseSheetWebhookUrl', fd.get('url').trim());
+        await Store.setAppSetting('expenseSheetWebhookSecret', fd.get('secret').trim());
+        toast('✔ Google Sheets backup settings saved.');
+        closeModal();
+        renderView(main);
+      });
+      const disconnectBtn = qs('#btn-disconnect-sheets', bd);
+      if (disconnectBtn) disconnectBtn.addEventListener('click', async () => {
+        if (!confirm('Disconnect the Google Sheets backup? Past edits already sent stay in the sheet; nothing new will sync until reconnected.')) return;
+        await Store.setAppSetting('expenseSheetWebhookUrl', '');
+        toast('Disconnected.');
+        closeModal();
+        renderView(main);
+      });
+    });
   }
 
   function renderExpensesTab(body, main) {
@@ -58,9 +156,10 @@ window.Views.finance = (function () {
     const monthLabel = new Date(expenseMonth + '-01T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
     body.innerHTML = `
+      ${sheetsBackupCard(main)}
       <div class="filters">
         <div class="field"><label>Month</label><input type="month" id="expense-month-input" value="${expenseMonth}" /></div>
-        <button class="btn btn-ghost btn-sm" id="btn-export-expenses" style="align-self:flex-end;">Export CSV</button>
+        <button class="btn btn-ghost btn-sm" id="btn-export-expenses" style="align-self:flex-end;">📥 Export Excel</button>
       </div>
 
       <div class="kpi-row">
@@ -71,12 +170,16 @@ window.Views.finance = (function () {
       <div class="panel">
         ${rows.length ? `
         <table>
-          <thead><tr><th>Date</th><th>Vendor</th><th>Category</th><th class="num">Amount</th><th>Description</th><th>Receipt</th><th>Entered By</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Entity</th><th>Vendor</th><th>Invoice #</th><th>TIN</th><th>Location</th><th>Particulars</th><th class="num">Amount</th><th>Description</th><th>Receipt</th><th>Entered By</th><th></th></tr></thead>
           <tbody>
             ${rows.map(r => `
               <tr>
                 <td class="dim">${fmtDate(r.date)}</td>
+                <td class="dim">${escapeHtml(r.entity || ENTITY_OPTIONS[0])}</td>
                 <td class="name">${escapeHtml(r.vendor)}</td>
+                <td class="dim">${escapeHtml(r.invoiceNumber || '—')}</td>
+                <td class="dim">${escapeHtml(r.tinNumber || '—')}</td>
+                <td class="dim">${escapeHtml(r.location || '—')}</td>
                 <td><span class="badge badge-gray">${escapeHtml(r.category)}</span></td>
                 <td class="num">${fmtMoney(r.amount)}</td>
                 <td class="dim" style="max-width:220px;">${escapeHtml(r.description || '—')}</td>
@@ -94,12 +197,9 @@ window.Views.finance = (function () {
     `;
 
     qs('#expense-month-input', body).addEventListener('change', (ev) => { expenseMonth = ev.target.value; renderExpensesTab(body, main); });
-    qs('#btn-export-expenses', body).addEventListener('click', () => {
-      downloadCsv(`expenses-${expenseMonth}.csv`, [
-        ['Date', 'Vendor', 'Category', 'Amount', 'Description', 'Entered By'],
-        ...rows.map(r => [r.date, r.vendor, r.category, r.amount, r.description || '', r.enteredBy || '']),
-      ]);
-    });
+    qs('#btn-export-expenses', body).addEventListener('click', () => downloadExpensesWorkbook(rows, monthLabel));
+    const backupBtn = qs('#btn-sheets-backup-settings', body);
+    if (backupBtn) backupBtn.addEventListener('click', () => openSheetsBackupSettingsModal(main));
     qsa('[data-view-receipt]', body).forEach(b => b.addEventListener('click', async () => {
       const win = window.open('', '_blank');
       const url = await Store.getSignedReceiptUrl(b.dataset.viewReceipt);
@@ -121,18 +221,28 @@ window.Views.finance = (function () {
   }
 
   function openExpenseForm(main, editing) {
-    const e = editing || { date: todayISO(), vendor: '', category: 'Supplies', amount: '', description: '' };
+    const e = editing || {
+      date: todayISO(), entity: ENTITY_OPTIONS[0], invoiceNumber: '', vendor: '',
+      tinNumber: '', location: '', category: '', amount: '', description: '',
+    };
     openModal(`
       <h2>${editing ? 'Edit Expense' : 'Add Expense'}</h2>
       <form id="expense-form">
         <div class="modal-grid">
-          <div class="field"><label>Date</label><input type="date" name="date" value="${e.date}" required /></div>
-          <div class="field"><label>Category</label>
-            <select name="category">${EXPENSE_CATEGORIES.map(c => `<option ${c === e.category ? 'selected' : ''}>${c}</option>`).join('')}</select>
+          <div class="field"><label>Date Issued</label><input type="date" name="date" value="${e.date}" required /></div>
+          <div class="field"><label>Entity</label>
+            <select name="entity">${ENTITY_OPTIONS.map(v => `<option ${v === (e.entity || ENTITY_OPTIONS[0]) ? 'selected' : ''}>${v}</option>`).join('')}</select>
           </div>
-          <div class="field full"><label>Vendor</label><input name="vendor" value="${escapeHtml(e.vendor)}" required /></div>
+          <div class="field full"><label>Vendor Name</label><input name="vendor" value="${escapeHtml(e.vendor)}" required /></div>
+          <div class="field"><label>Service/Sales Invoice Number</label><input name="invoiceNumber" value="${escapeHtml(e.invoiceNumber || '')}" /></div>
+          <div class="field"><label>TIN Number</label><input name="tinNumber" value="${escapeHtml(e.tinNumber || '')}" placeholder="e.g. 237-683-535-00000" /></div>
+          <div class="field full"><label>Location</label><input name="location" value="${escapeHtml(e.location || '')}" placeholder="e.g. QUEZON CITY, NCR" /></div>
+          <div class="field"><label>Particulars</label>
+            <input name="category" list="particulars-suggestions" value="${escapeHtml(e.category || '')}" required placeholder="e.g. MATERIALS" />
+            <datalist id="particulars-suggestions">${PARTICULARS_SUGGESTIONS.map(p => `<option value="${p}">`).join('')}</datalist>
+          </div>
           <div class="field"><label>Amount (PHP)</label><input type="number" name="amount" min="0" step="0.01" value="${e.amount}" required /></div>
-          <div class="field full"><label>Description</label><textarea name="description" rows="2">${escapeHtml(e.description || '')}</textarea></div>
+          <div class="field full"><label>Description (optional, internal note)</label><textarea name="description" rows="2">${escapeHtml(e.description || '')}</textarea></div>
           <div class="field full"><label>Receipt photo/scan (optional)</label><input type="file" name="receipt" accept="image/*,.pdf" /></div>
         </div>
         <div class="modal-actions">
@@ -151,8 +261,12 @@ window.Views.finance = (function () {
         try {
           const patch = {
             date: fd.get('date'),
+            entity: fd.get('entity'),
             vendor: fd.get('vendor').trim(),
-            category: fd.get('category'),
+            invoiceNumber: fd.get('invoiceNumber').trim(),
+            tinNumber: fd.get('tinNumber').trim(),
+            location: fd.get('location').trim(),
+            category: fd.get('category').trim(),
             amount: Number(fd.get('amount')) || 0,
             description: fd.get('description').trim(),
           };

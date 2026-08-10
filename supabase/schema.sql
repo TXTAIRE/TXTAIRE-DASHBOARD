@@ -2179,3 +2179,19 @@ $$;
 
 revoke all on function public.submit_public_complaint(text, text, text) from public;
 grant execute on function public.submit_public_complaint(text, text, text) to anon;
+
+-- =================================================================
+-- Expenses -- match the office's existing Google Sheets expense register format.
+-- Incremental migration, safe to re-run.
+--
+-- "category" is kept as-is (not renamed) and now holds the register's short
+-- "Particulars/Items" labels (MATERIALS, MEALS, TRANSPORTATION, etc.) instead of the
+-- previous fixed Rent/Utilities/Supplies/Fuel/Repairs/Other list -- same column, just a
+-- different, freer set of values going forward. Existing rows keep their old values
+-- untouched.
+-- =================================================================
+
+alter table expenses add column if not exists "invoiceNumber" text default '';
+alter table expenses add column if not exists "tinNumber" text default '';
+alter table expenses add column if not exists location text default '';
+alter table expenses add column if not exists entity text not null default 'TXTAIRE OPC';

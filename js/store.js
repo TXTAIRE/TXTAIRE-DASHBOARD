@@ -974,20 +974,55 @@ const Store = (function () {
     logAudit('appSettings.update', TABLES.appSettings, key, { value });
   }
 
+  // ---- Real-time Google Sheets backup for Expenses (best-effort, admin-configured) ----
+  // Every expense add/update/delete also POSTs to a Google Apps Script Web App the admin
+  // deploys and pastes the URL for (see the "Google Sheets Backup" card on the Expenses
+  // tab) -- a live mirror of the office's expense register spreadsheet. Exactly like
+  // logAudit() below, this never blocks or fails the real save: if the webhook is unset,
+  // unreachable, or errors, the expense itself is still saved to Supabase either way --
+  // Supabase remains the actual source of truth, the sheet is just a live copy.
+  async function syncExpenseToSheetsBackup(action, expense) {
+    const url = getAppSetting('expenseSheetWebhookUrl', '');
+    if (!url) return;
+    try {
+      // text/plain (not application/json) keeps this a CORS "simple request" -- Apps
+      // Script Web Apps don't handle a preflight OPTIONS request, so a real JSON
+      // content-type would fail outright. e.postData.contents on the Apps Script side
+      // still parses fine as JSON regardless of the header.
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          secret: getAppSetting('expenseSheetWebhookSecret', ''),
+          action, id: expense.id, entity: expense.entity,
+          date: expense.date, invoiceNumber: expense.invoiceNumber, vendor: expense.vendor,
+          tinNumber: expense.tinNumber, location: expense.location, category: expense.category,
+          amount: expense.amount,
+        }),
+      });
+    } catch (e) { /* best-effort -- the Supabase row is the source of truth either way */ }
+  }
+
   // ---- Expenses & Receipts (Admin/Finance, admin-only) ----
   function listExpenses() { return state.expenses.slice(); }
   function getExpense(id) { return state.expenses.find(e => e.id === id); }
   function expensesInRange(from, to) { return state.expenses.filter(e => e.date >= from && e.date <= to); }
   async function addExpense(e) {
     e.id = genId('exp');
-    return insertRow('expenses', e);
+    const row = await insertRow('expenses', e);
+    syncExpenseToSheetsBackup('insert', e);
+    return row;
   }
   async function updateExpense(id, patch) {
     await updateRow('expenses', id, patch);
-    return getExpense(id);
+    const row = getExpense(id);
+    if (row) syncExpenseToSheetsBackup('update', row);
+    return row;
   }
   async function deleteExpense(id) {
+    const row = getExpense(id);
     await deleteRow('expenses', id);
+    if (row) syncExpenseToSheetsBackup('delete', row);
   }
   // Uploads a receipt photo/scan to the private "receipts" bucket -- manual upload only,
   // since a browser can't drive a physical scanner directly.
