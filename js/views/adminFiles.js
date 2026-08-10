@@ -87,41 +87,70 @@ window.Views.adminFiles = (function () {
     if (main && currentRoute() === 'adminFiles') renderView(main);
   }
 
-  // The stability check described above: a name new to this poll is only recorded as a
+  // Walks the watched folder at any depth. Yields one entry per file, with `path` (full
+  // relative path -- the stable identity used for dedup, since a filename alone can
+  // collide across different client subfolders) and `topFolder` (the first path segment
+  // -- e.g. "ABRIO 2026/Invoices/scan.jpg" -> "ABRIO 2026" -- or null for a file sitting
+  // directly at the watched root).
+  async function* walkWatchedTree(dirHandle, relDir) {
+    for await (const [name, handle] of dirHandle.entries()) {
+      const relPath = relDir ? relDir + '/' + name : name;
+      if (handle.kind === 'file') {
+        yield { path: relPath, handle, topFolder: relDir ? relDir.split('/')[0] : null };
+      } else if (handle.kind === 'directory') {
+        yield* walkWatchedTree(handle, relPath);
+      }
+    }
+  }
+
+  // Client subfolder names (e.g. "ABRIO 2026") rarely match an existing Admin Files
+  // folder -- auto-create one, matching the local structure, the same way
+  // openNewFolderModal does (case-insensitive check, kept before "Other").
+  async function ensureAdminFolderExists(name) {
+    const folders = getFolders();
+    if (folders.some(f => f.toLowerCase() === name.toLowerCase())) return;
+    const otherIndex = folders.findIndex(f => f.toLowerCase() === 'other');
+    const updated = otherIndex >= 0 ? [...folders.slice(0, otherIndex), name, ...folders.slice(otherIndex)] : [...folders, name];
+    await saveFolders(updated);
+  }
+
+  // The stability check described above: a path new to this poll is only recorded as a
   // "candidate" with its current size; it's uploaded on a LATER poll once its size comes
   // back unchanged, meaning the scanner has finished writing it.
   async function pollWatchedFolder(main) {
     if (!watchState || watchPollInFlight) return;
     watchPollInFlight = true;
     try {
-      const seenNames = new Set();
+      const seenPaths = new Set();
       try {
-        for await (const [name, handle] of watchState.dirHandle.entries()) {
-          if (handle.kind !== 'file') continue;
-          seenNames.add(name);
-          if (watchState.seenFiles.has(name)) continue;
+        for await (const entry of walkWatchedTree(watchState.dirHandle, '')) {
+          const { path, handle, topFolder } = entry;
+          seenPaths.add(path);
+          if (watchState.seenFiles.has(path)) continue;
           const file = await handle.getFile();
-          const prevSize = watchState.candidates.get(name);
+          const prevSize = watchState.candidates.get(path);
           if (prevSize === file.size) {
-            watchState.candidates.delete(name);
-            watchState.seenFiles.add(name);
+            watchState.candidates.delete(path);
+            watchState.seenFiles.add(path);
             persistWatchState();
+            const destination = topFolder || watchState.destinationFolder;
             try {
-              await Store.uploadOfficeFile(file, watchState.destinationFolder, currentUserEmail());
-              toast(`✔ Auto-uploaded "${name}" to ${watchState.destinationFolder}.`);
+              if (topFolder) await ensureAdminFolderExists(topFolder);
+              await Store.uploadOfficeFile(file, destination, currentUserEmail());
+              toast(`✔ Auto-uploaded "${file.name}" to ${destination}.`);
               // The watch timer keeps running no matter which page is open (that's the
               // whole point), but #main-content is the one shared container the whole
               // app's router reuses -- only safe to re-render it if Admin Files is still
               // what's showing, or this would silently blow away whatever other page the
               // admin navigated to.
-              if (currentRoute() === 'adminFiles' && activeFolder === watchState.destinationFolder) renderView(main);
+              if (currentRoute() === 'adminFiles' && activeFolder === destination) renderView(main);
             } catch (err) {
               // Leave it marked seen either way -- retrying a failed upload forever on
               // every poll would just spam toasts; the file's still on disk to upload by
               // hand if needed.
             }
           } else {
-            watchState.candidates.set(name, file.size);
+            watchState.candidates.set(path, file.size);
           }
         }
       } catch (err) {
@@ -133,7 +162,7 @@ window.Views.adminFiles = (function () {
       }
       // Forget candidates for files that disappeared before stabilizing (renamed/deleted
       // before we got to them) so they don't linger in memory forever.
-      [...watchState.candidates.keys()].forEach((name) => { if (!seenNames.has(name)) watchState.candidates.delete(name); });
+      [...watchState.candidates.keys()].forEach((path) => { if (!seenPaths.has(path)) watchState.candidates.delete(path); });
     } finally {
       watchPollInFlight = false;
     }
@@ -154,7 +183,7 @@ window.Views.adminFiles = (function () {
     watchState = { dirHandle, destinationFolder, seenFiles: new Set(), candidates: new Map() };
     persistWatchState();
     startWatchingTimer(main);
-    toast(`👁 Watching "${dirHandle.name}" — new scans will upload to ${destinationFolder}.`);
+    toast(`👁 Watching "${dirHandle.name}" (including subfolders) — files upload to a matching Admin Files folder per subfolder, or ${destinationFolder} if loose at the top level.`);
     renderView(main);
   }
 
@@ -214,8 +243,8 @@ window.Views.adminFiles = (function () {
       const canRetarget = activeFolder && activeFolder !== watchState.destinationFolder;
       return `
         <div class="panel" style="margin-bottom:8px; padding:10px 14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-          <span>👁 Watching <strong>${escapeHtml(watchState.dirHandle.name)}</strong> for new scans — uploading to <strong>${escapeHtml(watchState.destinationFolder)}</strong></span>
-          ${canRetarget ? `<button type="button" class="link-btn" id="btn-retarget-watch">Change destination to "${escapeHtml(activeFolder)}"</button>` : ''}
+          <span>👁 Watching <strong>${escapeHtml(watchState.dirHandle.name)}</strong> (incl. subfolders) — each subfolder auto-creates/uploads to its own matching Admin Files folder; loose top-level files go to <strong>${escapeHtml(watchState.destinationFolder)}</strong></span>
+          ${canRetarget ? `<button type="button" class="link-btn" id="btn-retarget-watch">Change top-level destination to "${escapeHtml(activeFolder)}"</button>` : ''}
           <button type="button" class="link-btn" id="btn-stop-watch" style="color:var(--red);">Stop watching</button>
         </div>`;
     }
@@ -689,7 +718,7 @@ window.Views.adminFiles = (function () {
         </div>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-ghost" id="btn-delete-folder" ${rows.length || activeFolder === 'Other' ? 'disabled' : ''} title="${activeFolder === 'Other' ? '\'Other\' is the built-in fallback folder and can\'t be deleted' : rows.length ? 'Move or delete every file in this folder first' : 'Delete this empty folder'}">🗑 Delete Folder</button>
-          ${!watchState || watchState.pendingResume ? `<button class="btn btn-ghost" id="btn-start-watch" ${folderWatchUnsupportedReason() ? 'disabled' : ''} title="${folderWatchUnsupportedReason() || 'Auto-upload new files a scanner saves into a folder on this PC'}">📡 Watch for new scans</button>` : ''}
+          ${!watchState || watchState.pendingResume ? `<button class="btn btn-ghost" id="btn-start-watch" ${folderWatchUnsupportedReason() ? 'disabled' : ''} title="${folderWatchUnsupportedReason() || 'Auto-upload new files a scanner saves into a folder on this PC -- subfolders (e.g. per client) each become their own matching Admin Files folder automatically'}">📡 Watch for new scans</button>` : ''}
           <button class="btn btn-ghost" id="btn-scan-doc">📷 Scan Document</button>
           <button class="btn btn-ghost" id="btn-upload-folder">📁 Upload Folder</button>
           <button class="btn btn-primary" id="btn-upload-doc">+ Upload File</button>
