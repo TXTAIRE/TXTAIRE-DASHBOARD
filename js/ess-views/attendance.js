@@ -568,6 +568,26 @@ window.EssViews.attendance = (function () {
     ctx.restore();
   }
 
+  // Greedy word-wrap for canvas text -- fillText never wraps on its own, and the address
+  // stamped below is now a full street address (building/street/village/barangay/city/
+  // postal code), long enough to overflow a single line at the frame's width.
+  function wrapText(ctx, text, maxWidth) {
+    const words = text.split(' ');
+    const lines = [];
+    let line = '';
+    words.forEach((word) => {
+      const test = line ? line + ' ' + word : word;
+      if (line && ctx.measureText(test).width > maxWidth) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    });
+    if (line) lines.push(line);
+    return lines;
+  }
+
   // Draws the same info a physical time clock would stamp — logo, time, date, location,
   // name, company, verification code — directly onto the captured frame. Original design
   // (our own brand, wordmark and layout), not copied from any third-party product.
@@ -637,8 +657,12 @@ window.EssViews.attendance = (function () {
     if (locationInfo && locationInfo.text) {
       ctx.font = `500 ${Math.round(w * 0.028)}px Arial`;
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(locationInfo.text, px, y);
-      y += w * 0.05;
+      // Cap at 3 lines -- a full address can run long; the complete text is still saved
+      // in full to timeInLocation/timeOutLocation regardless of what fits on the stamp.
+      const lines = wrapText(ctx, locationInfo.text, w - px * 2).slice(0, 3);
+      const lineH = w * 0.036;
+      lines.forEach((line, i) => ctx.fillText(line, px, y + i * lineH));
+      y += lineH * lines.length + w * 0.014;
     }
     // Exact GPS coordinates — the actual proof of location, always shown whenever a fix
     // was obtained even if reverse geocoding (the readable city/region above) failed.
@@ -690,10 +714,11 @@ window.EssViews.attendance = (function () {
     return `${lat}, ${lon}${acc}`;
   }
 
-  // Returns { text, coordsText } — text is a human-readable city/region (reverse-geocoded,
-  // best-effort), coordsText is the exact GPS coordinates straight from the device, always
-  // included whenever a location fix is available even if reverse geocoding fails or is
-  // slow, since the coordinates are the actual proof of location.
+  // Returns { text, coordsText } — text is a full best-effort street address (building,
+  // street, village, barangay, city, postal code — reverse-geocoded), coordsText is the
+  // exact GPS coordinates straight from the device, always included whenever a location
+  // fix is available even if reverse geocoding fails or is slow, since the coordinates
+  // are the actual proof of location.
   function bestEffortLocation() {
     return new Promise((resolve) => {
       if (!navigator.geolocation) return resolve({ text: '', coordsText: '' });
@@ -703,12 +728,28 @@ window.EssViews.attendance = (function () {
         const { latitude, longitude, accuracy } = pos.coords;
         const coordsText = formatCoords(latitude, longitude, accuracy);
         try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=12`);
+          // zoom=18 + addressdetails=1 -- building/street-level detail (vs. the previous
+          // zoom=12 city/region-only lookup), so the structured address object below
+          // actually has road/building/village/suburb/postcode to pull from.
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`);
           const data = await res.json();
           const a = data.address || {};
-          const city = a.city || a.town || a.municipality || a.village || '';
-          const region = a.state || a.region || '';
-          resolve({ text: [city, region].filter(Boolean).join(', ') || data.display_name || '', coordsText });
+          // Nominatim/OSM has no dedicated "barangay" field -- Philippine barangays are
+          // typically tagged as suburb or quarter. village/neighbourhood is kept separate
+          // since a subdivision/village name and its barangay are often different things.
+          const street = [a.house_number, a.road].filter(Boolean).join(' ');
+          const building = a.building && a.building !== street ? a.building : '';
+          const village = a.village || a.neighbourhood || '';
+          // OSM's suburb/quarter tag for a PH barangay sometimes already includes the word
+          // "Barangay" in its name -- strip it before comparing/prefixing, or a suburb tagged
+          // exactly the same as the village produces a duplicated "Brgy. Barangay X".
+          const barangaySrc = (a.suburb || a.quarter || a.city_district || '').replace(/^barangay\s+/i, '');
+          const barangay = barangaySrc && barangaySrc !== village ? 'Brgy. ' + barangaySrc : '';
+          const city = a.city || a.town || a.municipality || '';
+          const postcode = a.postcode || '';
+          const line = [building, street, village, barangay, city].filter(Boolean).join(', ');
+          const text = postcode ? [line, postcode].filter(Boolean).join(' ') : line;
+          resolve({ text: text || data.display_name || '', coordsText });
         } catch (e) { resolve({ text: '', coordsText }); }
       }, () => { clearTimeout(timer); resolve({ text: '', coordsText: '' }); }, { timeout: 6000, enableHighAccuracy: true });
     });
