@@ -18,6 +18,224 @@ window.Views.adminFiles = (function () {
   let activeFolder = null; // null = folder grid
   let pasteListenerAttached = false;
   let selectedFileIds = new Set(); // ids checked in the currently open folder's table
+
+  // ---- Watch a local folder for new scans (File System Access API, Chrome/Edge only) ----
+  // Lets IJ Scan Utility (or any scanner software) save straight into a fixed folder on
+  // this PC, which the dashboard then polls and auto-uploads from -- no manual drag or
+  // "+ Upload File" needed per scan. A browser can't be handed a file the instant it's
+  // written (no OS-level file-watch event exposed to the web), so this polls every few
+  // seconds instead; a file also has to read the same size on two consecutive polls
+  // before it's uploaded, so a scan that's still being written is never grabbed mid-save.
+  // Only one watch is active at a time, global across the whole Admin Files page (there's
+  // realistically one scan folder for the office) -- watchState is null when inactive.
+  let watchState = null; // { dirHandle, destinationFolder, seenFiles: Set<string>, candidates: Map<string,number> }
+  let watchTimer = null;
+  let watchResumeAttempted = false;
+  let watchPollInFlight = false; // guards against an overlapping poll if an upload runs long
+  const WATCH_POLL_MS = 4000;
+  const WATCH_DB_NAME = 'txtaire-fs-handles';
+  const WATCH_DB_KEY = 'scanWatch';
+
+  function folderWatchUnsupportedReason() {
+    if ('showDirectoryPicker' in window) return null;
+    return 'Watching a folder for new scans needs Chrome or Edge on a desktop computer.';
+  }
+
+  function idbOpen() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(WATCH_DB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('kv');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idbSet(key, value) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+  async function idbGet(key) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('kv', 'readonly');
+      const req = tx.objectStore('kv').get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function persistWatchState() {
+    if (!watchState) { idbSet(WATCH_DB_KEY, null); return; }
+    idbSet(WATCH_DB_KEY, {
+      dirHandle: watchState.dirHandle,
+      destinationFolder: watchState.destinationFolder,
+      seenFiles: [...watchState.seenFiles],
+    });
+  }
+
+  function stopWatching(main) {
+    if (watchTimer) clearInterval(watchTimer);
+    watchTimer = null;
+    watchState = null;
+    persistWatchState();
+    // Safe to call from a direct button click (page is obviously showing) or from the
+    // background poll timer (page may have navigated elsewhere since) alike.
+    if (main && currentRoute() === 'adminFiles') renderView(main);
+  }
+
+  // The stability check described above: a name new to this poll is only recorded as a
+  // "candidate" with its current size; it's uploaded on a LATER poll once its size comes
+  // back unchanged, meaning the scanner has finished writing it.
+  async function pollWatchedFolder(main) {
+    if (!watchState || watchPollInFlight) return;
+    watchPollInFlight = true;
+    try {
+      const seenNames = new Set();
+      try {
+        for await (const [name, handle] of watchState.dirHandle.entries()) {
+          if (handle.kind !== 'file') continue;
+          seenNames.add(name);
+          if (watchState.seenFiles.has(name)) continue;
+          const file = await handle.getFile();
+          const prevSize = watchState.candidates.get(name);
+          if (prevSize === file.size) {
+            watchState.candidates.delete(name);
+            watchState.seenFiles.add(name);
+            persistWatchState();
+            try {
+              await Store.uploadOfficeFile(file, watchState.destinationFolder, currentUserEmail());
+              toast(`✔ Auto-uploaded "${name}" to ${watchState.destinationFolder}.`);
+              // The watch timer keeps running no matter which page is open (that's the
+              // whole point), but #main-content is the one shared container the whole
+              // app's router reuses -- only safe to re-render it if Admin Files is still
+              // what's showing, or this would silently blow away whatever other page the
+              // admin navigated to.
+              if (currentRoute() === 'adminFiles' && activeFolder === watchState.destinationFolder) renderView(main);
+            } catch (err) {
+              // Leave it marked seen either way -- retrying a failed upload forever on
+              // every poll would just spam toasts; the file's still on disk to upload by
+              // hand if needed.
+            }
+          } else {
+            watchState.candidates.set(name, file.size);
+          }
+        }
+      } catch (err) {
+        // Permission revoked, drive unplugged, folder deleted, etc. -- stop cleanly
+        // rather than error-looping every 4 seconds.
+        stopWatching(main);
+        toast('⚠ Stopped watching for scans — the folder became unavailable.');
+        return;
+      }
+      // Forget candidates for files that disappeared before stabilizing (renamed/deleted
+      // before we got to them) so they don't linger in memory forever.
+      [...watchState.candidates.keys()].forEach((name) => { if (!seenNames.has(name)) watchState.candidates.delete(name); });
+    } finally {
+      watchPollInFlight = false;
+    }
+  }
+
+  function startWatchingTimer(main) {
+    if (watchTimer) clearInterval(watchTimer);
+    watchTimer = setInterval(() => pollWatchedFolder(main), WATCH_POLL_MS);
+  }
+
+  async function beginWatch(main, destinationFolder) {
+    let dirHandle;
+    try {
+      dirHandle = await window.showDirectoryPicker({ mode: 'read' });
+    } catch (err) {
+      return; // user cancelled the picker
+    }
+    watchState = { dirHandle, destinationFolder, seenFiles: new Set(), candidates: new Map() };
+    persistWatchState();
+    startWatchingTimer(main);
+    toast(`👁 Watching "${dirHandle.name}" — new scans will upload to ${destinationFolder}.`);
+    renderView(main);
+  }
+
+  // Runs once, the first time this view renders -- resumes a previously-connected watch
+  // if the browser still silently grants read access (it often does, within the same
+  // browser profile), otherwise leaves it for the "Resume watching" banner to ask for a
+  // fresh click (permission can only ever be (re-)granted from a real user gesture).
+  async function tryResumeWatch(main) {
+    if (watchResumeAttempted) return;
+    watchResumeAttempted = true;
+    if (folderWatchUnsupportedReason()) return;
+    let saved;
+    try { saved = await idbGet(WATCH_DB_KEY); } catch (err) { return; }
+    if (!saved || !saved.dirHandle) return;
+    try {
+      const perm = await saved.dirHandle.queryPermission({ mode: 'read' });
+      if (perm === 'granted') {
+        watchState = { dirHandle: saved.dirHandle, destinationFolder: saved.destinationFolder, seenFiles: new Set(saved.seenFiles || []), candidates: new Map() };
+        startWatchingTimer(main);
+      } else {
+        // Keep the handle around (pendingResume) so the banner can request permission
+        // with one click instead of re-running the folder picker from scratch.
+        watchState = { pendingResume: true, dirHandle: saved.dirHandle, destinationFolder: saved.destinationFolder, seenFiles: new Set(saved.seenFiles || []), candidates: new Map() };
+      }
+      // This resolves asynchronously, well after renderView's own synchronous render --
+      // by then the admin may have already navigated to a different page on the shared
+      // #main-content container, so re-rendering here is only safe if Admin Files is
+      // still actually what's on screen.
+      if (currentRoute() === 'adminFiles') renderView(main);
+    } catch (err) { /* stored handle no longer valid -- ignore, treat as never connected */ }
+  }
+
+  async function resumePendingWatch(main) {
+    if (!watchState || !watchState.pendingResume) return;
+    try {
+      const perm = await watchState.dirHandle.requestPermission({ mode: 'read' });
+      if (perm !== 'granted') { toast('Access not granted — still not watching.'); return; }
+    } catch (err) { toast('Could not resume — pick the folder again.'); watchState = null; renderView(main); return; }
+    watchState = { dirHandle: watchState.dirHandle, destinationFolder: watchState.destinationFolder, seenFiles: watchState.seenFiles, candidates: new Map() };
+    startWatchingTimer(main);
+    toast(`👁 Resumed watching — uploading to ${watchState.destinationFolder}.`);
+    renderView(main);
+  }
+
+  function watchBannerHtml() {
+    const unsupported = folderWatchUnsupportedReason();
+    if (unsupported) return '';
+    if (watchState && watchState.pendingResume) {
+      return `
+        <div class="panel" style="margin-bottom:8px; padding:10px 14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; outline:2px dashed var(--accent); outline-offset:-2px;">
+          <span>👁 Resume watching for new scans → uploads to <strong>${escapeHtml(watchState.destinationFolder)}</strong>?</span>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-resume-watch">Resume</button>
+          <button type="button" class="link-btn" id="btn-forget-watch">Forget</button>
+        </div>`;
+    }
+    if (watchState) {
+      const canRetarget = activeFolder && activeFolder !== watchState.destinationFolder;
+      return `
+        <div class="panel" style="margin-bottom:8px; padding:10px 14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <span>👁 Watching <strong>${escapeHtml(watchState.dirHandle.name)}</strong> for new scans — uploading to <strong>${escapeHtml(watchState.destinationFolder)}</strong></span>
+          ${canRetarget ? `<button type="button" class="link-btn" id="btn-retarget-watch">Change destination to "${escapeHtml(activeFolder)}"</button>` : ''}
+          <button type="button" class="link-btn" id="btn-stop-watch" style="color:var(--red);">Stop watching</button>
+        </div>`;
+    }
+    return '';
+  }
+
+  function wireWatchBanner(main) {
+    const resumeBtn = qs('#btn-resume-watch', main);
+    if (resumeBtn) resumeBtn.addEventListener('click', () => resumePendingWatch(main));
+    const forgetBtn = qs('#btn-forget-watch', main);
+    if (forgetBtn) forgetBtn.addEventListener('click', () => stopWatching(main));
+    const stopBtn = qs('#btn-stop-watch', main);
+    if (stopBtn) stopBtn.addEventListener('click', () => stopWatching(main));
+    const retargetBtn = qs('#btn-retarget-watch', main);
+    if (retargetBtn) retargetBtn.addEventListener('click', () => {
+      watchState.destinationFolder = activeFolder;
+      persistWatchState();
+      renderView(main);
+    });
+  }
   // Desktop-file-explorer-style Cut/Copy + Paste. { mode: 'copy'|'cut', sourceFolder, files }
   // -- files is a snapshot (not just ids) so Paste still works even if the source rows
   // change/refetch in the meantime. Survives navigating between folders on purpose (that's
@@ -179,6 +397,7 @@ window.Views.adminFiles = (function () {
   }
 
   function renderView(main) {
+    tryResumeWatch(main);
     if (activeFolder) renderFolderDetail(main);
     else renderFolderGrid(main);
   }
@@ -198,6 +417,7 @@ window.Views.adminFiles = (function () {
           <button class="btn btn-ghost" id="btn-upload-folder-autosort">📁 Upload Folder (auto-sort)</button>
         </div>
       </div>
+      ${watchBannerHtml()}
       <div class="page-sub" style="margin-bottom:8px;">Or drag a folder from your computer here — if it has subfolders named after these categories (e.g. "HR", "Billing Invoice"), each file sorts into the matching one automatically; anything else goes to Other.</div>
       <div class="file-folder-grid" id="folder-grid-dropzone">
         ${folders.map(f => {
@@ -235,6 +455,7 @@ window.Views.adminFiles = (function () {
     });
 
     qs('#btn-upload-folder-autosort', main).addEventListener('click', () => openUploadFolderAutoSortModal(main));
+    wireWatchBanner(main);
     const gridDropzone = qs('#folder-grid-dropzone', main);
     gridDropzone.addEventListener('dragover', (ev) => { ev.preventDefault(); gridDropzone.classList.add('drag-over'); });
     gridDropzone.addEventListener('dragleave', (ev) => { if (ev.target === gridDropzone) gridDropzone.classList.remove('drag-over'); });
@@ -468,11 +689,13 @@ window.Views.adminFiles = (function () {
         </div>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-ghost" id="btn-delete-folder" ${rows.length || activeFolder === 'Other' ? 'disabled' : ''} title="${activeFolder === 'Other' ? '\'Other\' is the built-in fallback folder and can\'t be deleted' : rows.length ? 'Move or delete every file in this folder first' : 'Delete this empty folder'}">🗑 Delete Folder</button>
+          ${!watchState || watchState.pendingResume ? `<button class="btn btn-ghost" id="btn-start-watch" ${folderWatchUnsupportedReason() ? 'disabled' : ''} title="${folderWatchUnsupportedReason() || 'Auto-upload new files a scanner saves into a folder on this PC'}">📡 Watch for new scans</button>` : ''}
           <button class="btn btn-ghost" id="btn-scan-doc">📷 Scan Document</button>
           <button class="btn btn-ghost" id="btn-upload-folder">📁 Upload Folder</button>
           <button class="btn btn-primary" id="btn-upload-doc">+ Upload File</button>
         </div>
       </div>
+      ${watchBannerHtml()}
       <div class="page-sub" style="margin-bottom:8px;">Or drag files (or a whole folder) here, or paste (Ctrl/Cmd+V), to upload straight into this folder.</div>
       ${clipboard ? `
       <div class="panel" style="margin-bottom:8px; padding:10px 14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; outline:2px dashed var(--accent); outline-offset:-2px;">
@@ -528,6 +751,9 @@ window.Views.adminFiles = (function () {
     qs('#btn-upload-doc', main).addEventListener('click', () => openUploadModal(main, 'file'));
     qs('#btn-scan-doc', main).addEventListener('click', () => openUploadModal(main, 'scan'));
     qs('#btn-upload-folder', main).addEventListener('click', () => openUploadModal(main, 'folder'));
+    const btnStartWatch = qs('#btn-start-watch', main);
+    if (btnStartWatch && !btnStartWatch.disabled) btnStartWatch.addEventListener('click', () => beginWatch(main, activeFolder));
+    wireWatchBanner(main);
     const btnDeleteFolder = qs('#btn-delete-folder', main);
     if (btnDeleteFolder && !btnDeleteFolder.disabled) btnDeleteFolder.addEventListener('click', async () => {
       if (!confirm('Delete the "' + activeFolder + '" folder? This cannot be undone.')) return;
