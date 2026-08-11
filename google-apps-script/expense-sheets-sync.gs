@@ -3,13 +3,24 @@
  *
  * This file is not deployed automatically -- Google Apps Script has no equivalent of the
  * Supabase CLI/dashboard-paste workflow this project otherwise uses, so it must be set up
- * by hand, once:
+ * by hand, once. Two ways to do that, depending on what your Google account allows:
  *
- *   1. Open the Google Sheet you want as the live backup (the existing expense register,
- *      or a new one -- either works, since sheet tabs are created automatically if
- *      missing).
+ * OPTION A -- bound to the sheet (use this if you have it):
+ *   1. Open the Google Sheet you want as the live backup.
  *   2. Extensions -> Apps Script.
  *   3. Delete whatever's in Code.gs, paste this entire file in its place.
+ *   4. Continue at step 4 below.
+ *
+ * OPTION B -- standalone script (use this if "Extensions" is missing from the Sheets
+ * menu bar -- common on Workspace accounts where an admin has restricted Apps Script
+ * access from inside Sheets/Docs, but direct script.google.com access is still allowed):
+ *   1. Go to https://script.google.com/ -> New project.
+ *   2. Delete whatever's in Code.gs, paste this entire file in its place.
+ *   3. Set SPREADSHEET_ID below to the target sheet's ID -- the long string in its URL
+ *      between /d/ and /edit (already filled in with the one currently linked).
+ *   4. Continue at step 4 below.
+ *
+ * Both options from here:
  *   4. Change SHARED_SECRET below to a password of your own choosing.
  *   5. Deploy -> New deployment -> gear icon -> "Web app".
  *      Execute as: Me. Who has access: Anyone. Deploy.
@@ -28,10 +39,21 @@
 
 var SHARED_SECRET = 'CHANGE-THIS-TO-YOUR-OWN-SECRET';
 
+// Only used by Option B (standalone script) -- ignored when this runs as a script bound
+// to the sheet itself (Option A), since getSpreadsheet_() below always tries the bound
+// spreadsheet first.
+var SPREADSHEET_ID = '1ZwMDeTycOWRwd1Q2CAgifHtuGO6xC8Ec';
+
 var HEADERS = ['Date Issued', 'Service/Sales Invoice Number', 'Vendor Name', 'TIN Number', 'Location', 'Particulars/Items', 'Amount', 'Record ID'];
 
+function getSpreadsheet_() {
+  var bound = SpreadsheetApp.getActiveSpreadsheet();
+  if (bound) return bound;
+  return SpreadsheetApp.openById(SPREADSHEET_ID);
+}
+
 function getOrCreateSheet_(entityName) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet_();
   var sheet = ss.getSheetByName(entityName);
   if (!sheet) {
     sheet = ss.insertSheet(entityName);
@@ -45,7 +67,7 @@ function getOrCreateSheet_(entityName) {
 // can change between an insert and a later edit -- an update/delete has to find wherever
 // the row actually is now, not assume it never moved.
 function findRowByIdAnySheet_(id) {
-  var sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
+  var sheets = getSpreadsheet_().getSheets();
   for (var s = 0; s < sheets.length; s++) {
     var sheet = sheets[s];
     var data = sheet.getDataRange().getValues();

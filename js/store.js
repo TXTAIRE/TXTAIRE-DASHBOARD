@@ -968,7 +968,14 @@ const Store = (function () {
     return row ? row.value : fallback;
   }
   async function setAppSetting(key, value) {
-    const { error } = await sb.from(TABLES.appSettings).upsert(sanitize({ key, value }), { onConflict: 'key' });
+    // Deliberately skips sanitize() -- that helper treats an empty string as "clear to
+    // null" for regular data-table rows, but an app setting's value column is NOT NULL
+    // and an empty string is itself a meaningful, storable value here (e.g. "Disconnect"
+    // on the Google Sheets Backup card saves '' to represent "no webhook configured").
+    // Routing this through sanitize() turned every empty-value save into a null, which
+    // Postgres rejected outright -- silently breaking Disconnect and any setting saved
+    // blank, with no visible error beyond a console exception.
+    const { error } = await sb.from(TABLES.appSettings).upsert({ key, value }, { onConflict: 'key' });
     if (error) { toast('Save failed: ' + error.message); throw error; }
     await refetch('appSettings');
     logAudit('appSettings.update', TABLES.appSettings, key, { value });
@@ -989,7 +996,7 @@ const Store = (function () {
       // Script Web Apps don't handle a preflight OPTIONS request, so a real JSON
       // content-type would fail outright. e.postData.contents on the Apps Script side
       // still parses fine as JSON regardless of the header.
-      await fetch(url, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({
@@ -1000,7 +1007,18 @@ const Store = (function () {
           amount: expense.amount,
         }),
       });
-    } catch (e) { /* best-effort -- the Supabase row is the source of truth either way */ }
+      // fetch() only rejects on a network/CORS failure -- a reachable Apps Script that
+      // rejects the request (bad secret, script error) still resolves here with a 200 and
+      // a non-'OK' body. Surface that in the console instead of pretending it worked, since
+      // this sync has no other feedback path (by design -- it must never block the real
+      // Supabase save, which stays the source of truth either way).
+      const text = await res.text();
+      if (text.trim() !== 'OK') {
+        console.warn('Google Sheets backup did not confirm the write (check the webhook URL/secret in Office & Finance -> Expenses -> Google Sheets Backup):', text);
+      }
+    } catch (e) {
+      console.warn('Google Sheets backup request failed (Supabase save is unaffected):', e);
+    }
   }
 
   // ---- Expenses & Receipts (Admin/Finance, admin-only) ----
