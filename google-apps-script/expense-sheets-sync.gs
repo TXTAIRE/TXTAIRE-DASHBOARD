@@ -32,9 +32,9 @@
  *
  * From then on, every expense added/edited/deleted in the dashboard is mirrored here
  * automatically, into a tab per entity (TXTAIRE OPC / TXTAIRE REF / AVISO), matching the
- * columns of the existing expense register. Column H (Record ID) is added automatically
- * to match edits/deletes back to the right row later -- safe to ignore or hide, nothing
- * else reads it.
+ * columns of the existing expense register. Column H (Record ID) is added and
+ * auto-hidden on every sheet this touches -- it's how edits/deletes find the right row
+ * later, but nothing else reads it, so it stays out of the way.
  */
 
 var SHARED_SECRET = 'CHANGE-THIS-TO-YOUR-OWN-SECRET';
@@ -52,6 +52,17 @@ function getSpreadsheet_() {
   return SpreadsheetApp.openById(SPREADSHEET_ID);
 }
 
+// Labels column H "Record ID" and hides it -- runs on every sheet, not just ones this
+// script creates fresh, since the office's existing TXTAIRE OPC/REF/AVISO tabs already
+// had their own 7 columns (A-G) before this script ever touched them. Without this, a
+// pre-existing tab's column H shows up as an auto-generated "Column 1" header full of
+// internal record IDs, which is exactly the clutter this hides.
+function ensureRecordIdColumn_(sheet) {
+  var headerCell = sheet.getRange(1, 8);
+  if (headerCell.getValue() !== 'Record ID') headerCell.setValue('Record ID');
+  if (!sheet.isColumnHiddenByUser(8)) sheet.hideColumns(8);
+}
+
 function getOrCreateSheet_(entityName) {
   var ss = getSpreadsheet_();
   var sheet = ss.getSheetByName(entityName);
@@ -60,6 +71,7 @@ function getOrCreateSheet_(entityName) {
     sheet.appendRow(HEADERS);
     sheet.setFrozenRows(1);
   }
+  ensureRecordIdColumn_(sheet);
   return sheet;
 }
 
@@ -78,6 +90,15 @@ function findRowByIdAnySheet_(id) {
   return null;
 }
 
+// Matches the look of the office's existing hand-entered rows: a real Date value
+// (formatted d-mmm-yy, e.g. "3-Aug-26", same as the rest of the register) rather than
+// the literal "2026-08-11" text the dashboard sends, and a proper 2-decimal money format
+// on the Amount column -- otherwise a synced row visually stands out from the old ones.
+function formatRow_(sheet, rowNum, numCols) {
+  sheet.getRange(rowNum, 1).setNumberFormat('d-mmm-yy');
+  sheet.getRange(rowNum, 7).setNumberFormat('"PHP" #,##0.00');
+}
+
 function doPost(e) {
   var body;
   try {
@@ -92,20 +113,23 @@ function doPost(e) {
 
   var sheet = getOrCreateSheet_(body.entity || 'TXTAIRE OPC');
   var rowValues = [
-    body.date || '', body.invoiceNumber || '', body.vendor || '',
+    body.date ? new Date(body.date + 'T00:00:00') : '', body.invoiceNumber || '', body.vendor || '',
     body.tinNumber || '', body.location || '', body.category || '',
     Number(body.amount) || 0, body.id || '',
   ];
 
   if (body.action === 'insert') {
     sheet.appendRow(rowValues);
+    formatRow_(sheet, sheet.getLastRow(), rowValues.length);
   } else if (body.action === 'update') {
     var found = findRowByIdAnySheet_(body.id);
     if (found && found.sheet.getName() === sheet.getName()) {
       found.sheet.getRange(found.row, 1, 1, rowValues.length).setValues([rowValues]);
+      formatRow_(found.sheet, found.row, rowValues.length);
     } else {
       if (found) found.sheet.deleteRow(found.row); // entity changed -- drop the old row
       sheet.appendRow(rowValues);
+      formatRow_(sheet, sheet.getLastRow(), rowValues.length);
     }
   } else if (body.action === 'delete') {
     var toDelete = findRowByIdAnySheet_(body.id);
