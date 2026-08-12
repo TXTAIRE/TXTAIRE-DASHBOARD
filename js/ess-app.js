@@ -171,7 +171,7 @@ function showEssLogin(errorMessage) {
   screen.innerHTML = `
     <div class="ess-login-card">
       <img src="assets/logo.svg" alt="TxTAIRE" class="ess-login-logo" />
-      <h1>My Portal</h1>
+      <h1>TXTAIRE MY PORTAL</h1>
       <div class="page-sub" style="margin-bottom:18px;">Sign in with your Employee ID</div>
       ${errorMessage ? `<div class="auth-error">${escapeHtml(errorMessage)}</div>` : ''}
       <form id="ess-login-form">
@@ -443,6 +443,60 @@ function maybeShowInstallPrompt() {
   });
 }
 
+// ---- "Enable Notifications" nudge, shown once per login (throttled) ----
+// Separate from the install prompt above: that one only gets iOS installed to the home
+// screen (a prerequisite there), it never actually turns push on. This is the step that
+// does -- real OS-level push, with sound, even when My Portal isn't open at all, unlike
+// playEssNotificationTone() above which only ever plays while a portal tab is open.
+const PUSH_PROMPT_DISMISS_KEY = 'essPushPromptDismissedAt';
+const PUSH_PROMPT_REASK_DAYS = 14;
+
+function dismissPushPrompt() {
+  try { localStorage.setItem(PUSH_PROMPT_DISMISS_KEY, String(Date.now())); } catch (err) { /* ignore */ }
+  closeEssModal();
+}
+
+async function maybeShowPushPrompt() {
+  // Nothing to offer yet if this browser/device can't do push at all (e.g. iOS not
+  // installed to the home screen yet) -- the install prompt is the correct nudge there,
+  // not this one.
+  if (pushUnsupportedReason()) return;
+  // Already explicitly denied at the browser level -- our own "Enable" button can't
+  // override that (only the browser's own site settings can), so re-asking here would
+  // just be a dead-end button shown every 14 days.
+  if (typeof Notification !== 'undefined' && Notification.permission === 'denied') return;
+  let dismissedAt = 0;
+  try { dismissedAt = Number(localStorage.getItem(PUSH_PROMPT_DISMISS_KEY) || 0); } catch (err) { dismissedAt = 0; }
+  if (dismissedAt && (Date.now() - dismissedAt) < PUSH_PROMPT_REASK_DAYS * 86400000) return;
+  const existing = await getCurrentEssPushSubscription();
+  if (existing) return; // already enabled on this device
+
+  openEssModal(`
+    <h2>🔔 Turn On Notifications</h2>
+    <div class="modal-sub">Get notified the instant your leave request is approved, payroll is released, or an NTE is issued — with sound, even when My Portal isn't open.</div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="btn-push-later">Not Now</button>
+      <button type="button" class="btn btn-primary" id="btn-push-enable">Enable Notifications</button>
+    </div>
+  `, (bd) => {
+    qs('#btn-push-later', bd).addEventListener('click', dismissPushPrompt);
+    qs('#btn-push-enable', bd).addEventListener('click', async () => {
+      const btn = qs('#btn-push-enable', bd);
+      btn.disabled = true;
+      btn.textContent = 'Enabling…';
+      let ok = false;
+      try { ok = await enableEssPushNotifications(); } catch (err) { /* toasted inside enableEssPushNotifications */ }
+      if (ok) {
+        toast('✔ Notifications enabled on this device.');
+        dismissPushPrompt();
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Enable Notifications';
+      }
+    });
+  });
+}
+
 let essStarted = false;
 async function startEss(session) {
   if (essStarted) return;
@@ -493,8 +547,15 @@ async function startEss(session) {
   // Wrapped defensively -- a setTimeout callback that throws fails completely silently
   // (no visible error, nothing in the console the user could report), which would look
   // exactly like "nothing happens." try/catch here turns that into a visible signal.
+  // Shows at most one of the two prompts per login -- the install prompt when there's
+  // still an install step to do (the iOS prerequisite for push), otherwise the push-enable
+  // prompt, so employees are never stacked with two modals back to back.
   setTimeout(() => {
-    try { maybeShowInstallPrompt(); } catch (err) { toast('Install prompt error: ' + (err && err.message ? err.message : err)); }
+    if (shouldShowInstallPrompt()) {
+      try { maybeShowInstallPrompt(); } catch (err) { toast('Install prompt error: ' + (err && err.message ? err.message : err)); }
+    } else {
+      maybeShowPushPrompt().catch((err) => toast('Notification prompt error: ' + (err && err.message ? err.message : err)));
+    }
   }, 1200);
 }
 

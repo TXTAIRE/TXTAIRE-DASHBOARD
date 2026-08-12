@@ -1,6 +1,6 @@
 {
-  "name": "TxTAIRE My Portal",
-  "short_name": "My Portal",
+  "name": "TXTAIRE MY PORTAL",
+  "short_name": "TXTAIRE",
   "description": "TxTAIRE Employee Self-Service portal — attendance, payroll, and leave.",
   "start_url": "ess.html",
   "scope": ".",
