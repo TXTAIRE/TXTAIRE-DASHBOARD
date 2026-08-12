@@ -96,7 +96,25 @@ function findRowByIdAnySheet_(id) {
 // on the Amount column -- otherwise a synced row visually stands out from the old ones.
 function formatRow_(sheet, rowNum, numCols) {
   sheet.getRange(rowNum, 1).setNumberFormat('d-mmm-yy');
-  sheet.getRange(rowNum, 7).setNumberFormat('"PHP" #,##0.00');
+  // The "*" before a space is a number-format fill character -- it repeats the space to
+  // pad out the rest of the cell, which is what pins "PHP" to the left edge and the
+  // amount to the right edge in the existing rows, instead of them sitting side by side.
+  sheet.getRange(rowNum, 7).setNumberFormat('"PHP"* #,##0.00');
+}
+
+// Every JS Date-object approach tried here (bare local-time parsing, explicit UTC
+// anchoring) ran into the same wall: Apps Script's V8 runtime doesn't reliably treat a
+// Date object's "instant" the way its Project Settings timezone would suggest, so an
+// off-by-one kept surviving fixes that should have worked. Sidestepping Date objects
+// entirely fixes this for good -- this returns a plain "M/D/YYYY" string, which
+// sheet.appendRow()/setValues() parse exactly the way Sheets parses anything typed
+// directly into a cell (no instant, no timezone conversion, just a calendar date Sheets
+// recognizes on sight -- the same mechanism confirmed working when fixing a bad cell by
+// hand earlier).
+function parseDateLocal_(dateStr) {
+  if (!dateStr) return '';
+  var parts = dateStr.split('-'); // ['2026', '08', '10']
+  return Number(parts[1]) + '/' + Number(parts[2]) + '/' + parts[0]; // '8/10/2026'
 }
 
 function doPost(e) {
@@ -113,7 +131,7 @@ function doPost(e) {
 
   var sheet = getOrCreateSheet_(body.entity || 'TXTAIRE OPC');
   var rowValues = [
-    body.date ? new Date(body.date + 'T00:00:00') : '', body.invoiceNumber || '', body.vendor || '',
+    parseDateLocal_(body.date), body.invoiceNumber || '', body.vendor || '',
     body.tinNumber || '', body.location || '', body.category || '',
     Number(body.amount) || 0, body.id || '',
   ];
