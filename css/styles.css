@@ -604,6 +604,30 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .dtr-sig { flex: 1; text-align: center; font-size: 12px; }
 .dtr-sig-line { border-top: 1px solid #333; margin-bottom: 6px; padding-top: 36px; }
 
+/* Payslip section -- matches the office's existing payslip template: logo + "PAYSLIP"
+   title, a Pay Period/Designation/Name/Employee No. header grid, side-by-side
+   Earnings/Deductions columns, an Additional (COLA etc.) block, and a highlighted NET PAY
+   bar with an acknowledgement line above the signatures. */
+.payslip { margin-top: 26px; border-top: 2px solid var(--brand-green); padding-top: 16px; }
+.payslip-title { text-align: center; font-size: 16px; font-weight: 700; letter-spacing: 1px; margin-bottom: 14px; }
+.payslip-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; font-size: 13px; margin-bottom: 16px; }
+.payslip-meta b { font-weight: 700; }
+.payslip-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+.payslip-col-title { font-size: 12.5px; font-weight: 700; text-decoration: underline; margin-bottom: 6px; }
+.payslip-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.payslip-table td { padding: 3px 0; vertical-align: top; }
+.payslip-table td:nth-child(2) { width: 14px; padding: 3px 4px; }
+.payslip-table td.num { text-align: right; white-space: nowrap; }
+.payslip-table tr.payslip-total td { border-top: 2px solid #333; font-weight: 700; padding-top: 6px; }
+.payslip-additional { margin-top: 14px; padding-top: 10px; border-top: 1px solid #ccc; }
+.payslip-additional .payslip-col-title { font-style: italic; text-decoration: none; }
+.payslip-net {
+  display: flex; justify-content: space-between; align-items: center;
+  background: #d9d9d9; font-weight: 700; font-size: 15px;
+  padding: 10px 14px; margin-top: 14px;
+}
+.payslip-ack { font-style: italic; font-size: 11.5px; margin-top: 20px; line-height: 1.5; }
+
 /* On-screen phone view (not print, which forces its own A4 layout below) -- tighter
    padding/type and a single-column meta grid so the DTR fits a narrow viewport without
    the page itself scrolling sideways; signatures stay side-by-side (still readable at
@@ -617,6 +641,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   .dtr-table { font-size: 11px; }
   .dtr-table th, .dtr-table td { padding: 4px 6px; }
   .dtr-signatures { gap: 16px; margin-top: 40px; }
+  .payslip-meta { grid-template-columns: 1fr; gap: 4px; }
+  .payslip-columns { grid-template-columns: 1fr; gap: 14px; }
+  .payslip-net { font-size: 13px; }
 }
 
 @media print {
@@ -648,4 +675,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   .dtr-signatures { margin-top: 42px; gap: 40px; }
   .dtr-sig { font-size: 11px; }
   .dtr-sig-line { padding-top: 28px; margin-bottom: 5px; }
+
+  .payslip { margin-top: 18px; padding-top: 12px; page-break-inside: avoid; }
+  .payslip-title { font-size: 14px; margin-bottom: 10px; }
+  .payslip-meta { font-size: 11.5px; margin-bottom: 12px; }
+  .payslip-table { font-size: 11px; }
+  .payslip-net { font-size: 13px; padding: 8px 12px; margin-top: 10px; }
+  .payslip-ack { font-size: 10.5px; margin-top: 14px; }
 }

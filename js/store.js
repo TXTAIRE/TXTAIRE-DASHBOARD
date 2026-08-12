@@ -357,12 +357,16 @@ function computeRow(emp, from, to) {
   const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (workDays > 0 ? emp.rate / workDays : 0);
   const hourlyRate = dailyRateEq / 8;
 
-  let colaPay = (emp.allowancePerDay || 0) * daysPresent + (emp.fixedAllowance || 0);
+  // COLA and Housing Allowance are fixed per cutoff for every employee -- paid in full
+  // regardless of attendance, not prorated by days present/absent. (allowancePerDay is
+  // still "per day" only in the sense of how the rate is entered/priced; the amount owed
+  // each cutoff is the same every time, based on the cutoff's standard work days, not
+  // actual attendance.)
+  let colaPay = (emp.allowancePerDay || 0) * ordinaryWorkDays + (emp.fixedAllowance || 0);
   const isColaOverridden = !!(override && override.cola != null);
   if (isColaOverridden) colaPay = Number(override.cola);
 
-  const housingRatio = ordinaryWorkDays > 0 ? Math.min(1, daysPresent / ordinaryWorkDays) : 0;
-  let housingPay = (emp.housingAllowance || 0) * housingRatio;
+  let housingPay = emp.housingAllowance || 0;
   const isHousingOverridden = !!(override && override.housing != null);
   if (isHousingOverridden) housingPay = Number(override.housing);
 
@@ -431,7 +435,7 @@ function computeRow(emp, from, to) {
     emp, daysPresent, isOverridden, workDays, daysAbsent, isAbsentOverridden, basePay, isBasePayOverridden,
     colaPay, isColaOverridden, housingPay, isHousingOverridden, nsdPay, isNsdOverridden,
     otPay, isOtOverridden, holidayPay, isHolidayOverridden, retroPay,
-    gross, tax, manualDed, attendanceDed, lateUndertimeDed, dedTotal, bonusTotal, net,
+    gross, taxableGross, tax, manualDed, attendanceDed, lateUndertimeDed, dedTotal, bonusTotal, net,
   };
 }
 

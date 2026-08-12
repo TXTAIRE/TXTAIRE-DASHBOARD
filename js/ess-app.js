@@ -328,29 +328,87 @@ function openDTR(emp, from, to) {
         <div class="page-sub" style="margin-top:6px;">Daily-rate equivalent used for these computations: ${fmtMoney(dailyRateEq)} / day (${fmtMoney(dailyRateEq / 8)} / hour).</div>
       </div>
 
-      <div class="dtr-summary">
-        <div class="dtr-summary-title">Total Pay — ${fmtDate(from)} to ${fmtDate(to)}</div>
-        <table class="dtr-table">
-          <thead><tr><th>Component</th><th class="num">Amount</th></tr></thead>
-          <tbody>
-            <tr><td>Gross Pay</td><td class="num">${fmtMoney(row.gross)}</td></tr>
-            <tr><td>Withholding Tax</td><td class="num">${row.tax ? '−' + fmtMoney(row.tax) : fmtMoney(0)}</td></tr>
-            <tr><td>Deductions</td><td class="num">${row.dedTotal ? '−' + fmtMoney(row.dedTotal) : fmtMoney(0)}</td></tr>
-            ${row.bonusTotal ? `<tr><td>Bonus</td><td class="num">+${fmtMoney(row.bonusTotal)}</td></tr>` : ''}
-            <tr><td style="font-weight:700;">Net Pay</td><td class="num" style="font-weight:700;">${fmtMoney(row.net)}</td></tr>
-          </tbody>
-        </table>
-      </div>
+      ${payslipSectionHtml(emp, from, to, row)}
 
       <div class="dtr-signatures">
-        <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Employee Signature</div></div>
-        <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Supervisor / HR Signature</div></div>
+        <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Employee's Signature Over Printed Name</div></div>
+        <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Human Resource Department</div></div>
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
   overlay.querySelector('#dtr-close').addEventListener('click', () => overlay.remove());
   overlay.querySelector('#dtr-print-btn').addEventListener('click', () => window.print());
+}
+
+// Matches the office's existing payslip template (Pay Period/Designation/Employee's Name/
+// Employee No. header, side-by-side Earnings/Deductions columns, an Additional block for
+// COLA etc., and a highlighted NET PAY bar) -- built from the same computeRow() My Payroll
+// uses, so every figure here always matches there exactly.
+function payslipSectionHtml(emp, from, to, row) {
+  const deds = Store.deductionsInRange(from, to).filter(d => d.employeeId === emp.id);
+  const dedByKind = (kind) => deds.filter(d => d.kind === kind).reduce((s, d) => s + Number(d.amount), 0);
+  const pagibigDed = dedByKind('Pag-IBIG Premium');
+  const sssDed = dedByKind('SSS Contribution');
+  const philhealthDed = dedByKind('PhilHealth');
+  const namedDed = pagibigDed + sssDed + philhealthDed;
+  // Everything else -- Cash Advance/Tardy/Damage/Other manual deductions, plus the
+  // absence and late/undertime deductions computeRow() already folds into dedTotal --
+  // rolls up into one line instead of cluttering the payslip with every ad-hoc kind.
+  const otherDed = Math.max(0, row.dedTotal - namedDed);
+  const totalDed = row.tax + row.dedTotal;
+  const totalBeforeDed = row.gross + row.bonusTotal;
+
+  return `
+      <div class="payslip">
+        <div class="payslip-title">PAYSLIP</div>
+        <div class="payslip-meta">
+          <div><b>Pay Period</b> : ${fmtDate(from)} – ${fmtDate(to)}</div>
+          <div><b>Designation</b> : ${escapeHtml(emp.position || '—')}</div>
+          <div><b>Employee's Name</b> : ${escapeHtml(emp.name)}</div>
+          <div><b>Employee No.</b> : ${escapeHtml(emp.employeeCode || '—')}</div>
+        </div>
+        <div class="payslip-columns">
+          <div class="payslip-col">
+            <div class="payslip-col-title">EARNINGS</div>
+            <table class="payslip-table">
+              <tr><td>No. of Days worked</td><td>:</td><td class="num">${row.daysPresent}</td></tr>
+              <tr><td>${emp.payType === 'Daily' ? 'Daily Rate' : 'Monthly Rate'}</td><td>:</td><td class="num">${fmtMoney(emp.payType === 'Daily' ? emp.rate : row.basePay)}</td></tr>
+              <tr><td>Overtime Pay</td><td>:</td><td class="num">${fmtMoney(row.otPay)}</td></tr>
+              <tr><td>Night Differential</td><td>:</td><td class="num">${fmtMoney(row.nsdPay)}</td></tr>
+              <tr><td>Holiday Pay</td><td>:</td><td class="num">${fmtMoney(row.holidayPay)}</td></tr>
+              <tr class="payslip-total"><td>Gross Pay</td><td>:</td><td class="num">${fmtMoney(row.taxableGross)}</td></tr>
+            </table>
+          </div>
+          <div class="payslip-col">
+            <div class="payslip-col-title">DEDUCTIONS</div>
+            <table class="payslip-table">
+              <tr><td>Withholding tax</td><td>:</td><td class="num">${row.tax ? fmtMoney(row.tax) : '-'}</td></tr>
+              <tr><td>Pag-ibig Premium</td><td>:</td><td class="num">${pagibigDed ? fmtMoney(pagibigDed) : '-'}</td></tr>
+              <tr><td>SSS Regular Contribution</td><td>:</td><td class="num">${sssDed ? fmtMoney(sssDed) : '-'}</td></tr>
+              <tr><td>Philhealth</td><td>:</td><td class="num">${philhealthDed ? fmtMoney(philhealthDed) : '-'}</td></tr>
+              ${otherDed ? `<tr><td>Other Deductions</td><td>:</td><td class="num">${fmtMoney(otherDed)}</td></tr>` : ''}
+              <tr class="payslip-total"><td>Total Deductions</td><td>:</td><td class="num">${fmtMoney(totalDed)}</td></tr>
+            </table>
+          </div>
+        </div>
+        <div class="payslip-additional">
+          <div class="payslip-col-title">Additional</div>
+          <table class="payslip-table">
+            <tr><td>Cost of Living Allowance (COLA)</td><td>:</td><td class="num">${fmtMoney(row.colaPay)}</td></tr>
+            ${row.housingPay ? `<tr><td>Housing Allowance</td><td>:</td><td class="num">${fmtMoney(row.housingPay)}</td></tr>` : ''}
+            ${row.retroPay ? `<tr><td>Retro Pay</td><td>:</td><td class="num">${fmtMoney(row.retroPay)}</td></tr>` : ''}
+            ${row.bonusTotal ? `<tr><td>Bonus</td><td>:</td><td class="num">${fmtMoney(row.bonusTotal)}</td></tr>` : ''}
+            <tr class="payslip-total"><td>Total Pay before deduction</td><td>:</td><td class="num">${fmtMoney(totalBeforeDed)}</td></tr>
+          </table>
+        </div>
+        <div class="payslip-net">
+          <div>NET PAY</div>
+          <div>${fmtMoney(row.net)}</div>
+        </div>
+        <div class="payslip-ack">I hereby acknowledge receipt of my salaries as indicated in the NET PAY portion representing payment for my services rendered in payroll period as specified in this payslip.</div>
+      </div>
+  `;
 }
 
 // Every view re-renders by wholesale replacing main.innerHTML -- after saving a form,

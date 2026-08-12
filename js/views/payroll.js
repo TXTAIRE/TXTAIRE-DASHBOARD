@@ -12,6 +12,11 @@ window.Views.payroll = (function () {
     'Chinese New Year', 'Black Saturday', 'Christmas Eve', "New Year's Eve",
     'EDSA People Power Anniversary',
   ];
+  // The first three are broken out as their own lines on the printable payslip (see
+  // js/app.js/js/ess-app.js openDTR) -- everything else (including "Other") rolls up into
+  // a single "Other Deductions" line there instead of cluttering the payslip with every
+  // ad-hoc kind of deduction the office happens to log.
+  const DEDUCTION_KINDS = ['Pag-IBIG Premium', 'SSS Contribution', 'PhilHealth', 'Cash Advance', 'Tardy', 'Damage', 'Other'];
 
   // Unlike js/store.js's FIXED_PH_HOLIDAYS (annually-fixed, auto-detected), these shift
   // every year and only become certain once Malacañang issues the actual proclamation —
@@ -298,7 +303,13 @@ window.Views.payroll = (function () {
       input.addEventListener('change', async () => {
         const val = Number(input.value);
         if (!isNaN(val) && val >= 0) {
-          await Store.setPayrollOverride(input.dataset.emp, selected.from, { daysPresent: val });
+          const patch = { daysPresent: val };
+          // Auto-multiply days present × daily rate for Daily-rate staff -- if Base Pay
+          // was previously manually overridden, clear that override so it recomputes from
+          // the new days present instead of staying stuck at the old typed-in amount.
+          const row = rows.find(x => x.emp.id === input.dataset.emp);
+          if (row && row.emp.payType === 'Daily') patch.basePay = null;
+          await Store.setPayrollOverride(input.dataset.emp, selected.from, patch);
           renderPayrollTab(body, main);
         }
       });
@@ -552,7 +563,7 @@ window.Views.payroll = (function () {
           <div class="field full"><label>Employee</label><select name="employeeId">${employeeOptions()}</select></div>
           <div class="field"><label>Date</label><input type="date" name="date" value="${todayISO()}" /></div>
           <div class="field"><label>Kind</label>
-            <select name="kind">${['Cash Advance', 'Tardy', 'Damage', 'Other'].map(k => `<option>${k}</option>`).join('')}</select>
+            <select name="kind">${DEDUCTION_KINDS.map(k => `<option>${k}</option>`).join('')}</select>
           </div>
           <div class="field full"><label>Amount (PHP)</label><input type="number" name="amount" min="0" step="0.01" required /></div>
           <div class="field full"><label>Notes</label><textarea name="notes" rows="2"></textarea></div>
