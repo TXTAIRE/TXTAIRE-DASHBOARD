@@ -30,6 +30,10 @@ create table employees (
                                                                 -- js/store.js nightOverlapHours); only used to default
                                                                 -- the Attendance form's Time In/Out for this employee.
   "payCycle" text not null,                    -- '10-20' | '15-30'
+  "fixedHours" boolean not null default true,  -- false = flexible/no set schedule (typically management) --
+                                                -- skips the automatic late/undertime deduction for logging
+                                                -- under 8 hours in a day. true (default) preserves the
+                                                -- original behavior for everyone else.
   notes text default '',
   "employeeCode" text unique,                  -- Employee Self-Service login ID = real company Employee Number, e.g. 'TXT015'
   "authUserId" uuid references auth.users(id), -- set once ESS portal access is granted (js/views/staff.js
@@ -2194,4 +2198,23 @@ grant execute on function public.submit_public_complaint(text, text, text) to an
 alter table expenses add column if not exists "invoiceNumber" text default '';
 alter table expenses add column if not exists "tinNumber" text default '';
 alter table expenses add column if not exists location text default '';
+
+-- =================================================================
+-- Flexible-hours employees -- incremental migration. Run once against a database that
+-- already has the migrations above applied. Safe to re-run.
+--
+-- Adds "fixedHours" (default true, so behavior is unchanged for everyone until this is
+-- explicitly turned off per employee) and, as a one-time data fix, turns it off for every
+-- current Admin-category employee except Jennifer D. Cosme and Rica Mae Nabora, who keep
+-- the standard 8-hour late/undertime deduction. Adjust the name matches below if any of
+-- these don't match your actual records exactly.
+-- =================================================================
+
+alter table employees add column if not exists "fixedHours" boolean not null default true;
+
+update employees
+set "fixedHours" = false
+where category = 'Admin'
+  and name not ilike '%Cosme%'
+  and name not ilike '%Nabora%';
 alter table expenses add column if not exists entity text not null default 'TXTAIRE OPC';

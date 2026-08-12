@@ -391,11 +391,16 @@ function computeRow(emp, from, to) {
   // pay (folded into gross below), unlike a bonus which is added after tax.
   const retroPay = override && override.retroPay != null ? Number(override.retroPay) : 0;
 
+  // Flexible-hours employees (fixedHours === false, typically management with no set
+  // schedule) are exempt from the automatic under-8-hours deduction entirely -- everyone
+  // else keeps the standard fixed 8-hour workday.
   let lateUndertimeDed = 0;
-  presentRecords.forEach(r => {
-    const hrs = Number(r.hours) || 0;
-    lateUndertimeDed += Math.max(0, 8 - hrs) * hourlyRate;
-  });
+  if (emp.fixedHours !== false) {
+    presentRecords.forEach(r => {
+      const hrs = Number(r.hours) || 0;
+      lateUndertimeDed += Math.max(0, 8 - hrs) * hourlyRate;
+    });
+  }
 
   const gross = basePay + colaPay + housingPay + nsdPay + otPay + holidayPay + retroPay;
 
