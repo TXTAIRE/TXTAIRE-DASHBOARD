@@ -19,6 +19,10 @@ window.Views.adminFiles = (function () {
   let pasteListenerAttached = false;
   let selectedFileIds = new Set(); // ids checked in the currently open folder's table
   let selectedFolders = new Set(); // folder names checked on the "All Folders" grid
+  // Folder checkboxes stay hidden by default (keeps the grid clean) -- only appear once
+  // "Select" is chosen from a folder's right-click menu. Automatically turns back off
+  // once nothing is selected, so a stray click doesn't leave checkboxes stuck on.
+  let folderSelectMode = false;
 
   // ---- Watch a local folder for new scans (File System Access API, Chrome/Edge only) ----
   // Lets IJ Scan Utility (or any scanner software) save straight into a fixed folder on
@@ -477,6 +481,7 @@ window.Views.adminFiles = (function () {
     // Drop any selected names that no longer exist (renamed/deleted elsewhere) so the
     // "N selected" count is never stale.
     selectedFolders = new Set([...selectedFolders].filter(f => folders.includes(f)));
+    if (!selectedFolders.size) folderSelectMode = false;
     main.innerHTML = `
       <div class="crumb">Admin</div>
       <div class="page-head">
@@ -503,7 +508,7 @@ window.Views.adminFiles = (function () {
           const isOther = f.toLowerCase() === 'other';
           return `
             <div class="file-folder-card" data-folder-card="${escapeHtml(f)}">
-              <input type="checkbox" class="file-folder-select" data-folder-select="${escapeHtml(f)}" ${selectedFolders.has(f) ? 'checked' : ''} ${isOther ? 'disabled title="The Other folder can\'t be deleted"' : 'title="Select folder"'} />
+              ${folderSelectMode ? `<input type="checkbox" class="file-folder-select" data-folder-select="${escapeHtml(f)}" ${selectedFolders.has(f) ? 'checked' : ''} ${isOther ? 'disabled title="The Other folder can\'t be deleted"' : 'title="Select folder"'} />` : ''}
               ${!isOther ? `<button type="button" class="file-folder-rename-btn" data-folder-rename="${escapeHtml(f)}" title="Rename folder">✏️</button>` : ''}
               <button type="button" class="file-folder-open" data-folder="${escapeHtml(f)}">
                 <div class="file-folder-icon">📁</div>
@@ -524,6 +529,7 @@ window.Views.adminFiles = (function () {
       cb.addEventListener('change', () => {
         const name = cb.dataset.folderSelect;
         if (cb.checked) selectedFolders.add(name); else selectedFolders.delete(name);
+        if (!selectedFolders.size) folderSelectMode = false;
         renderFolderGrid(main);
       });
     });
@@ -534,7 +540,7 @@ window.Views.adminFiles = (function () {
     const btnDeleteSelectedFolders = qs('#btn-delete-selected-folders', main);
     if (btnDeleteSelectedFolders) btnDeleteSelectedFolders.addEventListener('click', () => deleteSelectedFolders(main));
     const btnClearFolderSelection = qs('#btn-clear-folder-selection', main);
-    if (btnClearFolderSelection) btnClearFolderSelection.addEventListener('click', () => { selectedFolders = new Set(); renderFolderGrid(main); });
+    if (btnClearFolderSelection) btnClearFolderSelection.addEventListener('click', () => { selectedFolders = new Set(); folderSelectMode = false; renderFolderGrid(main); });
 
     qsa('[data-folder-card]', main).forEach(card => {
       const folderName = card.dataset.folderCard;
@@ -561,6 +567,14 @@ window.Views.adminFiles = (function () {
         ];
         if (folderName.toLowerCase() !== 'other') {
           items.push({ label: 'Rename', onClick: () => openRenameFolderModal(main, folderName) });
+          // Turns on the checkboxes (hidden the rest of the time to keep the grid clean)
+          // and pre-selects this folder, matching how right-click "Select" behaves in a
+          // real file manager -- from here more folders can be checked before deleting.
+          items.push({ label: 'Select', onClick: () => {
+            folderSelectMode = true;
+            selectedFolders.add(folderName);
+            renderFolderGrid(main);
+          } });
           items.push({ label: 'Delete', danger: true, onClick: () => { selectedFolders = new Set([folderName]); deleteSelectedFolders(main); } });
         }
         showContextMenu(ev.clientX, ev.clientY, items);
