@@ -207,7 +207,12 @@ window.Views.payroll = (function () {
         <div class="field">
           <label>Payroll Status</label>
           ${release
-            ? `<span class="badge badge-green" style="align-self:flex-start;">Released ${fmtDate(release.releasedAt.slice(0, 10))}${release.releasedBy ? ' by ' + escapeHtml(release.releasedBy) : ''}</span>`
+            ? `<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                 <span class="badge badge-green">Released ${fmtDate(release.releasedAt.slice(0, 10))}${release.releasedBy ? ' by ' + escapeHtml(release.releasedBy) : ''}</span>
+                 <input type="date" id="input-release-date" value="${release.releasedAt.slice(0, 10)}" style="width:140px;" />
+                 <button type="button" class="link-btn" id="btn-save-release-date">Save date</button>
+                 <button type="button" class="link-btn" id="btn-unrelease-payroll">Unrelease</button>
+               </div>`
             : `<button class="btn btn-primary btn-sm" id="btn-release-payroll" title="Notifies every staff member on this schedule that their payroll for this cutoff is out">Mark as Released</button>`}
         </div>
       </div>
@@ -334,6 +339,21 @@ window.Views.payroll = (function () {
       if (!confirm(`Mark ${selected.label} as released? This notifies every staff member on this schedule that their payroll is out.`)) return;
       await Store.releasePayroll(group, selected.from, selected.to, selected.payDate, currentUserEmail());
       toast('✔ Payroll released — staff have been notified.');
+      renderPayrollTab(body, main);
+    });
+    const btnUnrelease = qs('#btn-unrelease-payroll', body);
+    if (btnUnrelease) btnUnrelease.addEventListener('click', async () => {
+      if (!confirm(`Unrelease ${selected.label}? Staff already notified won't get a retraction — this just lets you re-release once ready.`)) return;
+      await Store.unreleasePayroll(release.id);
+      toast('Payroll unreleased.');
+      renderPayrollTab(body, main);
+    });
+    const btnSaveReleaseDate = qs('#btn-save-release-date', body);
+    if (btnSaveReleaseDate) btnSaveReleaseDate.addEventListener('click', async () => {
+      const newDate = qs('#input-release-date', body).value;
+      if (!newDate) return;
+      await Store.updatePayrollRelease(release.id, { releasedAt: new Date(newDate + 'T12:00:00').toISOString() });
+      toast('✔ Release date updated.');
       renderPayrollTab(body, main);
     });
     qsa('#seg-group button', body).forEach(b => b.addEventListener('click', () => { setGroup(b.dataset.val); renderPayrollTab(body, main); }));

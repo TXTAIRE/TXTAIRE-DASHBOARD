@@ -126,8 +126,9 @@ window.EssViews.profile = (function () {
           <div class="field full" id="field-id-type" style="display:none;"><label>ID Type</label>
             <select name="idType">${PH_VALID_ID_TYPES.map(t => `<option>${t}</option>`).join('')}</select>
           </div>
-          <div class="field full"><label>File</label><input type="file" name="file" required /></div>
+          <div class="field full"><label>File(s)</label><input type="file" name="file" multiple required /></div>
         </div>
+        <div id="upload-doc-progress" class="modal-sub hidden" style="margin-top:6px;"></div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
           <button type="submit" class="btn btn-primary">Upload</button>
@@ -139,22 +140,37 @@ window.EssViews.profile = (function () {
       const toggleIdType = () => { idTypeField.style.display = catSel.value === 'Valid ID' ? '' : 'none'; };
       catSel.addEventListener('change', toggleIdType);
       toggleIdType();
+      const fileInput = qs('input[name="file"]', bd);
+      const submitBtn = qs('button[type="submit"]', bd);
+      fileInput.addEventListener('change', () => {
+        const n = fileInput.files.length;
+        submitBtn.textContent = n > 1 ? `Upload (${n})` : 'Upload';
+      });
       qs('#doc-upload-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
-        const file = fd.get('file');
-        if (!file || !file.size) { toast('Choose a file first.'); return; }
-        const submitBtn = qs('button[type="submit"]', bd);
+        const files = [...fileInput.files];
+        if (!files.length) { toast('Choose at least one file first.'); return; }
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Uploading…';
-        try {
-          await Store.uploadEmployeeDocument(emp.id, file, fd.get('category'), emp.email || emp.employeeCode, fd.get('idType'));
-          toast('✔ Document uploaded — HR will review it.');
+        const progress = qs('#upload-doc-progress', bd);
+        progress.classList.remove('hidden');
+        let succeeded = 0;
+        for (let i = 0; i < files.length; i++) {
+          progress.textContent = `Uploading ${i + 1} of ${files.length}: ${files[i].name}`;
+          try {
+            await Store.uploadEmployeeDocument(emp.id, files[i], fd.get('category'), emp.email || emp.employeeCode, fd.get('idType'));
+            succeeded++;
+          } catch (e) { /* keep going -- one failed file shouldn't block the rest */ }
+        }
+        if (succeeded === files.length) {
+          toast(succeeded === 1 ? '✔ Document uploaded — HR will review it.' : `✔ ${succeeded} documents uploaded — HR will review them.`);
           closeEssModal();
           render(main, emp);
-        } catch (e) {
+        } else {
+          toast(`⚠ ${succeeded} of ${files.length} uploaded — some failed. Try the rest again.`);
           submitBtn.disabled = false;
-          submitBtn.textContent = 'Upload';
+          submitBtn.textContent = files.length > 1 ? `Upload (${files.length})` : 'Upload';
+          progress.classList.add('hidden');
         }
       });
     });

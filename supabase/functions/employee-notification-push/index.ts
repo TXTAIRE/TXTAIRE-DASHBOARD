@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     url: './ess.html',
   });
 
-  var sent = 0, removed = 0;
+  var sent = 0, removed = 0, errors = [];
   for (var i = 0; i < subs.length; i++) {
     var sub = subs[i];
     try {
@@ -79,12 +79,19 @@ Deno.serve(async (req) => {
       if (err && (err.statusCode === 404 || err.statusCode === 410)) {
         await supabase.from('employeePushSubscriptions').delete().eq('endpoint', sub.endpoint);
         removed++;
+      } else {
+        // Anything else (bad VAPID subject, payload rejected, Apple/Safari push service
+        // quirks, etc.) was previously swallowed completely -- silently "sent: 0" with no
+        // trace of why. Logged and returned so a real failure is actually diagnosable.
+        var detail = { endpoint: sub.endpoint, statusCode: err && err.statusCode, body: err && err.body, message: err && err.message };
+        console.error('sendNotification failed', detail);
+        errors.push(detail);
       }
     }
   }
 
   return new Response(
-    JSON.stringify({ subscriptions: subs.length, sent: sent, removed: removed }),
+    JSON.stringify({ subscriptions: subs.length, sent: sent, removed: removed, errors: errors }),
     { headers: { 'Content-Type': 'application/json' } }
   );
 });

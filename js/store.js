@@ -966,6 +966,19 @@ const Store = (function () {
     })));
     return row;
   }
+  // Reverts a release back to "not released" (e.g. released by mistake, or a correction
+  // needs to go out before payday) -- doesn't retract the notification already sent, since
+  // that already reached staff; just clears the record so the cutoff can be re-released
+  // (sending a fresh notification) once it's actually ready.
+  async function unreleasePayroll(id) {
+    await deleteRow('payrollReleases', id);
+  }
+  // Corrects the displayed release date/by-line without touching the release record's
+  // identity (id, cutoff) -- for backfilling a release logged after the fact, or fixing a
+  // typo, without unreleasing and losing the notification-already-sent history.
+  async function updatePayrollRelease(id, patch) {
+    await updateRow('payrollReleases', id, patch);
+  }
 
   // ---- App Settings (small generic key/value store, admin-only) ----
   function getAppSetting(key, fallback) {
@@ -1280,7 +1293,7 @@ const Store = (function () {
     listAttendanceCorrections, getAttendanceCorrection, attendanceCorrectionsForEmployee, addAttendanceCorrection, reviewAttendanceCorrection, updateAttendanceCorrectionNotes, deleteAttendanceCorrection,
     listAuditLog, purgeOldAuditLog,
     createNotification, listNotificationsForEmployee, unreadNotificationCount, markNotificationRead, markAllNotificationsRead, deleteNotification,
-    getPayrollRelease, releasePayroll,
+    getPayrollRelease, releasePayroll, unreleasePayroll, updatePayrollRelease,
     getAppSetting, setAppSetting,
     listExpenses, getExpense, expensesInRange, addExpense, updateExpense, deleteExpense,
     uploadReceiptPhoto, getSignedReceiptUrl, deleteReceiptPhoto,
