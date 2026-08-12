@@ -142,7 +142,8 @@ window.Views.staff = (function () {
       </div>
       <div class="modal-actions" style="margin-top:8px; justify-content:flex-start;">
         ${e.authUserId
-          ? `<button class="btn btn-ghost btn-sm" id="btn-revoke-ess">Revoke portal access</button>`
+          ? `<button class="btn btn-ghost btn-sm" id="btn-reset-ess-password">Reset portal password</button>
+             <button class="btn btn-ghost btn-sm" id="btn-revoke-ess">Revoke portal access</button>`
           : `<button class="btn btn-ghost btn-sm" id="btn-grant-ess">Grant portal access</button>`}
       </div>
       <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
@@ -190,6 +191,8 @@ window.Views.staff = (function () {
       });
       const grantBtn = qs('#btn-grant-ess', dr);
       if (grantBtn) grantBtn.addEventListener('click', () => openGrantEssAccess(main, e));
+      const resetPwBtn = qs('#btn-reset-ess-password', dr);
+      if (resetPwBtn) resetPwBtn.addEventListener('click', () => openResetEssPasswordModal(main, e));
       const revokeBtn = qs('#btn-revoke-ess', dr);
       if (revokeBtn) revokeBtn.addEventListener('click', async () => {
         if (confirm(`Revoke ${e.name}'s Employee Self-Service login? They will no longer be able to sign into the portal.`)) {
@@ -423,6 +426,99 @@ window.Views.staff = (function () {
         toast('Portal access granted.');
         closeModal();
         renderList(main);
+      });
+    });
+  }
+
+  function generateStrongPassword() {
+    // Excludes visually-ambiguous characters (0/O, 1/l/I) since this is meant to be read
+    // off-screen and typed/relayed to the employee, not just copy-pasted.
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+    const arr = new Uint32Array(14);
+    crypto.getRandomValues(arr);
+    let pw = '';
+    for (let i = 0; i < arr.length; i++) pw += chars[arr[i] % chars.length];
+    return pw;
+  }
+
+  // Resets an employee's My Portal login password via the admin-reset-employee-password
+  // Edge Function (server-side, using the service role key -- only Supabase's Admin API
+  // can set another user's password; that key can never be exposed to client-side code,
+  // which is why this can't just be a Store.* call like everything else on this page).
+  // The new password only ever exists in plain text here, briefly, between being
+  // generated and sent -- shown once on a confirmation screen afterward so HR can copy it
+  // to give the employee, then never retrievable again by anyone, including this app.
+  function openResetEssPasswordModal(main, e) {
+    openModal(`
+      <h2>Reset Portal Password — ${escapeHtml(e.name)}</h2>
+      <div class="modal-sub" style="margin-bottom:10px;">Sets a new My Portal login password for this employee. You'll need to share it with them directly — it won't be shown again after this.</div>
+      <div id="reset-pw-error"></div>
+      <form id="reset-pw-form">
+        <div class="modal-grid">
+          <div class="field full">
+            <label>New password</label>
+            <div style="display:flex; gap:8px;">
+              <input type="text" name="password" id="reset-pw-input" required minlength="8" value="${escapeHtml(generateStrongPassword())}" style="flex:1;" />
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-regen-pw">🔄 Generate new</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Reset Password</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#btn-regen-pw', bd).addEventListener('click', () => {
+        qs('#reset-pw-input', bd).value = generateStrongPassword();
+      });
+      qs('#reset-pw-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const newPassword = qs('#reset-pw-input', bd).value;
+        const errEl = qs('#reset-pw-error', bd);
+        errEl.innerHTML = '';
+        const submitBtn = qs('button[type="submit"]', bd);
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Resetting…';
+        try {
+          const { data: { session } } = await sb.auth.getSession();
+          const res = await fetch('https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/admin-reset-employee-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+            body: JSON.stringify({ employeeId: e.id, newPassword }),
+          });
+          const result = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(result.error || 'Reset failed — try again.');
+
+          // Best-effort -- never includes the password itself, only that a reset happened.
+          Store.logAudit('employees.resetEssPassword', 'employees', e.id, { employeeName: e.name });
+
+          openModal(`
+            <h2>✔ Password Reset</h2>
+            <div class="modal-sub" style="margin-bottom:14px;">${escapeHtml(e.name)}'s new My Portal password — copy it now and share it with them directly. It will not be shown again.</div>
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:16px;">
+              <input type="text" readonly value="${escapeHtml(newPassword)}" id="new-pw-display" style="flex:1; font-family:monospace; font-size:15px;" onclick="this.select()" />
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-copy-new-pw">📋 Copy</button>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn btn-primary" data-close-modal>Done</button>
+            </div>
+          `, (bd2) => {
+            qs('#btn-copy-new-pw', bd2).addEventListener('click', async () => {
+              try {
+                await navigator.clipboard.writeText(newPassword);
+                toast('✔ Password copied.');
+              } catch (err) {
+                qs('#new-pw-display', bd2).select();
+                toast('Select and copy manually (clipboard access blocked).');
+              }
+            });
+          });
+        } catch (err) {
+          errEl.innerHTML = `<div class="auth-error">${escapeHtml(err.message || 'Something went wrong.')}</div>`;
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Reset Password';
+        }
       });
     });
   }
