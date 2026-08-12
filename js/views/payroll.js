@@ -286,11 +286,19 @@ window.Views.payroll = (function () {
                 <td class="num">
                   <div class="money-input-wrap"><span class="currency-prefix">₱</span><input type="number" class="retropay-input" min="0" step="0.01" value="${r.retroPay.toFixed(2)}" data-emp="${r.emp.id}" title="Back pay owed from a prior period — no computed baseline, 0 unless entered. Taxed as real wages, same as base pay." style="${r.retroPay ? 'border-color:var(--accent);' : ''}" /></div>
                 </td>
-                <td class="num" style="font-weight:600;">${fmtMoney(r.gross)}</td>
-                <td class="num ${r.tax ? '' : 'dim'}">${r.tax ? fmtMoney(r.tax) : '—'}</td>
-                <td class="num ${r.dedTotal ? '' : 'dim'}" title="${[r.attendanceDed ? 'Incl. ' + fmtMoney(r.attendanceDed) + ' for ' + r.daysAbsent + ' absent day(s)' : '', r.lateUndertimeDed ? fmtMoney(r.lateUndertimeDed) + ' for late/undertime' : ''].filter(Boolean).join('; ')}">${r.dedTotal ? fmtMoney(r.dedTotal) : '—'}</td>
+                <td class="num">
+                  <div class="money-input-wrap"><span class="currency-prefix">₱</span><input type="number" class="gross-input" min="0" step="0.01" value="${r.gross.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isGrossOverridden ? 'Manually edited — overrides Base Pay + COLA + Housing + NSD + OT + Holiday + Retro Pay' : 'Computed from the fields above'}" style="font-weight:600; ${r.isGrossOverridden ? 'border-color:var(--accent);' : ''}" /></div>
+                </td>
+                <td class="num">
+                  <div class="money-input-wrap"><span class="currency-prefix">₱</span><input type="number" class="tax-input" min="0" step="0.01" value="${r.tax.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isTaxOverridden ? 'Manually edited — overrides the computed withholding tax' : 'Computed from Base Pay + OT + NSD + Holiday Pay'}" style="${r.isTaxOverridden ? 'border-color:var(--accent);' : ''}" /></div>
+                </td>
+                <td class="num">
+                  <div class="money-input-wrap"><span class="currency-prefix">₱</span><input type="number" class="dedtotal-input" min="0" step="0.01" value="${r.dedTotal.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isDedTotalOverridden ? 'Manually edited — overrides logged deductions + absences + late/undertime' : [r.attendanceDed ? 'Incl. ' + fmtMoney(r.attendanceDed) + ' for ' + r.daysAbsent + ' absent day(s)' : '', r.lateUndertimeDed ? fmtMoney(r.lateUndertimeDed) + ' for late/undertime' : ''].filter(Boolean).join('; ') || 'Logged deductions for this cutoff'}" style="${r.isDedTotalOverridden ? 'border-color:var(--accent);' : ''}" /></div>
+                </td>
                 <td class="num ${r.bonusTotal ? 'green' : 'dim'}">${r.bonusTotal ? fmtMoney(r.bonusTotal) : '—'}</td>
-                <td class="num" style="font-weight:700;">${fmtMoney(r.net)}</td>
+                <td class="num">
+                  <div class="money-input-wrap"><span class="currency-prefix">₱</span><input type="number" class="net-input" min="0" step="0.01" value="${r.net.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isNetOverridden ? 'Manually edited — overrides Gross Pay − Withholding Tax − Deductions + Bonus' : 'Computed from the fields above'}" style="font-weight:700; ${r.isNetOverridden ? 'border-color:var(--accent);' : ''}" /></div>
+                </td>
                 <td><button class="link-btn" data-dtr="${r.emp.id}">DTR →</button></td>
               </tr>
             `).join('')}
@@ -323,7 +331,7 @@ window.Views.payroll = (function () {
         }
       });
     });
-    [['basepay-input', 'basePay'], ['cola-input', 'cola'], ['housing-input', 'housing'], ['nsd-input', 'nsd'], ['ot-input', 'ot'], ['holiday-input', 'holiday'], ['retropay-input', 'retroPay']].forEach(([cls, field]) => {
+    [['basepay-input', 'basePay'], ['cola-input', 'cola'], ['housing-input', 'housing'], ['nsd-input', 'nsd'], ['ot-input', 'ot'], ['holiday-input', 'holiday'], ['retropay-input', 'retroPay'], ['gross-input', 'gross'], ['tax-input', 'tax'], ['dedtotal-input', 'dedTotal'], ['net-input', 'net']].forEach(([cls, field]) => {
       qsa('.' + cls, body).forEach(input => {
         input.addEventListener('change', async () => {
           const val = Number(input.value);

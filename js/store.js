@@ -406,11 +406,15 @@ function computeRow(emp, from, to) {
     });
   }
 
-  const gross = basePay + colaPay + housingPay + nsdPay + otPay + holidayPay + retroPay;
+  let gross = basePay + colaPay + housingPay + nsdPay + otPay + holidayPay + retroPay;
+  const isGrossOverridden = !!(override && override.gross != null);
+  if (isGrossOverridden) gross = Number(override.gross);
 
   const manualDed = Store.deductionsInRange(from, to).filter(d => d.employeeId === emp.id).reduce((s, d) => s + Number(d.amount), 0);
   const attendanceDed = emp.payType === 'Monthly' && ordinaryWorkDays > 0 ? (emp.rate / ordinaryWorkDays) * daysAbsent : 0;
-  const dedTotal = manualDed + attendanceDed + lateUndertimeDed;
+  let dedTotal = manualDed + attendanceDed + lateUndertimeDed;
+  const isDedTotalOverridden = !!(override && override.dedTotal != null);
+  if (isDedTotalOverridden) dedTotal = Number(override.dedTotal);
 
   // Bonuses (13th month, performance, incentives, etc.) -- logged per employee per date,
   // matched against the cutoff the same way deductions are. Added after tax, same as
@@ -428,14 +432,20 @@ function computeRow(emp, from, to) {
   // logged yet (e.g. before HR has entered it) showed a confusing negative "net": real tax
   // charged on pay that was then fully deducted right back out.
   const taxableGross = basePay + otPay + nsdPay + holidayPay;
-  const tax = withholdingTax(Math.max(0, taxableGross - attendanceDed));
-  const net = gross - tax - dedTotal + bonusTotal;
+  let tax = withholdingTax(Math.max(0, taxableGross - attendanceDed));
+  const isTaxOverridden = !!(override && override.tax != null);
+  if (isTaxOverridden) tax = Number(override.tax);
+
+  let net = gross - tax - dedTotal + bonusTotal;
+  const isNetOverridden = !!(override && override.net != null);
+  if (isNetOverridden) net = Number(override.net);
 
   return {
     emp, daysPresent, isOverridden, workDays, daysAbsent, isAbsentOverridden, basePay, isBasePayOverridden,
     colaPay, isColaOverridden, housingPay, isHousingOverridden, nsdPay, isNsdOverridden,
     otPay, isOtOverridden, holidayPay, isHolidayOverridden, retroPay,
-    gross, taxableGross, tax, manualDed, attendanceDed, lateUndertimeDed, dedTotal, bonusTotal, net,
+    gross, isGrossOverridden, taxableGross, tax, isTaxOverridden, manualDed, attendanceDed, lateUndertimeDed,
+    dedTotal, isDedTotalOverridden, bonusTotal, net, isNetOverridden,
   };
 }
 

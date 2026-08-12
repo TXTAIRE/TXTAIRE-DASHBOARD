@@ -181,6 +181,10 @@ create table "payrollOverrides" (
   ot numeric(12,2),
   holiday numeric(12,2),
   "retroPay" numeric(12,2),
+  gross numeric(12,2),
+  tax numeric(12,2),
+  "dedTotal" numeric(12,2),
+  net numeric(12,2),
   unique("employeeId", "cutoffFrom")
 );
 
@@ -2218,3 +2222,15 @@ where category = 'Admin'
   and name not ilike '%Cosme%'
   and name not ilike '%Nabora%';
 alter table expenses add column if not exists entity text not null default 'TXTAIRE OPC';
+
+-- =================================================================
+-- Make Gross Pay, Withholding Tax, Deductions, and Net Pay directly editable on the
+-- Payroll tab, same as Base Pay/COLA/NSD/OT/Holiday already are -- incremental migration.
+-- Run once against a database that already has the migrations above applied. Safe to
+-- re-run.
+-- =================================================================
+
+alter table "payrollOverrides" add column if not exists gross numeric(12,2);
+alter table "payrollOverrides" add column if not exists tax numeric(12,2);
+alter table "payrollOverrides" add column if not exists "dedTotal" numeric(12,2);
+alter table "payrollOverrides" add column if not exists net numeric(12,2);
