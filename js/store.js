@@ -58,7 +58,7 @@ function fmtDate(iso) {
 
 function fmtMoney(n) {
   const v = Number(n) || 0;
-  return '₱' + v.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return '₱' + v.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // Formats a "HH:MM" 24-hour string (as stored) into 12-hour "h:mm AM/PM" for display.
