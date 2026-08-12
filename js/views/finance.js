@@ -101,10 +101,12 @@ window.Views.finance = (function () {
 
   function sheetsBackupCard(main) {
     const url = Store.getAppSetting('expenseSheetWebhookUrl', '');
+    const sheetUrl = Store.getAppSetting('expenseSheetSpreadsheetUrl', '');
     return `
       <div class="panel" style="margin-bottom:8px; padding:10px 14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
         <span>🔗 Google Sheets Backup: ${url ? '<span class="badge badge-green">Connected</span>' : '<span class="badge badge-gray">Not connected</span>'}</span>
         <span class="dim" style="font-size:12px;">${url ? 'Every add/edit/delete is mirrored live to your Google Sheet.' : 'Not saving a live copy to Google Sheets yet.'}</span>
+        ${url && sheetUrl ? `<a href="${escapeHtml(sheetUrl)}" target="_blank" rel="noopener" class="link-btn">Open Spreadsheet ↗</a>` : ''}
         <button type="button" class="link-btn" id="btn-sheets-backup-settings">${url ? 'Manage' : 'Connect'}</button>
       </div>
     `;
@@ -113,6 +115,7 @@ window.Views.finance = (function () {
   function openSheetsBackupSettingsModal(main) {
     const url = Store.getAppSetting('expenseSheetWebhookUrl', '');
     const secret = Store.getAppSetting('expenseSheetWebhookSecret', '');
+    const sheetUrl = Store.getAppSetting('expenseSheetSpreadsheetUrl', '');
     openModal(`
       <h2>🔗 Google Sheets Backup</h2>
       <div class="modal-sub" style="margin-bottom:10px;">Every expense added, edited, or deleted here is also sent live to a Google Sheet as a real-time backup — separate from Supabase, which stays the actual source of truth. Set this up once: deploy the provided Apps Script as a Web App in your target Google Sheet, then paste its URL and the shared secret you set inside it below.</div>
@@ -120,6 +123,7 @@ window.Views.finance = (function () {
         <div class="modal-grid">
           <div class="field full"><label>Web App URL</label><input name="url" value="${escapeHtml(url)}" placeholder="https://script.google.com/macros/s/.../exec" /></div>
           <div class="field full"><label>Shared secret</label><input name="secret" value="${escapeHtml(secret)}" placeholder="A password only this app and the script know" /></div>
+          <div class="field full"><label>Spreadsheet link <span class="dim" style="font-weight:400;">(optional — just for the "Open Spreadsheet" shortcut, not used by the sync itself)</span></label><input name="sheetUrl" value="${escapeHtml(sheetUrl)}" placeholder="https://docs.google.com/spreadsheets/d/.../edit" /></div>
         </div>
         <div class="modal-actions">
           ${url ? '<button type="button" class="btn btn-ghost" id="btn-disconnect-sheets" style="margin-right:auto;">Disconnect</button>' : ''}
@@ -133,6 +137,7 @@ window.Views.finance = (function () {
         const fd = new FormData(ev.target);
         await Store.setAppSetting('expenseSheetWebhookUrl', fd.get('url').trim());
         await Store.setAppSetting('expenseSheetWebhookSecret', fd.get('secret').trim());
+        await Store.setAppSetting('expenseSheetSpreadsheetUrl', fd.get('sheetUrl').trim());
         toast('✔ Google Sheets backup settings saved.');
         closeModal();
         renderView(main);
