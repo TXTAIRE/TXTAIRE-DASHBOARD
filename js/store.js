@@ -40,6 +40,20 @@ function addDays(isoDate, n) {
   return localISO(d);
 }
 
+// Inclusive calendar-day count between two ISO dates (same-day = 1) -- used for tallying
+// leave request length, same convention the leave request form itself uses (a single
+// start/end date pair, no separate "number of days" field).
+function dateRangeDays(startDate, endDate) {
+  const start = new Date(startDate + 'T00:00:00');
+  const end = new Date(endDate + 'T00:00:00');
+  return Math.round((end - start) / 86400000) + 1;
+}
+
+// Service Incentive Leave -- Labor Code of the Philippines, Article 95: every employee
+// who has rendered at least one year of service is entitled to 5 days of paid leave per
+// year. Fixed company-wide, not configurable per employee.
+const SIL_YEARLY_DAYS = 5;
+
 function addMonths(isoDate, n) {
   const d = new Date(isoDate + 'T00:00:00');
   const day = d.getDate();
@@ -680,10 +694,11 @@ const Store = (function () {
         const field = kind + 'Status';
         const newVal = patch[field];
         if ((newVal === 'Approved' || newVal === 'Rejected') && before[field] !== newVal) {
+          const remarks = (patch.approvalNotes || after.approvalNotes || '').trim();
           await createNotification({
             employeeId: after.employeeId,
             type: `${kind}_${newVal.toLowerCase()}`,
-            message: `Your ${ATTENDANCE_STATUS_LABELS[kind]} pay request for ${fmtDate(after.date)} was ${newVal.toLowerCase()}.`,
+            message: `Your ${ATTENDANCE_STATUS_LABELS[kind]} pay request for ${fmtDate(after.date)} was ${newVal.toLowerCase()}.${remarks ? ' Remarks: ' + remarks : ''}`,
             relatedTable: 'attendance', relatedId: id,
           });
         }
@@ -852,6 +867,17 @@ const Store = (function () {
   function listLeaveRequests() { return state.leaveRequests.slice(); }
   function getLeaveRequest(id) { return state.leaveRequests.find(r => r.id === id); }
   function leaveRequestsForEmployee(employeeId) { return state.leaveRequests.filter(r => r.employeeId === employeeId); }
+  // Counts Pending + Approved SIL days for one employee within one calendar year (matched
+  // by the request's start date), toward the 5-day yearly cap -- Pending counts too, not
+  // just Approved, so someone can't stack multiple pending requests past the cap before
+  // any of them are decided. excludeId skips a request being edited so re-saving it
+  // doesn't double-count against itself.
+  function silDaysUsed(employeeId, year, excludeId) {
+    return state.leaveRequests
+      .filter(r => r.employeeId === employeeId && r.leaveType === 'SIL' && r.id !== excludeId
+        && (r.status === 'Approved' || r.status === 'Pending') && (r.startDate || '').slice(0, 4) === String(year))
+      .reduce((sum, r) => sum + dateRangeDays(r.startDate, r.endDate), 0);
+  }
   async function addLeaveRequest(r) {
     r.id = genId('lr');
     r.status = 'Pending';
@@ -1308,7 +1334,7 @@ const Store = (function () {
     getPayrollOverride, setPayrollOverride,
     listHolidays, getHoliday, holidaysInRange, addHoliday, updateHoliday, deleteHoliday,
     listPayCutoffSettings, getPayCutoffSetting, updatePayCutoffSetting,
-    listLeaveRequests, getLeaveRequest, leaveRequestsForEmployee, addLeaveRequest, reviewLeaveRequest, updateLeaveRequestNotes, updateLeaveRequest, deleteLeaveRequest,
+    listLeaveRequests, getLeaveRequest, leaveRequestsForEmployee, silDaysUsed, addLeaveRequest, reviewLeaveRequest, updateLeaveRequestNotes, updateLeaveRequest, deleteLeaveRequest,
     listAttendanceCorrections, getAttendanceCorrection, attendanceCorrectionsForEmployee, addAttendanceCorrection, reviewAttendanceCorrection, updateAttendanceCorrectionNotes, deleteAttendanceCorrection,
     listAuditLog, purgeOldAuditLog,
     createNotification, listNotificationsForEmployee, unreadNotificationCount, markNotificationRead, markAllNotificationsRead, deleteNotification,

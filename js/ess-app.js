@@ -435,7 +435,9 @@ function preserveScrollAcrossRerenders(container) {
     // before the browser has laid it out, can get silently clamped to 0.
     setTimeout(restore, 0);
   });
-  observer.observe(container, { childList: true });
+  // subtree: true is required -- a nested sub-container re-rendering (not #ess-main
+  // itself) never fired a childList-only observer on the outer container.
+  observer.observe(container, { childList: true, subtree: true });
 }
 
 // ---- "Add to Home Screen" nudge, shown once per login (throttled) ----

@@ -389,7 +389,11 @@ function preserveScrollAcrossRerenders(container) {
     // is inserted, before the browser has laid it out, can get silently clamped to 0.
     setTimeout(restore, 0);
   });
-  observer.observe(container, { childList: true });
+  // subtree: true is required -- tabbed views (Payroll, Office & Finance, Attendance, ...)
+  // re-render a nested sub-container (e.g. #tab-body) after an inline edit, not
+  // #main-content itself, so a childList-only observer on the outer container never fired
+  // for those and scroll position silently reset on every edit.
+  observer.observe(container, { childList: true, subtree: true });
 }
 
 let appStarted = false;

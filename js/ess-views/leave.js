@@ -9,9 +9,16 @@ window.EssViews.leave = (function () {
 
   function render(main, emp) {
     const rows = Store.leaveRequestsForEmployee(emp.id).slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    const silYear = Number(todayISO().slice(0, 4));
+    const silUsed = Store.silDaysUsed(emp.id, silYear);
+    const silLeft = Math.max(0, SIL_YEARLY_DAYS - silUsed);
 
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0;">My Leave Requests</div>
+      <div class="ess-card" style="margin-bottom:14px;">
+        <div class="ess-row"><span class="label">Service Incentive Leave (SIL) — ${silYear}</span><span class="value" style="font-weight:700;">${silLeft} of ${SIL_YEARLY_DAYS} days left</span></div>
+        <div class="ess-sub" style="margin-top:4px;">5 paid days per year, per the Labor Code of the Philippines. Includes Pending requests, not just Approved.</div>
+      </div>
       <button class="btn btn-primary btn-sm" id="btn-new-leave" style="width:100%; justify-content:center; margin-bottom:14px;">+ New Leave Request</button>
       ${rows.length ? rows.map(r => `
         <div class="ess-card">
@@ -51,7 +58,7 @@ window.EssViews.leave = (function () {
       <form id="leave-form">
         <div class="modal-grid">
           <div class="field full"><label>Type</label>
-            <select name="leaveType">${['Vacation', 'Sick', 'Emergency', 'Other'].map(t => `<option ${t === r.leaveType ? 'selected' : ''}>${t}</option>`).join('')}</select>
+            <select name="leaveType">${['Vacation', 'Sick', 'SIL', 'Emergency', 'Other'].map(t => `<option ${t === r.leaveType ? 'selected' : ''}>${t}</option>`).join('')}</select>
           </div>
           <div class="field"><label>Start date</label><input type="date" name="startDate" value="${r.startDate}" required /></div>
           <div class="field"><label>End date</label><input type="date" name="endDate" value="${r.endDate}" required /></div>
@@ -73,6 +80,19 @@ window.EssViews.leave = (function () {
           endDate: fd.get('endDate'),
           reason: fd.get('reason').trim(),
         };
+        // 5 days/year cap on SIL (Labor Code Art. 95) -- checked against every OTHER
+        // Pending/Approved SIL request in the same calendar year as this one's start date,
+        // so editing an existing request compares against its own new dates correctly.
+        if (patch.leaveType === 'SIL') {
+          const requestedDays = dateRangeDays(patch.startDate, patch.endDate);
+          const year = Number(patch.startDate.slice(0, 4));
+          const usedElsewhere = Store.silDaysUsed(emp.id, year, existing ? existing.id : null);
+          if (usedElsewhere + requestedDays > SIL_YEARLY_DAYS) {
+            const left = Math.max(0, SIL_YEARLY_DAYS - usedElsewhere);
+            toast(`Only ${left} SIL day${left === 1 ? '' : 's'} left for ${year} — this request is for ${requestedDays}.`);
+            return;
+          }
+        }
         if (existing) {
           await Store.updateLeaveRequest(existing.id, patch);
           toast('✔ Leave request updated.');

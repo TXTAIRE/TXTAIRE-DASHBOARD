@@ -139,6 +139,10 @@ create table attendance (
   -- computeDayPay). Doesn't affect the absent-but-still-paid rule, which only ever looks
   -- at the real shared-list holiday.
   "holidayType" text,
+  -- HR's remarks on the NSD/OT/Holiday decision, shown to the employee alongside the
+  -- Approved/Rejected notification -- one shared field for all three, since they're all
+  -- decided together in the same Edit Attendance modal.
+  "approvalNotes" text default '',
   created_at timestamptz not null default now()
 );
 
@@ -2234,3 +2238,13 @@ alter table "payrollOverrides" add column if not exists gross numeric(12,2);
 alter table "payrollOverrides" add column if not exists tax numeric(12,2);
 alter table "payrollOverrides" add column if not exists "dedTotal" numeric(12,2);
 alter table "payrollOverrides" add column if not exists net numeric(12,2);
+
+-- =================================================================
+-- Let HR reject (not just approve) an NSD/OT/Holiday pay request, with remarks -- the
+-- notification infrastructure already supported a "Rejected" outcome (js/store.js
+-- updateAttendance already checks for 'Approved' OR 'Rejected'), only the UI never
+-- exposed a way to actually set it. Incremental migration. Run once against a database
+-- that already has the migrations above applied. Safe to re-run.
+-- =================================================================
+
+alter table attendance add column if not exists "approvalNotes" text default '';

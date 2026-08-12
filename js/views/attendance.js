@@ -137,8 +137,8 @@ window.Views.attendance = (function () {
                   <td>${row.label}</td>
                   <td class="num">${row.amount}</td>
                   <td style="white-space:nowrap;">
-                    <button class="btn btn-primary btn-sm" data-approve="${row.kind}" data-rec-id="${r.id}">Approve</button>
-                    <button class="btn btn-ghost btn-sm" data-reject="${row.kind}" data-rec-id="${r.id}">Reject</button>
+                    <button class="btn btn-primary btn-sm" data-decide="${row.kind}" data-decision="Approved" data-rec-id="${r.id}" data-label="${escapeHtml(row.label)}">Approve</button>
+                    <button class="btn btn-ghost btn-sm" data-decide="${row.kind}" data-decision="Rejected" data-rec-id="${r.id}" data-label="${escapeHtml(row.label)}">Reject</button>
                   </td>
                 </tr>
               `).join('');
@@ -148,16 +148,33 @@ window.Views.attendance = (function () {
       </div>
     `;
 
-    qsa('[data-approve]', body).forEach(b => b.addEventListener('click', async () => {
-      await Store.updateAttendance(b.dataset.recId, { [b.dataset.approve + 'Status']: 'Approved' });
-      toast('✔ Approved');
-      renderView(main);
+    qsa('[data-decide]', body).forEach(b => b.addEventListener('click', () => {
+      openDecisionModal(main, b.dataset.recId, b.dataset.decide, b.dataset.decision, b.dataset.label);
     }));
-    qsa('[data-reject]', body).forEach(b => b.addEventListener('click', async () => {
-      await Store.updateAttendance(b.dataset.recId, { [b.dataset.reject + 'Status']: 'Rejected' });
-      toast('Rejected');
-      renderView(main);
-    }));
+  }
+
+  // Quick approve/reject from the Requests tab -- same remarks capability as the full
+  // Edit Attendance modal, just faster for the common case of deciding one request at a
+  // time without opening the whole attendance record.
+  function openDecisionModal(main, recId, kind, decision, label) {
+    openModal(`
+      <h2>${decision === 'Approved' ? 'Approve' : 'Reject'} ${escapeHtml(label)}</h2>
+      <div class="field full"><label>Remarks <span class="dim" style="font-weight:400;">(optional — shown to the employee)</span></label>
+        <textarea id="decision-remarks" rows="2" autofocus></textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="button" class="btn ${decision === 'Approved' ? 'btn-primary' : 'btn-danger'}" id="btn-confirm-decision">${decision === 'Approved' ? 'Approve' : 'Reject'}</button>
+      </div>
+    `, (bd) => {
+      qs('#btn-confirm-decision', bd).addEventListener('click', async () => {
+        const notes = qs('#decision-remarks', bd).value.trim();
+        await Store.updateAttendance(recId, { [kind + 'Status']: decision, approvalNotes: notes });
+        toast(decision === 'Approved' ? '✔ Approved' : 'Rejected');
+        closeModal();
+        renderView(main);
+      });
+    });
   }
 
   function renderDailyTab(body, main) {
@@ -504,17 +521,21 @@ window.Views.attendance = (function () {
           </div>
           ` : ''}
           <div class="field"><label>Night Shift Diff.</label>
-            <label style="display:flex; align-items:center; gap:6px; font-weight:400; padding-top:8px;">
-              <input type="checkbox" name="nsdApproved" ${r.nsdStatus === 'Approved' ? 'checked' : ''} style="width:auto;" /> Approved
-              ${r.nsdStatus === 'Requested' ? '<span class="badge badge-yellow" style="margin-left:4px;">Pending request</span>' : ''}
-            </label>
+            <select name="nsdDecision">
+              <option value="" ${r.nsdStatus !== 'Approved' && r.nsdStatus !== 'Rejected' ? 'selected' : ''}>${r.nsdStatus === 'Requested' ? 'Not decided yet' : 'Not requested'}</option>
+              <option value="Approved" ${r.nsdStatus === 'Approved' ? 'selected' : ''}>Approved</option>
+              <option value="Rejected" ${r.nsdStatus === 'Rejected' ? 'selected' : ''}>Rejected</option>
+            </select>
+            ${r.nsdStatus === 'Requested' ? '<span class="badge badge-yellow" style="margin-top:4px; display:inline-block;">Pending request</span>' : ''}
             ${approvalStampHtml(r.nsdStatus, r.nsdApprovedBy, r.nsdApprovedAt)}
           </div>
           <div class="field"><label>Overtime</label>
-            <label style="display:flex; align-items:center; gap:6px; font-weight:400; padding-top:8px;">
-              <input type="checkbox" name="otApproved" ${r.otStatus === 'Approved' ? 'checked' : ''} style="width:auto;" /> Approved
-              ${r.otStatus === 'Requested' ? '<span class="badge badge-yellow" style="margin-left:4px;">Pending request</span>' : ''}
-            </label>
+            <select name="otDecision">
+              <option value="" ${r.otStatus !== 'Approved' && r.otStatus !== 'Rejected' ? 'selected' : ''}>${r.otStatus === 'Requested' ? 'Not decided yet' : 'Not requested'}</option>
+              <option value="Approved" ${r.otStatus === 'Approved' ? 'selected' : ''}>Approved</option>
+              <option value="Rejected" ${r.otStatus === 'Rejected' ? 'selected' : ''}>Rejected</option>
+            </select>
+            ${r.otStatus === 'Requested' ? '<span class="badge badge-yellow" style="margin-top:4px; display:inline-block;">Pending request</span>' : ''}
             <div style="display:flex; align-items:center; gap:6px; margin-top:6px;">
               <label for="att-ot-hours" style="font-weight:400; margin:0; font-size:12px; color:var(--text-faint);">OT hours</label>
               <input type="number" step="0.1" min="0" name="otHours" id="att-ot-hours" style="width:80px;"
@@ -523,14 +544,22 @@ window.Views.attendance = (function () {
             ${approvalStampHtml(r.otStatus, r.otApprovedBy, r.otApprovedAt)}
           </div>
           <div class="field full"><label>Holiday</label>
-            <select name="holidayType" id="att-holiday-type">
-              <option value="">None</option>
+            <select name="holidayDecision">
+              <option value="" ${r.holidayStatus !== 'Approved' && r.holidayStatus !== 'Rejected' ? 'selected' : ''}>${r.holidayStatus === 'Requested' ? 'Not decided yet' : 'Not requested'}</option>
+              <option value="Approved" ${r.holidayStatus === 'Approved' ? 'selected' : ''}>Approved</option>
+              <option value="Rejected" ${r.holidayStatus === 'Rejected' ? 'selected' : ''}>Rejected</option>
+            </select>
+            <select name="holidayType" id="att-holiday-type" style="margin-top:6px;">
+              <option value="">No holiday type</option>
               <option value="Regular" ${r.holidayType === 'Regular' || (!r.holidayType && holiday && holiday.type === 'Regular') ? 'selected' : ''}>Regular Holiday</option>
               <option value="Special" ${r.holidayType === 'Special' || (!r.holidayType && holiday && holiday.type === 'Special') ? 'selected' : ''}>Special (Non-working) Holiday</option>
             </select>
             <div id="holiday-hint" class="page-sub" style="margin-top:6px;">${holidayHintHtml(r.date, holidayCtx)}</div>
             ${r.holidayStatus === 'Requested' ? '<div class="badge badge-yellow" style="margin-top:6px;">Pending request</div>' : ''}
             ${approvalStampHtml(r.holidayStatus, r.holidayApprovedBy, r.holidayApprovedAt)}
+          </div>
+          <div class="field full"><label>Remarks <span class="dim" style="font-weight:400;">(shown to the employee alongside the NSD/OT/Holiday decision)</span></label>
+            <textarea name="approvalNotes" rows="2">${escapeHtml(r.approvalNotes || '')}</textarea>
           </div>
         </div>
         <div class="modal-actions">
@@ -582,6 +611,15 @@ window.Views.attendance = (function () {
         ev.preventDefault();
         const fd = new FormData(ev.target);
         const holidayType = fd.get('holidayType') || null;
+        // Leaving a decision at "Not decided"/"Not requested" (empty value) never clobbers
+        // a pending employee request (still visible/actionable in the Requests tab) — it
+        // only ever clears an already-decided status back to undecided. Explicitly picking
+        // Approved or Rejected always takes effect, decided or not.
+        const decision = (field, current) => {
+          const val = fd.get(field);
+          if (val === 'Approved' || val === 'Rejected') return val;
+          return current === 'Requested' ? current : null;
+        };
         const patch = {
           employeeId: fd.get('employeeId'),
           date: fd.get('date'),
@@ -589,14 +627,12 @@ window.Views.attendance = (function () {
           timeIn: fd.get('timeIn'),
           timeOut: fd.get('timeOut'),
           hours: Number(fd.get('hours')) || 0,
-          // Checking a box always approves it; leaving it unchecked never clobbers a
-          // pending employee request (still visible/actionable in the Requests tab) —
-          // it only ever clears an already-Approved flag back to undecided.
-          nsdStatus: fd.get('nsdApproved') === 'on' ? 'Approved' : (r.nsdStatus === 'Requested' ? r.nsdStatus : null),
-          otStatus: fd.get('otApproved') === 'on' ? 'Approved' : (r.otStatus === 'Requested' ? r.otStatus : null),
+          nsdStatus: decision('nsdDecision', r.nsdStatus),
+          otStatus: decision('otDecision', r.otStatus),
           otHours: fd.get('otHours') !== '' ? Number(fd.get('otHours')) : null,
           holidayType,
-          holidayStatus: holidayType ? 'Approved' : (r.holidayStatus === 'Requested' ? r.holidayStatus : null),
+          holidayStatus: decision('holidayDecision', r.holidayStatus),
+          approvalNotes: fd.get('approvalNotes').trim(),
         };
         if (rec) { await Store.updateAttendance(rec.id, patch); toast('Attendance updated.'); }
         else { await Store.addAttendance(patch); toast('Attendance logged.'); }
