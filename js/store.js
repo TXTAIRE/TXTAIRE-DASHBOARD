@@ -10,6 +10,16 @@
 
 window.Views = window.Views || {};
 
+// A focused number input silently changes value when the page is scrolled with the
+// cursor resting over it -- an easy way to accidentally mis-edit a salary/pay amount
+// without realizing it. Only intercepts while that exact input is focused (not just
+// hovered), so scrolling the page past an unfocused number input still works normally.
+document.addEventListener('wheel', (ev) => {
+  if (ev.target && ev.target.tagName === 'INPUT' && ev.target.type === 'number' && document.activeElement === ev.target) {
+    ev.preventDefault();
+  }
+}, { passive: false });
+
 const CATEGORIES = ['Admin', 'Technician', 'Executive / Management'];
 
 const STAGES_STANDARD = ['Screening', 'Phone Interview', 'Face-to-Face Interview', '3-Day Trade Test', 'Evaluation', 'Decision'];

@@ -1,4 +1,8 @@
 window.Views.payroll = (function () {
+  // Tracks which employee's row is highlighted on the Payroll tab -- module-level so it
+  // survives the re-render that happens after every inline edit (otherwise clicking a
+  // name to highlight it, then editing a field, would immediately lose the highlight).
+  let highlightedEmpId = null;
   // Reference list for the Holidays tab's "Add holiday" form — the officially recurring
   // PH holidays by type (Labor Code / Republic Act proclamations). "Other" always remains
   // available for newly/locally declared holidays not on this list.
@@ -256,8 +260,8 @@ window.Views.payroll = (function () {
           <thead><tr><th>Staff</th><th>Position</th><th class="num">Days Present</th><th class="num">Absent</th><th class="num">Base Pay</th><th class="num">COLA</th><th class="num">Housing Allowance</th><th class="num">NSD</th><th class="num">OT</th><th class="num">Holiday</th><th class="num">Retro Pay</th><th class="num">Gross Pay</th><th class="num">Withholding Tax</th><th class="num">Deductions</th><th class="num">Bonus</th><th class="num">Net Pay</th><th></th></tr></thead>
           <tbody>
             ${rows.map(r => `
-              <tr>
-                <td class="name">${escapeHtml(r.emp.name)}</td>
+              <tr class="${r.emp.id === highlightedEmpId ? 'row-highlighted' : ''}">
+                <td class="name row-link" data-highlight-emp="${r.emp.id}" title="Click to highlight this row while you edit it">${escapeHtml(r.emp.name)}</td>
                 <td class="dim">${escapeHtml(r.emp.position)}</td>
                 <td class="num">
                   <input type="number" class="days-input" min="0" step="0.5" value="${r.daysPresent}" data-emp="${r.emp.id}" title="${r.isOverridden ? 'Manually edited — overrides attendance count' : 'From attendance records'} · ${r.workDays} working days in this cutoff" style="${r.isOverridden ? 'border-color:var(--accent);' : ''}" />
@@ -345,6 +349,10 @@ window.Views.payroll = (function () {
     qsa('[data-dtr]', body).forEach(btn => btn.addEventListener('click', () => {
       const row = rows.find(r => r.emp.id === btn.dataset.dtr);
       if (row) openDTR(row.emp, selected.from, selected.to);
+    }));
+    qsa('[data-highlight-emp]', body).forEach(td => td.addEventListener('click', () => {
+      highlightedEmpId = highlightedEmpId === td.dataset.highlightEmp ? null : td.dataset.highlightEmp;
+      renderPayrollTab(body, main);
     }));
     qs('#btn-reset-absences', body).addEventListener('click', async () => {
       if (!rows.length) return;

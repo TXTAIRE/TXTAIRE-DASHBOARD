@@ -349,6 +349,10 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 td.name { font-weight: 600; }
 td.name.row-link { cursor: pointer; }
 td.name.row-link:hover { text-decoration: underline; }
+/* Click a name to keep its whole row visually marked while editing across many columns
+   (Payroll) -- distinct from the individual focused-cell highlight (yellow), and
+   persists across the re-render that follows every inline edit. */
+tr.row-highlighted > td { background: var(--accent-dim); }
 td.dim { color: var(--text-dim); }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .days-input { width: 64px; text-align: right; padding: 6px 8px; }
@@ -358,6 +362,17 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   font-size: 12px; color: var(--text-faint); pointer-events: none;
 }
 .money-input-wrap input { width: 90px; text-align: right; padding: 6px 8px 6px 18px; }
+/* Hides the native up/down spinner on every number input, app-wide -- purely cosmetic
+   (the actual accidental-scroll-changes-the-value behavior these spinners come with is
+   blocked separately in JS, see the "wheel" listener in store.js). */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
 /* Distinct from the blue "manually overridden" border (which stays visible even when not
    focused) -- the Payroll tab packs a dozen+ editable cells into one row, easy to lose
    track of which one you're actually typing in. A bright highlight only while focused
