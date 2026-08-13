@@ -77,6 +77,19 @@ function silDaysInRange(employeeId, from, to) {
     }, 0);
 }
 
+// Labor Code Art. 95 grants SIL only once an employee has rendered at least one year of
+// service -- an employee with no dateHired on file can't have that proven yet, so treated
+// as not-yet-eligible (rather than assuming eligibility) until HR fills it in.
+function silEligibleAsOf(emp, asOfDate) {
+  if (!emp || !emp.dateHired) return false;
+  return addMonths(emp.dateHired, 12) <= (asOfDate || todayISO());
+}
+// First date this employee will actually become eligible (their 1-year anniversary) --
+// only meaningful when silEligibleAsOf() is currently false.
+function silEligibleFrom(emp) {
+  return emp && emp.dateHired ? addMonths(emp.dateHired, 12) : null;
+}
+
 function addMonths(isoDate, n) {
   const d = new Date(isoDate + 'T00:00:00');
   const day = d.getDate();

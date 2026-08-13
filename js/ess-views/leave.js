@@ -12,12 +12,15 @@ window.EssViews.leave = (function () {
     const silYear = Number(todayISO().slice(0, 4));
     const silUsed = Store.silDaysUsed(emp.id, silYear);
     const silLeft = Math.max(0, SIL_YEARLY_DAYS - silUsed);
+    const silEligible = silEligibleAsOf(emp);
 
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0;">My Leave Requests</div>
       <div class="ess-card" style="margin-bottom:14px;">
-        <div class="ess-row"><span class="label">Service Incentive Leave (SIL) — ${silYear}</span><span class="value" style="font-weight:700;">${silLeft} of ${SIL_YEARLY_DAYS} days left</span></div>
-        <div class="ess-sub" style="margin-top:4px;">5 paid days per year, per the Labor Code of the Philippines. Includes Pending requests, not just Approved.</div>
+        <div class="ess-row"><span class="label">Service Incentive Leave (SIL) — ${silYear}</span><span class="value" style="font-weight:700;">${silEligible ? `${silLeft} of ${SIL_YEARLY_DAYS} days left` : 'Not yet eligible'}</span></div>
+        <div class="ess-sub" style="margin-top:4px;">${silEligible
+          ? '5 paid days per year, per the Labor Code of the Philippines. Includes Pending requests, not just Approved.'
+          : `Requires 1 year of service (Labor Code Art. 95). Eligible starting ${fmtDate(silEligibleFrom(emp))}.`}</div>
       </div>
       <button class="btn btn-primary btn-sm" id="btn-new-leave" style="width:100%; justify-content:center; margin-bottom:14px;">+ New Leave Request</button>
       ${rows.length ? rows.map(r => `
@@ -80,10 +83,16 @@ window.EssViews.leave = (function () {
           endDate: fd.get('endDate'),
           reason: fd.get('reason').trim(),
         };
-        // 5 days/year cap on SIL (Labor Code Art. 95) -- checked against every OTHER
-        // Pending/Approved SIL request in the same calendar year as this one's start date,
-        // so editing an existing request compares against its own new dates correctly.
+        // SIL requires 1 year of service (Labor Code Art. 95) before it can be used at
+        // all, checked as of the leave's own start date -- and separately, a 5 days/year
+        // cap once eligible, checked against every OTHER Pending/Approved SIL request in
+        // the same calendar year as this one's start date, so editing an existing request
+        // compares against its own new dates correctly.
         if (patch.leaveType === 'SIL') {
+          if (!silEligibleAsOf(emp, patch.startDate)) {
+            toast(`Not yet eligible for SIL — requires 1 year of service. Eligible starting ${fmtDate(silEligibleFrom(emp))}.`);
+            return;
+          }
           const requestedDays = dateRangeDays(patch.startDate, patch.endDate);
           const year = Number(patch.startDate.slice(0, 4));
           const usedElsewhere = Store.silDaysUsed(emp.id, year, existing ? existing.id : null);
