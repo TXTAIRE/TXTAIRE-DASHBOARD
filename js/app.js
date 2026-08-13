@@ -73,8 +73,7 @@ function openDTR(emp, from, to) {
   qsa('.dtr-overlay').forEach(el => el.remove());
 
   const records = Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id);
-  const recByDate = {};
-  records.forEach(r => { recByDate[r.date] = r; });
+  const recByDate = dedupeAttendanceByDate(records);
 
   const holidays = Store.holidaysInRange(from, to);
   const holidayByDate = {};
@@ -334,11 +333,33 @@ function setActiveNav(route) {
   });
 }
 
+// Red pending-count badges in the sidebar, so what needs a decision is visible without
+// clicking into each section -- same counting logic each page already uses for its own
+// "N pending" indicators, just surfaced one level up.
+function setNavBadge(route, count) {
+  const el = qs('#nav-badge-' + route);
+  if (!el) return;
+  el.textContent = count > 99 ? '99+' : String(count);
+  el.classList.toggle('hidden', !count);
+}
+function updateNavBadges() {
+  const pendingLeave = Store.listLeaveRequests().filter(r => r.status === 'Pending').length;
+  const pendingCorrections = Store.listAttendanceCorrections().filter(c => c.status === 'Pending').length;
+  const pendingAttendanceRequests = Store.listAttendance().reduce((n, r) =>
+    n + (r.nsdStatus === 'Requested' ? 1 : 0) + (r.otStatus === 'Requested' ? 1 : 0) + (r.holidayStatus === 'Requested' ? 1 : 0), 0);
+  const openComplaints = Store.listComplaints().filter(c => c.status === 'Open').length;
+  setNavBadge('leaveRequests', pendingLeave);
+  setNavBadge('attendanceCorrections', pendingCorrections);
+  setNavBadge('attendance', pendingAttendanceRequests);
+  setNavBadge('complaints', openComplaints);
+}
+
 function render() {
   closeModal();
   closeDrawer();
   const route = currentRoute();
   setActiveNav(route);
+  updateNavBadges();
   const main = qs('#main-content');
   main.innerHTML = '';
   const view = window.Views[route];
@@ -671,6 +692,60 @@ async function startApp(session) {
   });
 
   render();
+  // Deferred a beat so it doesn't compete with the login->dashboard transition/initial
+  // render. Wrapped defensively -- a setTimeout callback that throws fails completely
+  // silently, which would look exactly like "nothing happens."
+  setTimeout(() => {
+    maybeShowAdminPushPrompt().catch((err) => toast('Notification prompt error: ' + (err && err.message ? err.message : err)));
+  }, 1200);
+}
+
+// ---- "Enable Notifications" nudge for HR/Admin, shown once per login (throttled) ----
+// Without this, the only way to discover push alerts for new employee requests is to
+// happen to find the "Push Notifications" card on the Payroll page -- easy for an admin
+// to simply never see, which defeats the point of a real-time alert. Mirrors the same
+// prompt on My Portal (js/ess-app.js maybeShowPushPrompt).
+const ADMIN_PUSH_PROMPT_DISMISS_KEY = 'adminPushPromptDismissedAt';
+const ADMIN_PUSH_PROMPT_REASK_DAYS = 14;
+
+function dismissAdminPushPrompt() {
+  try { localStorage.setItem(ADMIN_PUSH_PROMPT_DISMISS_KEY, String(Date.now())); } catch (err) { /* ignore */ }
+  closeModal();
+}
+
+async function maybeShowAdminPushPrompt() {
+  if (pushUnsupportedReason()) return;
+  if (typeof Notification !== 'undefined' && Notification.permission === 'denied') return;
+  let dismissedAt = 0;
+  try { dismissedAt = Number(localStorage.getItem(ADMIN_PUSH_PROMPT_DISMISS_KEY) || 0); } catch (err) { dismissedAt = 0; }
+  if (dismissedAt && (Date.now() - dismissedAt) < ADMIN_PUSH_PROMPT_REASK_DAYS * 86400000) return;
+  const existing = await getCurrentPushSubscription();
+  if (existing) return;
+
+  openModal(`
+    <h2>🔔 Turn On Notifications</h2>
+    <div class="modal-sub">Get notified the instant an employee submits a leave request, attendance correction, or NSD/OT/Holiday pay request — with sound, even when this dashboard isn't open.</div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="btn-admin-push-later">Not Now</button>
+      <button type="button" class="btn btn-primary" id="btn-admin-push-enable">Enable Notifications</button>
+    </div>
+  `, (bd) => {
+    qs('#btn-admin-push-later', bd).addEventListener('click', dismissAdminPushPrompt);
+    qs('#btn-admin-push-enable', bd).addEventListener('click', async () => {
+      const btn = qs('#btn-admin-push-enable', bd);
+      btn.disabled = true;
+      btn.textContent = 'Enabling…';
+      let ok = false;
+      try { ok = await enablePushReminders(); } catch (err) { /* toasted inside enablePushReminders */ }
+      if (ok) {
+        toast('✔ Notifications enabled on this device.');
+        dismissAdminPushPrompt();
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Enable Notifications';
+      }
+    });
+  });
 }
 
 // A password-only session is "aal1". Once an admin has enrolled a TOTP factor (see the

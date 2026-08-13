@@ -335,8 +335,7 @@ window.Views.attendance = (function () {
           <tbody>
             ${employees.map(emp => {
               const records = Store.attendanceInRange(monthFrom, monthTo).filter(a => a.employeeId === emp.id);
-              const recByDate = {};
-              records.forEach(r => { recByDate[r.date] = r; });
+              const recByDate = dedupeAttendanceByDate(records);
               const rowA = computeRow(emp, cutoffs[0].from, cutoffs[0].to);
               const rowB = computeRow(emp, cutoffs[1].from, cutoffs[1].to);
               const rowUpcoming = computeRow(emp, upcoming.from, upcoming.to);

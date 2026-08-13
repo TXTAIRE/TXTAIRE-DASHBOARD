@@ -233,8 +233,7 @@ function openDTR(emp, from, to) {
   qsa('.dtr-overlay').forEach(el => el.remove());
 
   const records = Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id);
-  const recByDate = {};
-  records.forEach(r => { recByDate[r.date] = r; });
+  const recByDate = dedupeAttendanceByDate(records);
 
   const holidays = Store.holidaysInRange(from, to);
   const holidayByDate = {};

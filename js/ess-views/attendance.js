@@ -229,8 +229,7 @@ window.EssViews.attendance = (function () {
     const holidayByDate = {};
     holidays.forEach(h => { holidayByDate[h.date] = h; });
     const records = Store.attendanceInRange(from, to).filter(r => r.employeeId === emp.id);
-    const recByDate = {};
-    records.forEach(r => { recByDate[r.date] = r; });
+    const recByDate = dedupeAttendanceByDate(records);
 
     const days = [];
     let d = to;
@@ -770,6 +769,19 @@ window.EssViews.attendance = (function () {
   async function saveClockEvent(emp, kind, photoPath, timeStr, date, locationText) {
     const location = combineLocationText(locationText) || null;
     if (kind === 'in') {
+      // The UI only ever offers Time In when there's no record yet for today (see
+      // quickClock/render above), but checking again here directly against the Store --
+      // right before the actual write, not just at button-render time -- closes any
+      // window for a second record to get created for the same day (e.g. HR logs the day
+      // manually in the moments between the button rendering and this actually running).
+      const existing = Store.attendanceForDate(date).find(r => r.employeeId === emp.id);
+      if (existing) {
+        await Store.updateAttendance(existing.id, {
+          timeIn: timeStr, status: 'Present',
+          timeInPhotoPath: photoPath, timeInLocation: location,
+        });
+        return;
+      }
       await Store.addAttendance({
         employeeId: emp.id, date, status: 'Present',
         timeIn: timeStr, timeOut: null, hours: 0,

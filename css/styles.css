@@ -129,6 +129,12 @@ html, body {
   font-weight: 600;
 }
 .nav-item .ic { width: 16px; text-align: center; opacity: .9; }
+.nav-badge {
+  margin-left: auto; background: var(--red, #e5484d); color: #fff;
+  font-size: 11px; font-weight: 700; line-height: 1; border-radius: 10px;
+  padding: 3px 6px; min-width: 8px; text-align: center;
+}
+.nav-item.active .nav-badge { background: #fff; color: var(--accent); }
 
 .sidebar-foot {
   margin-top: 24px;

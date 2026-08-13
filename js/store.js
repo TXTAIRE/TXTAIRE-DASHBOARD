@@ -377,8 +377,26 @@ function computeDayPay(dailyRateEq, rec, holiday) {
 // counted day (`to`) and its actual payDate (see payCutoffs) is what gives HR processing
 // time before payday — already baked into the cutoff span itself, so this just uses
 // `from`/`to` directly with no additional shift.
+// Attendance is meant to be one record per employee per date, but nothing has ever
+// stopped a second one for the same day (e.g. HR manually logs a day the employee
+// separately self-clocked via photo) -- when that happens, this makes the employee's
+// photo-verified record the authoritative one, both for the printable DTR/Calendar
+// display and for what actually counts toward pay, instead of an arbitrary "whichever
+// happened to load last" pick. Returns a { date: record } map.
+function dedupeAttendanceByDate(records) {
+  const byDate = {};
+  records.forEach(r => {
+    const existing = byDate[r.date];
+    if (!existing) { byDate[r.date] = r; return; }
+    const hasPhoto = !!(r.timeInPhotoPath || r.timeOutPhotoPath);
+    const existingHasPhoto = !!(existing.timeInPhotoPath || existing.timeOutPhotoPath);
+    if (hasPhoto && !existingHasPhoto) byDate[r.date] = r;
+  });
+  return byDate;
+}
+
 function computeRow(emp, from, to) {
-  const allRecords = Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id);
+  const allRecords = Object.values(dedupeAttendanceByDate(Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id)));
   const presentRecords = allRecords.filter(a => a.status === 'Present' || a.status === 'Late');
   const attendanceDays = presentRecords.length;
   const override = Store.getPayrollOverride(emp.id, from);
@@ -923,12 +941,13 @@ const Store = (function () {
     const r = getLeaveRequest(id);
     await updateRow('leaveRequests', id, { status, reviewedBy, reviewedDate: todayISO(), reviewNotes: reviewNotes || '' });
     if (r && (status === 'Approved' || status === 'Disapproved')) {
+      const notes = (reviewNotes || '').trim();
       await createNotification({
         employeeId: r.employeeId,
         // Internal notification type key stays 'leave_rejected' (icon lookup only, never
         // shown to the user) even though the status/message wording is now "Disapproved".
         type: status === 'Approved' ? 'leave_approved' : 'leave_rejected',
-        message: `Your ${r.leaveType} leave request (${fmtDate(r.startDate)} – ${fmtDate(r.endDate)}) was ${status.toLowerCase()}.`,
+        message: `Your ${r.leaveType} leave request (${fmtDate(r.startDate)} – ${fmtDate(r.endDate)}) was ${status.toLowerCase()}.${notes ? ' Remarks: ' + notes : ''}`,
         relatedTable: 'leaveRequests', relatedId: id,
       });
     }
@@ -966,10 +985,11 @@ const Store = (function () {
     const c = getAttendanceCorrection(id);
     await updateRow('attendanceCorrections', id, { status, reviewedBy, reviewedDate: todayISO(), reviewNotes: reviewNotes || '' });
     if (c && (status === 'Approved' || status === 'Rejected')) {
+      const notes = (reviewNotes || '').trim();
       await createNotification({
         employeeId: c.employeeId,
         type: status === 'Approved' ? 'correction_approved' : 'correction_rejected',
-        message: `Your attendance concern for ${fmtDate(c.date)} was ${status.toLowerCase()}.`,
+        message: `Your attendance concern for ${fmtDate(c.date)} was ${status.toLowerCase()}.${notes ? ' Remarks: ' + notes : ''}`,
         relatedTable: 'attendanceCorrections', relatedId: id,
       });
     }
