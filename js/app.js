@@ -91,7 +91,7 @@ function openDTR(emp, from, to) {
   let d = from;
   while (d <= to) { days.push(d); d = addDays(d, 1); }
 
-  let totalHours = 0, totalNsdHrs = 0, totalNsdPay = 0, totalOtHrs = 0, totalOtPay = 0, totalHolidayPay = 0;
+  let totalHours = 0, totalNsdHrs = 0, totalOtHrs = 0;
   const dayRows = days.map(date => {
     const r = recByDate[date];
     const holiday = holidayByDate[date];
@@ -99,10 +99,7 @@ function openDTR(emp, from, to) {
     const hrs = r ? (Number(r.hours) || 0) : 0;
     totalHours += hrs;
     totalNsdHrs += pay.nsdHrs;
-    totalNsdPay += pay.nsdPay;
     totalOtHrs += pay.otHrs;
-    totalOtPay += pay.otPay;
-    totalHolidayPay += pay.holidayPay;
     return { date, r, holiday, pay, hrs };
   });
 
@@ -156,17 +153,17 @@ function openDTR(emp, from, to) {
       </div>
 
       <div class="dtr-summary">
-        <div class="dtr-summary-title">Pay computation (per the Labor Code of the Philippines)</div>
+        <div class="dtr-summary-title">Summary — ${fmtDate(from)} to ${fmtDate(to)}</div>
         <table class="dtr-table">
-          <thead><tr><th>Component</th><th>Basis</th><th class="num">Amount</th></tr></thead>
+          <thead><tr><th>Item</th><th class="num">Total</th></tr></thead>
           <tbody>
-            <tr><td>Night Shift Differential</td><td class="dim">${totalNsdHrs.toFixed(2)} hr(s) worked 10:00 PM–6:00 AM &times; 10% of hourly rate</td><td class="num">${fmtMoney(totalNsdPay)}</td></tr>
-            <tr><td>Overtime Pay</td><td class="dim">${totalOtHrs.toFixed(2)} hr(s) beyond 8/day &times; 125% ordinary / 169% special holiday / 260% regular holiday</td><td class="num">${fmtMoney(totalOtPay)}</td></tr>
-            <tr><td>Holiday Pay</td><td class="dim">200% (regular) / 130% (special) if worked; full day's pay if an unworked regular holiday</td><td class="num">${fmtMoney(totalHolidayPay)}</td></tr>
-            <tr><td style="font-weight:700;">Total NSD + OT + Holiday</td><td></td><td class="num" style="font-weight:700;">${fmtMoney(totalNsdPay + totalOtPay + totalHolidayPay)}</td></tr>
+            <tr><td>Days Present</td><td class="num">${row.daysPresent}</td></tr>
+            <tr><td>Night Shift Differential</td><td class="num">${fmtMoney(row.nsdPay)}</td></tr>
+            <tr><td>Overtime Pay</td><td class="num">${fmtMoney(row.otPay)}</td></tr>
+            <tr><td>SIL (Service Incentive Leave)</td><td class="num">${silDaysInRange(emp.id, from, to)} day(s)</td></tr>
+            <tr><td>Holiday Pay</td><td class="num">${fmtMoney(row.holidayPay)}</td></tr>
           </tbody>
         </table>
-        <div class="page-sub" style="margin-top:6px;">Daily-rate equivalent used for these computations: ${fmtMoney(dailyRateEq)} / day (${fmtMoney(dailyRateEq / 8)} / hour).</div>
       </div>
 
       ${payslipSectionHtml(emp, from, to, row)}

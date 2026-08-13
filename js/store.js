@@ -64,6 +64,19 @@ function dateRangeDays(startDate, endDate) {
 // year. Fixed company-wide, not configurable per employee.
 const SIL_YEARLY_DAYS = 5;
 
+// Approved SIL days that overlap one specific cutoff (clipped to it, not the leave
+// request's full span if it runs longer than the cutoff) -- used on the printable DTR,
+// which reports per-cutoff, unlike the yearly balance shown on My Portal.
+function silDaysInRange(employeeId, from, to) {
+  return Store.leaveRequestsForEmployee(employeeId)
+    .filter(r => r.leaveType === 'SIL' && r.status === 'Approved' && r.startDate <= to && r.endDate >= from)
+    .reduce((sum, r) => {
+      const clippedStart = r.startDate > from ? r.startDate : from;
+      const clippedEnd = r.endDate < to ? r.endDate : to;
+      return sum + dateRangeDays(clippedStart, clippedEnd);
+    }, 0);
+}
+
 function addMonths(isoDate, n) {
   const d = new Date(isoDate + 'T00:00:00');
   const day = d.getDate();
