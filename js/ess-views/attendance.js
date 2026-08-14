@@ -34,7 +34,8 @@ window.EssViews.attendance = (function () {
       action = `<strong>${escapeHtml(valueWhenApproved)}</strong> <span class="badge badge-green">Approved</span>` +
         (timeGated ? '' : ` <button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Edit</button>`);
     } else if (statusVal === 'Requested') {
-      action = `<span class="badge badge-yellow">Pending approval</span> <button type="button" class="link-btn" data-cancel-request="${kind}" data-rec-id="${recId}">Cancel</button>`;
+      const requestedAtText = kind === 'ot' && rec.otRequestedAt ? ` <span class="dim" style="font-size:11px;">requested ${fmtDateTime(rec.otRequestedAt)}</span>` : '';
+      action = `<span class="badge badge-yellow">Pending approval</span>${requestedAtText} <button type="button" class="link-btn" data-cancel-request="${kind}" data-rec-id="${recId}">Cancel</button>`;
     } else if (statusVal === 'Rejected') {
       action = `<span class="badge badge-red">Rejected</span>` +
         (timeGated ? '' : ` <button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Request again</button>`);
@@ -70,7 +71,7 @@ window.EssViews.attendance = (function () {
         <div class="ess-row"><span class="label">Hours</span><span class="value">${rec.hours}</span></div>
         <div class="ess-row"><span class="label">Status</span><span class="value">${escapeHtml(rec.status)}</span></div>
         ${requestRow(rec, rec.nsdStatus, 'Night Shift Diff.', pay.nsdHrs.toFixed(2) + ' hr', 'nsd', nsdRawHrs > 0)}
-        ${requestRow(rec, rec.otStatus, 'Overtime', pay.otHrs.toFixed(2) + ' hr', 'ot', true)}
+        ${requestRow(rec, rec.otStatus, `Overtime (${to12Hour(rec.timeIn)}–${rec.timeOut ? to12Hour(rec.timeOut) : '—'})`, pay.otHrs.toFixed(2) + ' hr', 'ot', true)}
         ${requestRow(rec, rec.holidayStatus, holidayLabel, fmtMoney(pay.holidayPay), 'holiday', !!holiday)}
         ${Number(rec.hours) < 8 ? `<div class="ess-row"><span class="label">Undertime</span><span class="value">${(8 - Number(rec.hours)).toFixed(2)} hr</span></div>` : ''}
         ` : `<div class="ess-sub">Not logged${holiday ? ' · ' + escapeHtml(holiday.name) : ''}</div>`}
@@ -798,13 +799,16 @@ window.EssViews.attendance = (function () {
         timeOutPhotoPath: photoPath,
         timeOutLocation: location,
       };
-      // Time In/Time Out photo shows the employee actually worked past the standard
-      // 8-hour shift -- automatically files the OT request for HR instead of making the
-      // employee remember to click Request separately. Still just a request: js/store.js
-      // computeDayPay never counts OT toward pay until HR reviews and sets otStatus to
-      // 'Approved' (Attendance -> Requests) -- same as the reminder that travel time past
-      // the designated timeout doesn't count as OT unless HR approves it.
-      if (hours > 8) patch.otStatus = 'Requested';
+      // Clocking out past this employee's own scheduled end time (or, if they have no
+      // schedule set, past a flat 8-hour shift) automatically files the OT request for HR
+      // instead of making the employee remember to click Request separately. Still just a
+      // request: js/store.js computeDayPay never counts OT toward pay until HR reviews and
+      // sets otStatus to 'Approved' (Attendance -> Requests) -- same as the reminder that
+      // travel time past the designated timeout doesn't count as OT unless HR approves it.
+      const exceededSchedule = emp.defaultTimeOut
+        ? exceedsDefaultTimeOut(rec.timeIn, timeStr, emp.defaultTimeOut)
+        : hours > 8;
+      if (exceededSchedule) patch.otStatus = 'Requested';
       await Store.updateAttendance(rec.id, patch);
     }
   }

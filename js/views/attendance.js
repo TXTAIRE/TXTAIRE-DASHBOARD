@@ -118,7 +118,7 @@ window.Views.attendance = (function () {
       <div class="panel">
         ${pending.length ? `
         <table>
-          <thead><tr><th>Employee</th><th>Date</th><th>Type</th><th class="num">If approved</th><th></th></tr></thead>
+          <thead><tr><th>Employee</th><th>Date</th><th>Type</th><th>Time</th><th>Requested</th><th class="num">If approved</th><th></th></tr></thead>
           <tbody>
             ${pending.map(r => {
               const emp = empById[r.employeeId];
@@ -126,15 +126,18 @@ window.Views.attendance = (function () {
               const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (emp.rate / (workDaysInRange(r.date, r.date) || 1));
               const holiday = holidayByDate[r.date];
               const previewPay = computeDayPay(dailyRateEq, Object.assign({}, r, { nsdStatus: 'Approved', otStatus: 'Approved', holidayStatus: 'Approved' }), holiday);
+              const otTime = r.timeIn ? `${to12Hour(r.timeIn)}–${r.timeOut ? to12Hour(r.timeOut) : '—'}` : '—';
               const rows = [];
-              if (r.nsdStatus === 'Requested') rows.push({ kind: 'nsd', label: 'Night Shift Diff.', amount: fmtMoney(previewPay.nsdPay) });
-              if (r.otStatus === 'Requested') rows.push({ kind: 'ot', label: 'Overtime', amount: fmtMoney(previewPay.otPay) });
-              if (r.holidayStatus === 'Requested' && holiday) rows.push({ kind: 'holiday', label: `Holiday Pay (${escapeHtml(holiday.name)})`, amount: fmtMoney(previewPay.holidayPay) });
+              if (r.nsdStatus === 'Requested') rows.push({ kind: 'nsd', label: 'Night Shift Diff.', amount: fmtMoney(previewPay.nsdPay), time: '—', requestedAt: '—' });
+              if (r.otStatus === 'Requested') rows.push({ kind: 'ot', label: 'Overtime', amount: fmtMoney(previewPay.otPay), time: otTime, requestedAt: fmtDateTime(r.otRequestedAt) });
+              if (r.holidayStatus === 'Requested' && holiday) rows.push({ kind: 'holiday', label: `Holiday Pay (${escapeHtml(holiday.name)})`, amount: fmtMoney(previewPay.holidayPay), time: '—', requestedAt: '—' });
               return rows.map(row => `
                 <tr>
                   <td class="name">${escapeHtml(emp.name)}</td>
                   <td class="dim">${fmtDate(r.date)}</td>
                   <td>${row.label}</td>
+                  <td class="dim">${row.time}</td>
+                  <td class="dim">${row.requestedAt}</td>
                   <td class="num">${row.amount}</td>
                   <td style="white-space:nowrap;">
                     <button class="btn btn-primary btn-sm" data-decide="${row.kind}" data-decision="Approved" data-rec-id="${r.id}" data-label="${escapeHtml(row.label)}">Approve</button>

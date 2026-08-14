@@ -19,6 +19,11 @@ window.Views.adminFiles = (function () {
   let pasteListenerAttached = false;
   let selectedFileIds = new Set(); // ids checked in the currently open folder's table
   let selectedFolders = new Set(); // folder names checked on the "All Folders" grid
+  // Which column the currently-open folder's file table is sorted by -- click a header to
+  // sort by it, click again to flip direction. Defaults to newest-first, matching the
+  // fixed sort this table always used before column sorting existed.
+  let fileSortKey = 'created_at';
+  let fileSortDir = 'desc'; // 'asc' | 'desc'
   // Folder checkboxes stay hidden by default (keeps the grid clean) -- only appear once
   // "Select" is chosen from a folder's right-click menu. Automatically turns back off
   // once nothing is selected, so a stray click doesn't leave checkboxes stuck on.
@@ -469,6 +474,23 @@ window.Views.adminFiles = (function () {
     return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
   }
 
+  // Sortable columns for the file table inside an open folder.
+  const FILE_SORT_COLUMNS = [
+    { key: 'fileName', label: 'File' },
+    { key: 'fileSize', label: 'Size' },
+    { key: 'created_at', label: 'Uploaded' },
+    { key: 'uploadedBy', label: 'By' },
+  ];
+  function compareFiles(a, b, key) {
+    if (key === 'fileSize') return (a.fileSize || 0) - (b.fileSize || 0);
+    if (key === 'created_at') return (a.created_at || '').localeCompare(b.created_at || '');
+    return (a[key] || '').toLowerCase().localeCompare((b[key] || '').toLowerCase());
+  }
+  function sortedFileRows(rows) {
+    const sorted = [...rows].sort((a, b) => compareFiles(a, b, fileSortKey));
+    return fileSortDir === 'desc' ? sorted.reverse() : sorted;
+  }
+
   function renderView(main) {
     tryResumeWatch(main);
     if (activeFolder) renderFolderDetail(main);
@@ -867,9 +889,7 @@ window.Views.adminFiles = (function () {
   }
 
   function renderFolderDetail(main) {
-    const rows = Store.listOfficeFiles()
-      .filter(f => (f.category || 'Other') === activeFolder)
-      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    const rows = sortedFileRows(Store.listOfficeFiles().filter(f => (f.category || 'Other') === activeFolder));
     // Drop any selected ids that no longer exist in this folder (deleted elsewhere, or a
     // stale selection from before a refetch) so the "N selected" count is never wrong.
     selectedFileIds = new Set([...selectedFileIds].filter(id => rows.some(f => f.id === id)));
@@ -913,7 +933,8 @@ window.Views.adminFiles = (function () {
         <table>
           <thead><tr>
             <th style="width:32px;"><input type="checkbox" id="chk-select-all" ${rows.every(f => selectedFileIds.has(f.id)) ? 'checked' : ''} /></th>
-            <th>File</th><th>Size</th><th>Uploaded</th><th>By</th><th></th>
+            ${FILE_SORT_COLUMNS.map(c => `<th class="sortable-th" data-sort-key="${c.key}" title="Sort by ${c.label}">${c.label}${fileSortKey === c.key ? (fileSortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>`).join('')}
+            <th></th>
           </tr></thead>
           <tbody>
             ${rows.map(f => `
@@ -943,6 +964,12 @@ window.Views.adminFiles = (function () {
       </div>
     `;
 
+    qsa('[data-sort-key]', main).forEach(th => th.addEventListener('click', () => {
+      const key = th.dataset.sortKey;
+      if (fileSortKey === key) fileSortDir = fileSortDir === 'asc' ? 'desc' : 'asc';
+      else { fileSortKey = key; fileSortDir = key === 'created_at' ? 'desc' : 'asc'; }
+      renderFolderDetail(main);
+    }));
     qs('#btn-back-folders', main).addEventListener('click', () => { activeFolder = null; selectedFileIds = new Set(); renderView(main); });
     qs('#btn-upload-doc', main).addEventListener('click', () => openUploadModal(main, 'file'));
     qs('#btn-scan-doc', main).addEventListener('click', () => openUploadModal(main, 'scan'));

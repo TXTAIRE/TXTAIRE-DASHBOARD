@@ -34,6 +34,11 @@ create table employees (
                                                 -- skips the automatic late/undertime deduction for logging
                                                 -- under 8 hours in a day. true (default) preserves the
                                                 -- original behavior for everyone else.
+  "defaultTimeIn" text,                        -- this employee's scheduled Time In/Out, e.g. '08:00'/'17:00'.
+  "defaultTimeOut" text,                       -- Null = no schedule set. Clocking out later than
+                                                -- defaultTimeOut auto-files an OT request (js/ess-views/
+                                                -- attendance.js saveClockEvent); with no default set, that
+                                                -- employee keeps the flat "over 8 hours" fallback instead.
   notes text default '',
   "employeeCode" text unique,                  -- Employee Self-Service login ID = real company Employee Number, e.g. 'TXT015'
   "authUserId" uuid references auth.users(id), -- set once ESS portal access is granted (js/views/staff.js
@@ -127,6 +132,11 @@ create table attendance (
   -- status column actually transitions to 'Approved' (and cleared if it's ever un-approved),
   -- so there's always a clear audit trail distinguishing a genuine HR approval from any
   -- other value. Never set directly by application code.
+  -- When the employee actually submitted the OT request (stamped automatically the instant
+  -- "otStatus" transitions to 'Requested' -- see stamp_attendance_approvals below), distinct
+  -- from the record's own created_at (which is when the day's attendance row was first
+  -- created, e.g. at clock-in, possibly long before OT was requested or re-requested).
+  "otRequestedAt" timestamptz,
   "otApprovedBy" text,
   "otApprovedAt" timestamptz,
   "nsdApprovedBy" text,
@@ -2248,3 +2258,65 @@ alter table "payrollOverrides" add column if not exists net numeric(12,2);
 -- =================================================================
 
 alter table attendance add column if not exists "approvalNotes" text default '';
+
+-- =================================================================
+-- Stamp when an OT request was actually submitted (distinct from the attendance record's
+-- own created_at, which is when the day's row was first created -- e.g. at clock-in,
+-- possibly long before OT was requested or re-requested). Shown on the admin Requests tab
+-- and the employee's My Portal overtime entry. Incremental migration. Run once against a
+-- database that already has the migrations above applied. Safe to re-run.
+-- =================================================================
+
+alter table attendance add column if not exists "otRequestedAt" timestamptz;
+
+create or replace function stamp_attendance_approvals() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  actor text := auth.jwt() ->> 'email';
+  old_ot text := (case when TG_OP = 'INSERT' then null else old."otStatus" end);
+  old_nsd text := (case when TG_OP = 'INSERT' then null else old."nsdStatus" end);
+  old_holiday text := (case when TG_OP = 'INSERT' then null else old."holidayStatus" end);
+begin
+  if new."otStatus" = 'Requested' and (old_ot is distinct from 'Requested') then
+    new."otRequestedAt" := now();
+  end if;
+
+  if new."otStatus" = 'Approved' and (old_ot is distinct from 'Approved') then
+    new."otApprovedBy" := actor;
+    new."otApprovedAt" := now();
+  elsif new."otStatus" is distinct from 'Approved' then
+    new."otApprovedBy" := null;
+    new."otApprovedAt" := null;
+  end if;
+
+  if new."nsdStatus" = 'Approved' and (old_nsd is distinct from 'Approved') then
+    new."nsdApprovedBy" := actor;
+    new."nsdApprovedAt" := now();
+  elsif new."nsdStatus" is distinct from 'Approved' then
+    new."nsdApprovedBy" := null;
+    new."nsdApprovedAt" := null;
+  end if;
+
+  if new."holidayStatus" = 'Approved' and (old_holiday is distinct from 'Approved') then
+    new."holidayApprovedBy" := actor;
+    new."holidayApprovedAt" := now();
+  elsif new."holidayStatus" is distinct from 'Approved' then
+    new."holidayApprovedBy" := null;
+    new."holidayApprovedAt" := null;
+  end if;
+
+  return new;
+end;
+$$;
+
+-- =================================================================
+-- Per-employee default Time In / Time Out schedule -- lets self-clock-in automatically
+-- file an OT request the instant an employee clocks out later than their own default end
+-- time, instead of only ever comparing against a flat 8-hour shift. Nullable: an employee
+-- with no default set keeps the old flat 8-hour-based behavior (js/ess-views/attendance.js
+-- saveClockEvent). Incremental migration. Run once against a database that already has the
+-- migrations above applied. Safe to re-run.
+-- =================================================================
+
+alter table employees add column if not exists "defaultTimeIn" text;
+alter table employees add column if not exists "defaultTimeOut" text;

@@ -541,7 +541,7 @@ window.Views.staff = (function () {
 
   function openEmployeeModal(main, id) {
     const editing = id ? Store.getEmployee(id) : null;
-    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, housingAllowance: 0, nightShiftDifferential: false, fixedHours: true, payCycle: '10-20', notes: '', bankAccountNumber: '' };
+    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, housingAllowance: 0, nightShiftDifferential: false, fixedHours: true, defaultTimeIn: '', defaultTimeOut: '', payCycle: '10-20', notes: '', bankAccountNumber: '' };
 
     openModal(`
       <h2>${editing ? 'Edit employee' : 'Add employee'}</h2>
@@ -588,6 +588,9 @@ window.Views.staff = (function () {
               Fixed 8-hour workday <span class="dim">(uncheck for flexible/no set schedule — skips the automatic under-8-hours deduction)</span>
             </label>
           </div>
+          <div class="field"><label>Default Time In <span class="dim">(optional)</span></label><input type="time" name="defaultTimeIn" value="${escapeHtml(e.defaultTimeIn || '')}" /></div>
+          <div class="field"><label>Default Time Out <span class="dim">(optional)</span></label><input type="time" name="defaultTimeOut" value="${escapeHtml(e.defaultTimeOut || '')}" /></div>
+          <div class="field full page-sub" style="margin-top:-8px;">When set, clocking out later than the Default Time Out on My Portal automatically files an Overtime request. Leave blank to keep the flat "over 8 hours" rule instead.</div>
           <div class="field full"><label>Bank Account Number <span class="dim">(payroll — visible only to HR/admins and this employee)</span></label><input name="bankAccountNumber" value="${escapeHtml(e.bankAccountNumber || '')}" placeholder="e.g. GCash / bank account number" /></div>
           <div class="field full"><label>Notes</label><textarea name="notes" rows="2">${escapeHtml(e.notes || '')}</textarea></div>
         </div>
@@ -619,6 +622,8 @@ window.Views.staff = (function () {
           housingAllowance: Number(fd.get('housingAllowance')) || 0,
           nightShiftDifferential: fd.get('nightShiftDifferential') === 'on',
           fixedHours: fd.get('fixedHours') === 'on',
+          defaultTimeIn: fd.get('defaultTimeIn') || null,
+          defaultTimeOut: fd.get('defaultTimeOut') || null,
           bankAccountNumber: fd.get('bankAccountNumber').trim(),
           notes: fd.get('notes').trim(),
         };

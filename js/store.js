@@ -106,6 +106,12 @@ function fmtDate(iso) {
   return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 }
 
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
 function fmtMoney(n) {
   const v = Number(n) || 0;
   return '₱' + v.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -298,6 +304,21 @@ function hoursBetween(timeIn, timeOut) {
   let start = toMin(timeIn), end = toMin(timeOut);
   if (end <= start) end += 1440; // crosses midnight
   return Math.round(((end - start) / 60) * 100) / 100;
+}
+
+// Did an employee clock out later than their own scheduled end time? Both actualTimeOut
+// and defaultTimeOut are anchored relative to timeIn (same "crosses midnight" handling as
+// hoursBetween) so an overnight shift (e.g. in 22:00, default out 06:00) compares
+// correctly instead of looking like it ended hours "early."
+function exceedsDefaultTimeOut(timeIn, actualTimeOut, defaultTimeOut) {
+  if (!timeIn || !actualTimeOut || !defaultTimeOut) return false;
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const start = toMin(timeIn);
+  let actual = toMin(actualTimeOut);
+  let def = toMin(defaultTimeOut);
+  if (actual <= start) actual += 1440;
+  if (def <= start) def += 1440;
+  return actual > def;
 }
 
 // Hours of a shift ("HH:MM"-"HH:MM") that fall within the legal night-shift-differential

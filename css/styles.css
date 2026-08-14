@@ -344,6 +344,8 @@ thead th {
   border-bottom: 1px solid var(--border-soft);
   white-space: nowrap;
 }
+th.sortable-th { cursor: pointer; user-select: none; }
+th.sortable-th:hover { color: var(--text); }
 tbody td {
   padding: 13px 16px;
   border-bottom: 1px solid var(--border-soft);
