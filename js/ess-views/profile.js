@@ -127,7 +127,11 @@ window.EssViews.profile = (function () {
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0;">My Profile</div>
       <div class="ess-card" style="text-align:center;">
-        <div id="profile-photo-wrap" style="margin-bottom:10px;"></div>
+        <div style="position:relative; width:88px; height:88px; margin:0 auto 10px;">
+          <div id="profile-photo-wrap" style="width:100%; height:100%;"></div>
+          <button type="button" id="btn-edit-photo-pen" title="Edit Profile Picture" style="position:absolute; bottom:-2px; right:-2px; width:28px; height:28px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; border:2px solid var(--bg-card); padding:0; cursor:pointer;">✏️</button>
+          <input type="file" accept="image/*" id="input-avatar-photo" style="display:none;" />
+        </div>
         <div style="font-size:18px; font-weight:700;">${escapeHtml(emp.name)}</div>
         <div class="ess-sub">${escapeHtml(emp.position || '—')}</div>
       </div>
@@ -202,17 +206,36 @@ window.EssViews.profile = (function () {
     `;
 
     const photoWrap = qs('#profile-photo-wrap', main);
-    const avatarStyle = 'width:88px; height:88px; border-radius:50%; object-fit:cover; border:1px solid var(--border-soft);';
+    const avatarStyle = 'width:100%; height:100%; border-radius:50%; object-fit:cover; border:1px solid var(--border-soft);';
+    qs('#btn-edit-photo-pen', main).addEventListener('click', () => qs('#input-avatar-photo', main).click());
+    qs('#input-avatar-photo', main).addEventListener('change', (ev) => {
+      const file = ev.target.files[0];
+      ev.target.value = '';
+      if (!file) return;
+      openPhotoCropOverlay(file, async (croppedBlob) => {
+        const oldPath = emp.photoPath;
+        try {
+          const newPath = await Store.uploadEmployeePhoto(emp.id, croppedBlob);
+          await Store.updateEmployee(emp.id, { photoPath: newPath });
+          if (oldPath) await Store.deleteEmployeePhoto(oldPath);
+          emp.photoPath = newPath;
+          toast('✔ Profile picture updated.');
+          render(main, emp);
+        } catch (err) {
+          toast('Could not update photo — try again.');
+        }
+      });
+    });
     if (emp.photoPath) {
       photoWrap.innerHTML = `<div class="ess-sub">Loading photo…</div>`;
       Store.getSignedEmployeePhotoUrl(emp.photoPath).then((url) => {
         if (!qs('#profile-photo-wrap', main)) return; // view changed while the signed URL was loading
         photoWrap.innerHTML = url
           ? `<img src="${url}" alt="Profile photo" style="${avatarStyle}" />`
-          : `<div style="${avatarStyle} display:flex; align-items:center; justify-content:center; margin:0 auto; background:var(--bg-elevated);">📷</div>`;
+          : `<div style="${avatarStyle} display:flex; align-items:center; justify-content:center; background:var(--bg-elevated);">📷</div>`;
       });
     } else {
-      photoWrap.innerHTML = `<div style="${avatarStyle} display:flex; align-items:center; justify-content:center; margin:0 auto; background:var(--bg-elevated); font-size:32px;">👤</div>`;
+      photoWrap.innerHTML = `<div style="${avatarStyle} display:flex; align-items:center; justify-content:center; background:var(--bg-elevated); font-size:32px;">👤</div>`;
     }
 
     const qrWrap = qs('#qr-preview-wrap', main);
