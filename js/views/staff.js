@@ -52,7 +52,7 @@ window.Views.staff = (function () {
           <thead>
             <tr>
               <th>Name</th><th>Category</th><th>Position</th><th>Status</th><th>Employment</th>
-              <th>Rate</th><th>COLA</th><th>Payday</th><th></th>
+              <th>Rate</th><th>COLA</th><th>Payday</th><th>Default Hours</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -66,6 +66,7 @@ window.Views.staff = (function () {
                 <td class="dim">${e.payType === 'Daily' ? fmtMoney(e.rate) + '/day' : fmtMoney(e.rate) + '/cutoff'}</td>
                 <td class="dim">${(e.allowancePerDay || e.fixedAllowance) ? [e.allowancePerDay ? fmtMoney(e.allowancePerDay) + '/day' : null, e.fixedAllowance ? fmtMoney(e.fixedAllowance) + '/cutoff' : null].filter(Boolean).join(' + ') : '—'}</td>
                 <td class="dim">${e.payCycle ? paydayLabel(e.payCycle) : '—'}</td>
+                <td><button type="button" class="link-btn" data-set-hours="${e.id}" title="Set default Time In/Out — used to auto-detect late arrivals and file Overtime requests">${e.defaultTimeIn && e.defaultTimeOut ? escapeHtml(to12Hour(e.defaultTimeIn)) + '–' + escapeHtml(to12Hour(e.defaultTimeOut)) : '🕒 Set hours'}</button></td>
                 <td><button class="link-btn" data-edit="${e.id}">Edit →</button></td>
               </tr>
             `).join('')}
@@ -80,6 +81,51 @@ window.Views.staff = (function () {
     qsa('#seg-employment button', main).forEach(b => b.addEventListener('click', () => { filterEmployment = b.dataset.val; renderList(main); }));
     qsa('[data-edit]', main).forEach(b => b.addEventListener('click', () => openEmployeeModal(main, b.dataset.edit)));
     qsa('[data-open]', main).forEach(b => b.addEventListener('click', () => openEmployeeDetail(main, b.dataset.open)));
+    qsa('[data-set-hours]', main).forEach(b => b.addEventListener('click', () => openSetHoursModal(main, b.dataset.setHours, renderList)));
+  }
+
+  // Quick action — sets just Default Time In/Out without opening the full Edit Employee
+  // form. Used to auto-detect late arrivals and auto-file Overtime requests on My Portal
+  // (js/store.js isLateArrival/exceedsDefaultTimeOut, both with a 15-minute grace period),
+  // and to correctly exclude the unpaid lunch break from real OT pay (effectivePaidHours).
+  // `onSaved(main)` re-renders whichever view opened this (the list or the detail drawer).
+  function openSetHoursModal(main, id, onSaved) {
+    const e = Store.getEmployee(id);
+    if (!e) return;
+    openModal(`
+      <h2>Default Working Hours</h2>
+      <div class="modal-sub">${escapeHtml(e.name)} — used to auto-detect late arrivals and auto-file Overtime requests on My Portal (15-minute grace period either side), and to correctly compute overtime pay excluding the unpaid lunch break.</div>
+      <form id="set-hours-form">
+        <div class="modal-grid">
+          <div class="field"><label>Default Time In</label><input type="time" name="defaultTimeIn" value="${escapeHtml(e.defaultTimeIn || '')}" /></div>
+          <div class="field"><label>Default Time Out</label><input type="time" name="defaultTimeOut" value="${escapeHtml(e.defaultTimeOut || '')}" /></div>
+        </div>
+        <div class="modal-actions">
+          ${e.defaultTimeIn || e.defaultTimeOut ? '<button type="button" class="btn btn-ghost" id="btn-clear-hours" style="margin-right:auto;">Clear</button>' : ''}
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    `, (bd) => {
+      const clearBtn = qs('#btn-clear-hours', bd);
+      if (clearBtn) clearBtn.addEventListener('click', async () => {
+        await Store.updateEmployee(id, { defaultTimeIn: null, defaultTimeOut: null });
+        toast('✔ Default hours cleared.');
+        closeModal();
+        onSaved(main);
+      });
+      qs('#set-hours-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        await Store.updateEmployee(id, {
+          defaultTimeIn: fd.get('defaultTimeIn') || null,
+          defaultTimeOut: fd.get('defaultTimeOut') || null,
+        });
+        toast('✔ Default hours updated.');
+        closeModal();
+        onSaved(main);
+      });
+    });
   }
 
   function documentStatusBadge(status) {
@@ -116,7 +162,9 @@ window.Views.staff = (function () {
         ${e.allowancePerDay ? 'COLA: ' + fmtMoney(e.allowancePerDay) + ' / day<br/>' : ''}
         ${e.fixedAllowance ? 'Fixed COLA: ' + fmtMoney(e.fixedAllowance) + ' / cutoff<br/>' : ''}
         ${e.housingAllowance ? 'Housing Allowance: ' + fmtMoney(e.housingAllowance) + ' / cutoff<br/>' : ''}
-        Payday: ${e.payCycle ? paydayLabel(e.payCycle) : '—'}
+        Payday: ${e.payCycle ? paydayLabel(e.payCycle) : '—'}<br/>
+        Default hours: ${e.defaultTimeIn && e.defaultTimeOut ? escapeHtml(to12Hour(e.defaultTimeIn)) + '–' + escapeHtml(to12Hour(e.defaultTimeOut)) : '<span class="dim">not set</span>'}
+        <button type="button" class="link-btn" id="btn-set-hours" style="margin-left:6px;">${e.defaultTimeIn && e.defaultTimeOut ? 'Change' : 'Set'}</button>
       </div>
       ${e.notes ? `<div class="section-title">Notes</div><div class="page-sub">${escapeHtml(e.notes)}</div>` : ''}
       <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
@@ -194,6 +242,7 @@ window.Views.staff = (function () {
         photoWrap.innerHTML = `<div style="${avatarStyle} display:flex; align-items:center; justify-content:center; background:var(--bg-elevated); font-size:28px;">👤</div>`;
       }
       qs('#drawer-edit', dr).addEventListener('click', () => { closeDrawer(); openEmployeeModal(main, id); });
+      qs('#btn-set-hours', dr).addEventListener('click', () => openSetHoursModal(main, id, () => { closeDrawer(); openEmployeeDetail(main, id); }));
       const viewQrBtn = qs('#btn-view-bank-qr', dr);
       if (viewQrBtn) viewQrBtn.addEventListener('click', () => {
         const win = window.open('', '_blank');
