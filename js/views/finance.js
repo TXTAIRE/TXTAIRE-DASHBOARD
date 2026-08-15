@@ -12,6 +12,11 @@ window.Views.finance = (function () {
   const BILL_CATEGORIES = ['Rent', 'Utilities', 'Other'];
 
   let expenseMonth = todayISO().slice(0, 7); // 'YYYY-MM'
+  // Which date the month filter (and Print Report/Export Excel) group by -- 'encoded'
+  // (created_at, when it was actually entered into the system) or 'issued' (the receipt's
+  // own Date Issued). Defaults to 'encoded': a receipt from May keyed in during a August
+  // catch-up session should land in August's report, not get scattered back into May's.
+  let expenseFilterBy = 'encoded'; // 'encoded' | 'issued'
   let voucherMonth = todayISO().slice(0, 7); // 'YYYY-MM'
 
   function renderView(main) {
@@ -109,7 +114,7 @@ window.Views.finance = (function () {
   // for a physical/PDF expense report to file or route for approval -- reuses the DTR's
   // print overlay/table classes (js/app.js openDTR, css/styles.css .dtr-*) rather than
   // duplicating that CSS, since they're already a generic print-ready document layout.
-  function openExpenseReportPrintView(rows, monthLabel, total) {
+  function openExpenseReportPrintView(rows, monthLabel, total, filterLabel) {
     const overlay = document.createElement('div');
     overlay.className = 'dtr-overlay';
     overlay.innerHTML = `
@@ -123,16 +128,17 @@ window.Views.finance = (function () {
           <h2>Expense Report</h2>
         </div>
         <div class="dtr-meta">
-          <div><strong>Period:</strong> ${escapeHtml(monthLabel)}</div>
+          <div><strong>Period:</strong> ${escapeHtml(monthLabel)} (by ${escapeHtml(filterLabel || 'Date Encoded')})</div>
           <div><strong>Entries:</strong> ${rows.length}</div>
         </div>
         <div class="dtr-table-wrap">
         <table class="dtr-table">
-          <thead><tr><th>Date</th><th>Entity</th><th>Vendor</th><th>Invoice #</th><th>TIN</th><th>Location</th><th>Particulars</th><th class="num">Amount</th><th>Description</th><th>Receipt</th><th>Entered By</th></tr></thead>
+          <thead><tr><th>Date Issued</th><th>Date Encoded</th><th>Entity</th><th>Vendor</th><th>Invoice #</th><th>TIN</th><th>Location</th><th>Particulars</th><th class="num">Amount</th><th>Description</th><th>Receipt</th><th>Entered By</th></tr></thead>
           <tbody>
             ${rows.map(r => `
               <tr>
                 <td>${fmtDate(r.date)}</td>
+                <td>${fmtDate((r.created_at || '').slice(0, 10))}</td>
                 <td>${escapeHtml(r.entity || ENTITY_OPTIONS[0])}</td>
                 <td>${escapeHtml(r.vendor)}</td>
                 <td>${escapeHtml(r.invoiceNumber || '—')}</td>
@@ -147,7 +153,7 @@ window.Views.finance = (function () {
             `).join('')}
           </tbody>
           <tfoot><tr>
-            <td colspan="7" style="text-align:right;font-weight:600;">Total</td>
+            <td colspan="8" style="text-align:right;font-weight:600;">Total</td>
             <td class="num" style="font-weight:600;">${fmtMoney(total)}</td>
             <td colspan="3"></td>
           </tr></tfoot>
@@ -221,31 +227,45 @@ window.Views.finance = (function () {
   function renderExpensesTab(body, main) {
     const from = expenseMonth + '-01';
     const to = expenseMonth + '-31';
-    const rows = Store.expensesInRange(from, to).slice().sort((a, b) => b.date.localeCompare(a.date));
+    const rows = (expenseFilterBy === 'encoded'
+      ? Store.listExpenses().filter(e => { const d = (e.created_at || '').slice(0, 10); return d >= from && d <= to; })
+      : Store.expensesInRange(from, to)
+    ).slice().sort((a, b) => a.date.localeCompare(b.date));
     const total = rows.reduce((s, r) => s + Number(r.amount), 0);
     const monthLabel = new Date(expenseMonth + '-01T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const filterLabel = expenseFilterBy === 'encoded' ? 'Date Encoded' : 'Date Issued';
 
     body.innerHTML = `
       ${sheetsBackupCard(main)}
       <div class="filters">
         <div class="field"><label>Month</label><input type="month" id="expense-month-input" value="${expenseMonth}" /></div>
+        <div class="field"><label>Filter &amp; group by</label>
+          <div class="seg" id="seg-expense-filter-by">
+            <button data-val="encoded" class="${expenseFilterBy === 'encoded' ? 'active' : ''}">Date Encoded</button>
+            <button data-val="issued" class="${expenseFilterBy === 'issued' ? 'active' : ''}">Date Issued</button>
+          </div>
+        </div>
         <button class="btn btn-ghost btn-sm" id="btn-print-expenses" style="align-self:flex-end;" ${rows.length ? '' : 'disabled'}>🖨 Print Report</button>
         <button class="btn btn-ghost btn-sm" id="btn-export-expenses" style="align-self:flex-end;">📥 Export Excel</button>
       </div>
+      <div class="page-sub" style="margin-bottom:10px;">${expenseFilterBy === 'encoded'
+        ? 'Groups by when each receipt was entered into the system -- a May/June/July receipt encoded during August shows up (and prints) under August.'
+        : 'Groups by the date printed on the receipt itself, regardless of when it was entered.'}</div>
 
       <div class="kpi-row">
-        <div class="kpi-card"><div class="kpi-label">Total Expenses — ${monthLabel}</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(total)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Expenses — ${monthLabel} (by ${filterLabel})</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(total)}</div></div>
         <div class="kpi-card"><div class="kpi-label">Entries</div><div class="kpi-value">${rows.length}</div></div>
       </div>
 
       <div class="panel">
         ${rows.length ? `
         <table>
-          <thead><tr><th>Date</th><th>Entity</th><th>Vendor</th><th>Invoice #</th><th>TIN</th><th>Location</th><th>Particulars</th><th class="num">Amount</th><th>Description</th><th>Receipt</th><th>Entered By</th><th></th></tr></thead>
+          <thead><tr><th>Date Issued</th><th>Date Encoded</th><th>Entity</th><th>Vendor</th><th>Invoice #</th><th>TIN</th><th>Location</th><th>Particulars</th><th class="num">Amount</th><th>Description</th><th>Receipt</th><th>Entered By</th><th></th></tr></thead>
           <tbody>
             ${rows.map(r => `
               <tr>
                 <td class="dim">${fmtDate(r.date)}</td>
+                <td class="dim">${fmtDate((r.created_at || '').slice(0, 10))}</td>
                 <td class="dim">${escapeHtml(r.entity || ENTITY_OPTIONS[0])}</td>
                 <td class="name">${escapeHtml(r.vendor)}</td>
                 <td class="dim">${escapeHtml(r.invoiceNumber || '—')}</td>
@@ -268,8 +288,9 @@ window.Views.finance = (function () {
     `;
 
     qs('#expense-month-input', body).addEventListener('change', (ev) => { expenseMonth = ev.target.value; renderExpensesTab(body, main); });
+    qsa('#seg-expense-filter-by button', body).forEach(b => b.addEventListener('click', () => { expenseFilterBy = b.dataset.val; renderExpensesTab(body, main); }));
     const printExpensesBtn = qs('#btn-print-expenses', body);
-    if (printExpensesBtn && !printExpensesBtn.disabled) printExpensesBtn.addEventListener('click', () => openExpenseReportPrintView(rows, monthLabel, total));
+    if (printExpensesBtn && !printExpensesBtn.disabled) printExpensesBtn.addEventListener('click', () => openExpenseReportPrintView(rows, monthLabel, total, filterLabel));
     qs('#btn-export-expenses', body).addEventListener('click', () => downloadExpensesWorkbook(rows, monthLabel));
     const backupBtn = qs('#btn-sheets-backup-settings', body);
     if (backupBtn) backupBtn.addEventListener('click', () => openSheetsBackupSettingsModal(main));
