@@ -128,7 +128,7 @@ window.Views.finance = (function () {
         </div>
         <div class="dtr-table-wrap">
         <table class="dtr-table">
-          <thead><tr><th>Date</th><th>Entity</th><th>Vendor</th><th>Invoice #</th><th>TIN</th><th>Location</th><th>Particulars</th><th class="num">Amount</th></tr></thead>
+          <thead><tr><th>Date</th><th>Entity</th><th>Vendor</th><th>Invoice #</th><th>TIN</th><th>Location</th><th>Particulars</th><th class="num">Amount</th><th>Description</th><th>Receipt</th><th>Entered By</th></tr></thead>
           <tbody>
             ${rows.map(r => `
               <tr>
@@ -140,12 +140,16 @@ window.Views.finance = (function () {
                 <td>${escapeHtml(r.location || '—')}</td>
                 <td>${escapeHtml(r.category)}</td>
                 <td class="num">${fmtMoney(r.amount)}</td>
+                <td>${escapeHtml(r.description || '—')}</td>
+                <td>${r.receiptPath ? 'Yes' : '—'}</td>
+                <td>${escapeHtml(r.enteredBy || '—')}</td>
               </tr>
             `).join('')}
           </tbody>
           <tfoot><tr>
             <td colspan="7" style="text-align:right;font-weight:600;">Total</td>
             <td class="num" style="font-weight:600;">${fmtMoney(total)}</td>
+            <td colspan="3"></td>
           </tr></tfoot>
         </table>
         </div>
