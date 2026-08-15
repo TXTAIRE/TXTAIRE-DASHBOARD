@@ -3,10 +3,15 @@ window.EssViews.profile = (function () {
     const map = { Pending: 'badge-yellow', Verified: 'badge-green', Rejected: 'badge-red' };
     return `<span class="badge ${map[status] || 'badge-gray'}">${escapeHtml(status)}</span>`;
   }
+  function scheduleStatusBadge(status) {
+    const map = { Pending: 'badge-yellow', Approved: 'badge-green', Rejected: 'badge-red' };
+    return `<span class="badge ${map[status] || 'badge-gray'}">${escapeHtml(status)}</span>`;
+  }
 
   function render(main, emp) {
     const history = Store.employmentHistoryForEmployee(emp.id);
     const docs = Store.employeeDocumentsForEmployee(emp.id);
+    const scheduleRequests = Store.scheduleChangeRequestsForEmployee(emp.id).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
 
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0;">My Profile</div>
@@ -25,6 +30,20 @@ window.EssViews.profile = (function () {
         <div class="ess-card-label">Contact</div>
         <div class="ess-row"><span class="label">Phone</span><span class="value">${escapeHtml(emp.phone || '—')}</span></div>
         <div class="ess-row"><span class="label">Email</span><span class="value">${escapeHtml(emp.email || '—')}</span></div>
+      </div>
+      <div class="ess-card">
+        <div class="ess-card-label" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>Working Schedule</span>
+          <button type="button" class="link-btn" id="btn-request-schedule">Request Change</button>
+        </div>
+        <div class="ess-row"><span class="label">Default Time In</span><span class="value">${emp.defaultTimeIn ? to12Hour(emp.defaultTimeIn) : '—'}</span></div>
+        <div class="ess-row"><span class="label">Default Time Out</span><span class="value">${emp.defaultTimeOut ? to12Hour(emp.defaultTimeOut) : '—'}</span></div>
+        ${scheduleRequests.length ? scheduleRequests.map(r => `
+          <div class="ess-sub" style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border-soft);">
+            ${to12Hour(r.requestedTimeIn)} – ${to12Hour(r.requestedTimeOut)} ${scheduleStatusBadge(r.status)}
+            ${r.reviewNotes ? `<br/>HR: ${escapeHtml(r.reviewNotes)}` : ''}
+          </div>
+        `).join('') : ''}
       </div>
       <div class="ess-card">
         <div class="ess-card-label">Bank Details</div>
@@ -99,6 +118,7 @@ window.EssViews.profile = (function () {
     }
 
     qs('#btn-edit-profile', main).addEventListener('click', () => openEditProfile(main, emp));
+    qs('#btn-request-schedule', main).addEventListener('click', () => openRequestScheduleModal(main, emp));
     qs('#btn-add-history', main).addEventListener('click', () => openEmploymentHistoryForm(main, emp));
     qsa('[data-edit-history]', main).forEach(b => b.addEventListener('click', () => {
       const h = history.find(x => x.id === b.dataset.editHistory);
@@ -235,6 +255,42 @@ window.EssViews.profile = (function () {
           await Store.addEmploymentHistory(Object.assign({ employeeId: emp.id, category: emp.category }, patch));
           toast('✔ Employment history entry added.');
         }
+        closeEssModal();
+        render(main, emp);
+      });
+    });
+  }
+
+  // Employee-submitted request for a new Default Time In/Out -- doesn't change anything
+  // directly (js/store.js addScheduleChangeRequest just inserts a Pending row); HR reviews
+  // and approves it on the Schedule Requests dashboard page, which is what actually applies
+  // the new schedule (js/store.js reviewScheduleChangeRequest).
+  function openRequestScheduleModal(main, emp) {
+    openEssModal(`
+      <h2>Request Schedule Change</h2>
+      <div class="modal-sub">HR will review and approve before it takes effect.</div>
+      <form id="schedule-request-form">
+        <div class="modal-grid">
+          <div class="field"><label>Requested Time In</label><input type="time" name="requestedTimeIn" value="${escapeHtml(emp.defaultTimeIn || '')}" required /></div>
+          <div class="field"><label>Requested Time Out</label><input type="time" name="requestedTimeOut" value="${escapeHtml(emp.defaultTimeOut || '')}" required /></div>
+          <div class="field full"><label>Reason <span class="dim" style="font-weight:400;">(optional)</span></label><textarea name="reason" rows="2"></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Submit</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#schedule-request-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        await Store.addScheduleChangeRequest({
+          employeeId: emp.id,
+          requestedTimeIn: fd.get('requestedTimeIn'),
+          requestedTimeOut: fd.get('requestedTimeOut'),
+          reason: fd.get('reason').trim(),
+        });
+        toast('✔ Schedule change requested — HR will review it.');
         closeEssModal();
         render(main, emp);
       });

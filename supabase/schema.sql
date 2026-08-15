@@ -2354,3 +2354,63 @@ create policy "admin full access to employee photos" on storage.objects
   for all to authenticated
   using (bucket_id = 'employee-photos' and is_admin())
   with check (bucket_id = 'employee-photos' and is_admin());
+
+-- =================================================================
+-- Schedule Change Requests (Employee Self-Service) -- an employee requests a new Default
+-- Time In/Out from My Portal; HR reviews on the dashboard. Unlike Attendance Corrections,
+-- approving here DOES apply the change directly (js/store.js reviewScheduleChangeRequest
+-- sets employees.defaultTimeIn/defaultTimeOut) -- there's no ambiguity to resolve since the
+-- request already carries the exact new values HR is approving.
+-- Incremental migration. Run once against a database that already has the migrations above
+-- applied, AND after deploying the employee-request-notify Edge Function (same one used by
+-- Leave Requests/Attendance Corrections/NSD-OT-Holiday, see the "Employee request push
+-- notifications" migration above). Safe to re-run.
+-- =================================================================
+
+create table if not exists "scheduleChangeRequests" (
+  id text primary key,
+  "employeeId" text not null references employees(id) on delete cascade,
+  "requestedTimeIn" text,
+  "requestedTimeOut" text,
+  reason text default '',
+  status text not null default 'Pending',      -- 'Pending' | 'Approved' | 'Rejected'
+  "reviewedBy" text,
+  "reviewedDate" date,
+  "reviewNotes" text default '',
+  created_at timestamptz not null default now()
+);
+
+alter table "scheduleChangeRequests" enable row level security;
+
+drop policy if exists "admin full access" on "scheduleChangeRequests";
+create policy "admin full access" on "scheduleChangeRequests"
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "employee reads own schedule change requests" on "scheduleChangeRequests";
+create policy "employee reads own schedule change requests" on "scheduleChangeRequests"
+  for select to authenticated using ("employeeId" = my_employee_id());
+drop policy if exists "employee submits own schedule change requests" on "scheduleChangeRequests";
+create policy "employee submits own schedule change requests" on "scheduleChangeRequests"
+  for insert to authenticated with check ("employeeId" = my_employee_id());
+
+create or replace function notify_new_schedule_change_request() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  emp_name text;
+begin
+  select name into emp_name from employees where id = NEW."employeeId";
+  perform net.http_post(
+    url := 'https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/employee-request-notify',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', '5f24f19fdf651e99db5d397158bda6a8a4c48f59c06df3cc'),
+    body := jsonb_build_object(
+      'employeeName', coalesce(emp_name, 'An employee'),
+      'detail', 'Schedule change request: ' || coalesce(NEW."requestedTimeIn", '?') || '-' || coalesce(NEW."requestedTimeOut", '?')
+    )
+  );
+  return NEW;
+end;
+$$;
+
+drop trigger if exists trg_notify_new_schedule_change_request on "scheduleChangeRequests";
+create trigger trg_notify_new_schedule_change_request
+  after insert on "scheduleChangeRequests"
+  for each row execute function notify_new_schedule_change_request();

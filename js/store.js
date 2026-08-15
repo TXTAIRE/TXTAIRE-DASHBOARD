@@ -624,6 +624,7 @@ const Store = (function () {
     payCutoffSettings: 'payCutoffSettings',
     leaveRequests: 'leaveRequests',
     attendanceCorrections: 'attendanceCorrections',
+    scheduleChangeRequests: 'scheduleChangeRequests',
     auditLog: 'auditLog',
     notifications: 'notifications',
     payrollReleases: 'payrollReleases',
@@ -642,7 +643,7 @@ const Store = (function () {
     employees: [], candidates: [], disciplinaryCases: [], complaints: [],
     attendance: [], deductions: [], bonuses: [], probationRecords: [], payrollOverrides: [], holidays: [],
     payCutoffSettings: [],
-    leaveRequests: [], attendanceCorrections: [], auditLog: [],
+    leaveRequests: [], attendanceCorrections: [], scheduleChangeRequests: [], auditLog: [],
     notifications: [], payrollReleases: [], appSettings: [],
     expenses: [], bills: [], officeFiles: [],
     employmentHistory: [], employeeDocuments: [],
@@ -1123,6 +1124,45 @@ const Store = (function () {
     await deleteRow('attendanceCorrections', id);
   }
 
+  // ---- Schedule Change Requests (Employee Self-Service) ----
+  // An employee requests a new Default Time In/Out from My Portal; HR reviews it here.
+  function listScheduleChangeRequests() { return state.scheduleChangeRequests.slice(); }
+  function getScheduleChangeRequest(id) { return state.scheduleChangeRequests.find(r => r.id === id); }
+  function scheduleChangeRequestsForEmployee(employeeId) { return state.scheduleChangeRequests.filter(r => r.employeeId === employeeId); }
+  async function addScheduleChangeRequest(r) {
+    r.id = genId('scr');
+    r.status = 'Pending';
+    return insertRow('scheduleChangeRequests', r);
+  }
+  // Unlike reviewAttendanceCorrection, Approved here DOES apply the change directly --
+  // the request already carries the exact new Default Time In/Out, so there's nothing left
+  // for HR to separately go enter (see the Set Hours quick action on Employee Management).
+  async function reviewScheduleChangeRequest(id, status, reviewedBy, reviewNotes) {
+    const r = getScheduleChangeRequest(id);
+    await updateRow('scheduleChangeRequests', id, { status, reviewedBy, reviewedDate: todayISO(), reviewNotes: reviewNotes || '' });
+    if (r && status === 'Approved') {
+      await updateEmployee(r.employeeId, { defaultTimeIn: r.requestedTimeIn || null, defaultTimeOut: r.requestedTimeOut || null });
+    }
+    if (r && (status === 'Approved' || status === 'Rejected')) {
+      const notes = (reviewNotes || '').trim();
+      const timeRange = `${to12Hour(r.requestedTimeIn)} – ${to12Hour(r.requestedTimeOut)}`;
+      await createNotification({
+        employeeId: r.employeeId,
+        type: status === 'Approved' ? 'schedule_change_approved' : 'schedule_change_rejected',
+        message: `Your schedule change request (${timeRange}) was ${status.toLowerCase()}.${notes ? ' Remarks: ' + notes : ''}`,
+        relatedTable: 'scheduleChangeRequests', relatedId: id,
+      });
+    }
+    return getScheduleChangeRequest(id);
+  }
+  async function updateScheduleChangeRequestNotes(id, notes) {
+    await updateRow('scheduleChangeRequests', id, { reviewNotes: notes || '' });
+    return getScheduleChangeRequest(id);
+  }
+  async function deleteScheduleChangeRequest(id) {
+    await deleteRow('scheduleChangeRequests', id);
+  }
+
   // ---- Audit Log (read-only in the app; populated automatically by insertRow/updateRow/deleteRow) ----
   function listAuditLog() { return state.auditLog.slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')); }
 
@@ -1511,6 +1551,7 @@ const Store = (function () {
     listPayCutoffSettings, getPayCutoffSetting, updatePayCutoffSetting,
     listLeaveRequests, getLeaveRequest, leaveRequestsForEmployee, silDaysUsed, addLeaveRequest, reviewLeaveRequest, updateLeaveRequestNotes, updateLeaveRequest, deleteLeaveRequest,
     listAttendanceCorrections, getAttendanceCorrection, attendanceCorrectionsForEmployee, addAttendanceCorrection, reviewAttendanceCorrection, updateAttendanceCorrectionNotes, deleteAttendanceCorrection,
+    listScheduleChangeRequests, getScheduleChangeRequest, scheduleChangeRequestsForEmployee, addScheduleChangeRequest, reviewScheduleChangeRequest, updateScheduleChangeRequestNotes, deleteScheduleChangeRequest,
     listAuditLog, purgeOldAuditLog,
     createNotification, listNotificationsForEmployee, unreadNotificationCount, markNotificationRead, markAllNotificationsRead, deleteNotification,
     getPayrollRelease, releasePayroll, unreleasePayroll, updatePayrollRelease,
