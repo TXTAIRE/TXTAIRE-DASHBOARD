@@ -38,11 +38,19 @@ window.EssViews.settings = (function () {
         btn.disabled = true;
         btn.textContent = subscribed ? 'Disabling…' : 'Enabling…';
         try {
-          if (subscribed) await disableEssPushNotifications();
-          else await enableEssPushNotifications();
-          toast(subscribed ? 'Notifications disabled on this device.' : '✔ Notifications enabled on this device.');
+          if (subscribed) {
+            await disableEssPushNotifications();
+            toast('Notifications disabled on this device.');
+          } else {
+            // enableEssPushNotifications() already shows its own toast for known failure
+            // cases (unsupported browser, permission denied/dismissed) and returns false
+            // without throwing -- showing a generic "enabled" toast on top of that was
+            // masking the real reason with a false success message.
+            const ok = await enableEssPushNotifications();
+            if (ok) toast('✔ Notifications enabled on this device.');
+          }
         } catch (err) {
-          toast('Something went wrong — try again.');
+          toast('Something went wrong: ' + (err && err.message ? err.message : String(err)));
         }
         renderNotificationsCard(main, emp);
       };
