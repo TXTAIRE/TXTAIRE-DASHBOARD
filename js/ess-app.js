@@ -253,8 +253,8 @@ function openDTR(emp, from, to) {
   const dayRows = days.map(date => {
     const r = recByDate[date];
     const holiday = holidayByDate[date];
-    const pay = computeDayPay(dailyRateEq, r, holiday);
-    const hrs = r ? (Number(r.hours) || 0) : 0;
+    const pay = computeDayPay(dailyRateEq, r, holiday, emp);
+    const hrs = dtrDisplayHours(r, emp);
     totalHours += hrs;
     totalNsdHrs += pay.nsdHrs;
     totalOtHrs += pay.otHrs;

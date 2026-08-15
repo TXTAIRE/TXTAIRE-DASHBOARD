@@ -336,6 +336,57 @@ function exceedsDefaultTimeOut(timeIn, actualTimeOut, defaultTimeOut) {
   return actual > def;
 }
 
+// Printable-DTR-only display helper: is this clock time within the grace period of the
+// employee's default? (Plain absolute-value comparison, no midnight-crossing handling --
+// good enough for "am I basically on schedule," unlike exceedsDefaultTimeOut which has to
+// be exact for real OT decisions.)
+function withinScheduleGrace(actualTime, defaultTime) {
+  if (!defaultTime || !actualTime) return false;
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  return Math.abs(toMin(actualTime) - toMin(defaultTime)) <= ATTENDANCE_GRACE_MINUTES;
+}
+
+const STANDARD_WORKDAY_HOURS = 8;
+
+// Labor Code Art. 83 (8-hour normal workday) + Art. 85 (unpaid 60-minute meal period,
+// excluded from hours worked): a 9:00 AM-6:00 PM schedule is 9 clock hours but only 8 PAID
+// hours, and OT worked until 8:00 PM off that same schedule is 2 hours, not 3 -- the meal
+// break has to come out of the raw clocked span either way. Used for real pay (computeDayPay
+// OT/holiday hours), not just the DTR printout.
+const LUNCH_BREAK_HOURS = 1;
+
+// Effective (paid) hours for one day. Only kicks in for an employee with a Default Time
+// In/Out set, and only once the shift actually covers their full scheduled day (Time In at
+// or before defaultTimeIn+grace, Time Out at or after defaultTimeOut-grace) -- that's what
+// tells us the meal break genuinely fell inside the clocked span. Anything short of a full
+// scheduled day (no default set, or the employee left before finishing it) is left as the
+// raw clocked hours -- this only ever removes the lunch hour, never adds hours back, and
+// never touches the stored attendance.hours field itself.
+function effectivePaidHours(rawHours, timeIn, timeOut, emp) {
+  if (!emp || !emp.defaultTimeIn || !emp.defaultTimeOut || !timeIn || !timeOut) return rawHours;
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const coveredFullShift = toMin(timeIn) <= toMin(emp.defaultTimeIn) + ATTENDANCE_GRACE_MINUTES
+    && toMin(timeOut) >= toMin(emp.defaultTimeOut) - ATTENDANCE_GRACE_MINUTES;
+  return coveredFullShift ? Math.max(0, rawHours - LUNCH_BREAK_HOURS) : rawHours;
+}
+
+// Hours to print on the DTR for one day. A day within the grace period on BOTH Time In and
+// Time Out (i.e. not actually Late, not actually filing OT) shows the clean standard 8
+// instead of the precise clock-derived minutes (8.9, 9.08, etc.) -- those few minutes
+// either side of the schedule aren't meant to nudge the printed total. A real deviation
+// beyond the grace period on either end (genuine lateness/undertime, or genuine overtime --
+// already broken out in its own OT Hrs column) still shows the real clocked hours.
+// Untouched: the actual stored attendance.hours field, used everywhere else (payroll,
+// Store.computeRow, etc.) -- this only affects what's printed on the DTR.
+function dtrDisplayHours(r, emp) {
+  if (!r) return 0;
+  const rawHours = Number(r.hours) || 0;
+  if (r.timeIn && r.timeOut && withinScheduleGrace(r.timeIn, emp.defaultTimeIn) && withinScheduleGrace(r.timeOut, emp.defaultTimeOut)) {
+    return STANDARD_WORKDAY_HOURS;
+  }
+  return effectivePaidHours(rawHours, r.timeIn, r.timeOut, emp);
+}
+
 // Hours of a shift ("HH:MM"-"HH:MM") that fall within the legal night-shift-differential
 // window, 10:00 PM to 6:00 AM. Handles shifts that cross midnight (e.g. 22:00-06:00) and
 // early-morning shifts that don't (e.g. 04:00-13:00, where 04:00-06:00 counts).
@@ -371,9 +422,14 @@ function nightOverlapHours(timeIn, timeOut) {
 // day pays neither. The one exception, required by Philippine labor law: an employee who
 // was ABSENT on a declared Regular Holiday is still owed their full daily rate regardless
 // of any request/approval, since there's no attendance record for them to request against.
-function computeDayPay(dailyRateEq, rec, holiday) {
+function computeDayPay(dailyRateEq, rec, holiday, emp) {
   const hourlyRate = dailyRateEq / 8;
   const hrs = rec ? (Number(rec.hours) || 0) : 0;
+  // Labor Code Art. 85: the unpaid 60-minute meal break comes out of the raw clocked span
+  // before it counts toward OT/holiday hours -- see effectivePaidHours above. Only applies
+  // once emp.defaultTimeIn/defaultTimeOut are set and the shift actually covered the full
+  // scheduled day; otherwise this is just the raw hours, unchanged.
+  const effHrs = rec ? effectivePaidHours(hrs, rec.timeIn, rec.timeOut, emp) : 0;
 
   // A record can carry its own holidayType, overriding/standing in for the shared
   // Holidays list entry for that date — lets HR grant the holiday premium for a specific
@@ -382,10 +438,10 @@ function computeDayPay(dailyRateEq, rec, holiday) {
   // no per-record override possible for a day nobody clocked in for.
   const effectiveType = (rec && rec.holidayType) ? rec.holidayType : (holiday ? holiday.type : null);
 
-  // otHours lets HR override the raw "hours - 8" figure (e.g. to exclude a break, or cap
-  // it) — null/undefined falls back to the original derived calculation.
+  // otHours lets HR override the derived "effective hours - 8" figure (e.g. to exclude a
+  // break, or cap it) — null/undefined falls back to the original derived calculation.
   const otHrs = (rec && rec.otStatus === 'Approved')
-    ? (rec.otHours != null ? Number(rec.otHours) : Math.max(0, hrs - 8))
+    ? (rec.otHours != null ? Number(rec.otHours) : Math.max(0, effHrs - 8))
     : 0;
   const otMultiplier = effectiveType ? (effectiveType === 'Regular' ? 2.6 : 1.69) : 1.25;
   const otPay = otHrs * hourlyRate * otMultiplier;
@@ -395,7 +451,7 @@ function computeDayPay(dailyRateEq, rec, holiday) {
   let holidayPay = 0;
   if (effectiveType) {
     if (rec && rec.holidayStatus === 'Approved') {
-      const regHrs = Math.min(hrs, 8);
+      const regHrs = Math.min(effHrs, 8);
       const mult = effectiveType === 'Regular' ? 2.0 : 1.3;
       holidayPay = dailyRateEq * (mult - 1) * (regHrs / 8);
     } else if (!rec && holiday && holiday.type === 'Regular') {
@@ -476,7 +532,7 @@ function computeRow(emp, from, to) {
 
   let otPay = 0, nsdPay = 0;
   presentRecords.forEach(r => {
-    const day = computeDayPay(dailyRateEq, r, holidayByDate[r.date]);
+    const day = computeDayPay(dailyRateEq, r, holidayByDate[r.date], emp);
     otPay += day.otPay;
     nsdPay += day.nsdPay;
   });
@@ -488,7 +544,7 @@ function computeRow(emp, from, to) {
   let holidayPay = 0;
   holidays.forEach(h => {
     const rec = presentRecords.find(r => r.date === h.date);
-    holidayPay += computeDayPay(dailyRateEq, rec, h).holidayPay;
+    holidayPay += computeDayPay(dailyRateEq, rec, h, emp).holidayPay;
   });
   const isHolidayOverridden = !!(override && override.holiday != null);
   if (isHolidayOverridden) holidayPay = Number(override.holiday);

@@ -125,7 +125,7 @@ window.Views.attendance = (function () {
               if (!emp) return '';
               const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (emp.rate / (workDaysInRange(r.date, r.date) || 1));
               const holiday = holidayByDate[r.date];
-              const previewPay = computeDayPay(dailyRateEq, Object.assign({}, r, { nsdStatus: 'Approved', otStatus: 'Approved', holidayStatus: 'Approved' }), holiday);
+              const previewPay = computeDayPay(dailyRateEq, Object.assign({}, r, { nsdStatus: 'Approved', otStatus: 'Approved', holidayStatus: 'Approved' }), holiday, emp);
               const otTime = r.timeIn ? `${to12Hour(r.timeIn)}–${r.timeOut ? to12Hour(r.timeOut) : '—'}` : '—';
               const rows = [];
               if (r.nsdStatus === 'Requested') rows.push({ kind: 'nsd', label: 'Night Shift Diff.', amount: fmtMoney(previewPay.nsdPay), time: '—', requestedAt: '—' });
@@ -233,7 +233,7 @@ window.Views.attendance = (function () {
   function calDayCell(emp, date, rec, holiday) {
     const dow = new Date(date + 'T00:00:00').getDay();
     const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (emp.rate / (workDaysInRange(date, date) || 1));
-    const pay = rec ? computeDayPay(dailyRateEq, rec, holiday) : null;
+    const pay = rec ? computeDayPay(dailyRateEq, rec, holiday, emp) : null;
     const badges = [];
     if (pay && pay.nsdHrs) badges.push('<span class="badge badge-blue" title="Night Shift Differential">NSD</span>');
     if (pay && pay.otHrs) badges.push('<span class="badge badge-orange" title="Overtime">OT</span>');

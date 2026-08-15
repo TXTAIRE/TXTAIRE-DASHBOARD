@@ -52,7 +52,7 @@ window.EssViews.attendance = (function () {
   function dayCard(emp, date, rec, holiday) {
     const dow = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (emp.rate / (workDaysInRange(date, date) || 1));
-    const pay = rec ? computeDayPay(dailyRateEq, rec, holiday) : null;
+    const pay = rec ? computeDayPay(dailyRateEq, rec, holiday, emp) : null;
     const nsdRawHrs = rec ? nightOverlapHours(rec.timeIn, rec.timeOut) : 0;
     const holidayLabel = holiday ? `Holiday Pay — ${escapeHtml(holiday.name)} (${escapeHtml(holiday.type)} Holiday)` : 'Holiday Pay';
     // Edit AND Delete only ever make sense within the same 24-hour window the DB enforces
