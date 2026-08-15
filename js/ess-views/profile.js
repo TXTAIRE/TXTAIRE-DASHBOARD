@@ -19,18 +19,7 @@ window.EssViews.profile = (function () {
     return new Blob([bytes], { type: mime });
   }
 
-  // iPhone photo library photos are typically HEIC, which most non-Safari/non-iOS browser
-  // engines (and even some in-app decode paths on iOS itself) can't turn into <img>/<canvas>
-  // pixels -- without this, those files silently fail to decode and the crop viewport just
-  // shows its plain background with nothing on it. Detected by MIME type where the browser
-  // reports one, falling back to the file extension since iOS Safari sometimes hands file
-  // inputs a HEIC file with an empty/generic type.
-  function looksLikeHeic(file) {
-    const type = (file.type || '').toLowerCase();
-    const name = (file.name || '').toLowerCase();
-    return type === 'image/heic' || type === 'image/heif' || name.endsWith('.heic') || name.endsWith('.heif');
-  }
-  // Loaded lazily (only when an actual HEIC file shows up) from the same jsdelivr CDN
+  // Loaded lazily (only when a photo actually needs converting) from the same jsdelivr CDN
   // already allow-listed in index.html/ess.html's CSP script-src for supabase-js/exceljs --
   // no new CSP change needed. Cached so picking a second HEIC photo doesn't re-fetch it.
   let heic2anyLoadPromise = null;
@@ -111,12 +100,36 @@ window.EssViews.profile = (function () {
       statusEl.style.display = 'none';
       confirmBtn.disabled = false;
     };
-    // A photo that isn't HEIC but still can't be decoded for some other reason (corrupt
-    // file, truly exotic format) lands here too -- same message either way, since there's
-    // nothing more specific to tell the employee.
-    img.onerror = () => {
-      statusEl.textContent = "Couldn't load this photo — it may be an unsupported format. Try a different photo, or a screenshot of it.";
+    // Whenever the browser can't natively decode the picked file (HEIC being the common
+    // real-world case -- an iPhone camera roll photo -- but this deliberately doesn't try
+    // to detect that upfront: file.type/name have proven unreliable across iOS versions/
+    // browsers, sometimes empty, sometimes a generic value that doesn't actually match what
+    // the bytes are), fall back to converting it and retrying exactly once. Only shows the
+    // final "can't load this" message if that fallback also fails.
+    let heicFallbackAttempted = false;
+    img.onerror = async () => {
+      if (heicFallbackAttempted) {
+        if (!controller.signal.aborted) statusEl.textContent = "Couldn't load this photo — it may be an unsupported format. Try a different photo, or a screenshot of it.";
+        return;
+      }
+      heicFallbackAttempted = true;
+      statusEl.textContent = 'Converting photo…';
+      try {
+        const heic2any = await loadHeic2Any();
+        const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 });
+        const convertedBlob = Array.isArray(converted) ? converted[0] : converted;
+        if (controller.signal.aborted) return;
+        setSrc(convertedBlob);
+      } catch (err) {
+        if (!controller.signal.aborted) statusEl.textContent = "Couldn't load this photo — it may be an unsupported format. Try a different photo, or a screenshot of it.";
+      }
     };
+    function setSrc(blob) {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrl = URL.createObjectURL(blob);
+      img.src = objectUrl;
+      imgEl.src = objectUrl;
+    }
 
     zoomSlider.addEventListener('input', () => {
       const t = Number(zoomSlider.value) / 100;
@@ -143,27 +156,9 @@ window.EssViews.profile = (function () {
     }
     overlay.querySelector('#crop-cancel').addEventListener('click', close, { signal: controller.signal });
 
-    // HEIC (the default format for an iPhone camera roll photo) can't be decoded by every
-    // mobile browser's <img>/<canvas> pipeline -- convert it to JPEG first so cropping works
-    // the same regardless of source format, instead of leaving the viewport looking like a
-    // plain black box with no explanation. Converted (lazy-loaded) library, not built-in.
-    let workingFile = file;
-    if (looksLikeHeic(file)) {
-      statusEl.textContent = 'Converting photo…';
-      try {
-        const heic2any = await loadHeic2Any();
-        const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 });
-        workingFile = Array.isArray(converted) ? converted[0] : converted;
-      } catch (err) {
-        if (!controller.signal.aborted) statusEl.textContent = "Couldn't convert this photo automatically. Try a screenshot of it instead, or a different photo.";
-        return;
-      }
-      if (controller.signal.aborted) return; // cancelled while converting
-      statusEl.textContent = 'Loading photo…';
-    }
-    objectUrl = URL.createObjectURL(workingFile);
-    img.src = objectUrl;
-    imgEl.src = objectUrl;
+    // Always try the file exactly as picked first -- img.onerror above automatically falls
+    // back to HEIC conversion if the browser can't decode it natively.
+    setSrc(file);
     overlay.querySelector('#crop-confirm').addEventListener('click', () => {
       const canvas = document.createElement('canvas');
       canvas.width = OUTPUT;
