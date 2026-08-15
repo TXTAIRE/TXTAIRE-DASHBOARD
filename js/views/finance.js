@@ -133,7 +133,7 @@ window.Views.finance = (function () {
         </div>
         <div class="dtr-table-wrap">
         <table class="dtr-table">
-          <thead><tr><th>Date Issued</th><th>Date Encoded</th><th>Entity</th><th>Vendor</th><th>Invoice #</th><th>TIN</th><th>Location</th><th>Particulars</th><th class="num">Amount</th><th>Description</th><th>Receipt</th><th>Entered By</th></tr></thead>
+          <thead><tr><th>Date Issued</th><th>Date Encoded</th><th>Entity</th><th>Vendor</th><th>Invoice #</th><th>TIN</th><th>Location</th><th>Particulars</th><th class="num">Amount</th></tr></thead>
           <tbody>
             ${rows.map(r => `
               <tr>
@@ -146,16 +146,12 @@ window.Views.finance = (function () {
                 <td>${escapeHtml(r.location || '—')}</td>
                 <td>${escapeHtml(r.category)}</td>
                 <td class="num">${fmtMoney(r.amount)}</td>
-                <td>${escapeHtml(r.description || '—')}</td>
-                <td>${r.receiptPath ? 'Yes' : '—'}</td>
-                <td>${escapeHtml(r.enteredBy || '—')}</td>
               </tr>
             `).join('')}
           </tbody>
           <tfoot><tr>
             <td colspan="8" style="text-align:right;font-weight:600;">Total</td>
             <td class="num" style="font-weight:600;">${fmtMoney(total)}</td>
-            <td colspan="3"></td>
           </tr></tfoot>
         </table>
         </div>
@@ -230,7 +226,7 @@ window.Views.finance = (function () {
     const rows = (expenseFilterBy === 'encoded'
       ? Store.listExpenses().filter(e => { const d = (e.created_at || '').slice(0, 10); return d >= from && d <= to; })
       : Store.expensesInRange(from, to)
-    ).slice().sort((a, b) => a.date.localeCompare(b.date));
+    ).slice().sort((a, b) => b.date.localeCompare(a.date));
     const total = rows.reduce((s, r) => s + Number(r.amount), 0);
     const monthLabel = new Date(expenseMonth + '-01T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     const filterLabel = expenseFilterBy === 'encoded' ? 'Date Encoded' : 'Date Issued';
