@@ -693,7 +693,11 @@ window.Views.finance = (function () {
     `;
   }
 
-  function openVoucherPrintView(vouchers) {
+  function openVoucherPrintView(vouchersIn) {
+    // Printed vouchers always read oldest-to-newest (a ledger/chronological convention,
+    // same as the Expense Report), independent of whatever order the on-screen table is
+    // currently sorted in.
+    const vouchers = vouchersIn.slice().sort((a, b) => a.date.localeCompare(b.date));
     const pages = [];
     for (let i = 0; i < vouchers.length; i += 4) pages.push(vouchers.slice(i, i + 4));
     if (!pages.length) pages.push([]);
