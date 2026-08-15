@@ -582,7 +582,10 @@ window.Views.finance = (function () {
     if (!v) return '<div class="voucher-card empty"></div>';
     return `
       <div class="voucher-card">
-        <div class="voucher-title">Payment Voucher</div>
+        <div class="voucher-header">
+          <img src="assets/logo.svg" class="voucher-logo" alt="TxTAIRE" />
+          <div class="voucher-title">Payment Voucher</div>
+        </div>
         <div class="voucher-refno">Ref No: <strong>${escapeHtml(v.refNo)}</strong></div>
         <div class="voucher-row">
           <div><span class="voucher-label">Amount</span><br/><span class="voucher-value">${fmtMoney(v.amount)}</span></div>

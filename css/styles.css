@@ -677,7 +677,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 }
 .voucher-card { border: 1.5px solid #333; padding: 10px 12px; font-size: 11px; display: flex; flex-direction: column; }
 .voucher-card.empty { border: none; }
-.voucher-title { text-align: center; font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+.voucher-header { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 6px; }
+.voucher-logo { height: 20px; width: auto; }
+.voucher-title { text-align: center; font-weight: 700; font-size: 14px; margin: 0; }
 .voucher-refno { font-size: 10.5px; margin-bottom: 6px; }
 .voucher-row { display: flex; border-top: 1px solid #333; }
 .voucher-row > div { flex: 1; padding: 4px 6px; }
