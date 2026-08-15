@@ -19,6 +19,34 @@ window.EssViews.profile = (function () {
     return new Blob([bytes], { type: mime });
   }
 
+  // iPhone photo library photos are typically HEIC, which most non-Safari/non-iOS browser
+  // engines (and even some in-app decode paths on iOS itself) can't turn into <img>/<canvas>
+  // pixels -- without this, those files silently fail to decode and the crop viewport just
+  // shows its plain background with nothing on it. Detected by MIME type where the browser
+  // reports one, falling back to the file extension since iOS Safari sometimes hands file
+  // inputs a HEIC file with an empty/generic type.
+  function looksLikeHeic(file) {
+    const type = (file.type || '').toLowerCase();
+    const name = (file.name || '').toLowerCase();
+    return type === 'image/heic' || type === 'image/heif' || name.endsWith('.heic') || name.endsWith('.heif');
+  }
+  // Loaded lazily (only when an actual HEIC file shows up) from the same jsdelivr CDN
+  // already allow-listed in index.html/ess.html's CSP script-src for supabase-js/exceljs --
+  // no new CSP change needed. Cached so picking a second HEIC photo doesn't re-fetch it.
+  let heic2anyLoadPromise = null;
+  function loadHeic2Any() {
+    if (window.heic2any) return Promise.resolve(window.heic2any);
+    if (heic2anyLoadPromise) return heic2anyLoadPromise;
+    heic2anyLoadPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+      script.onload = () => resolve(window.heic2any);
+      script.onerror = () => { heic2anyLoadPromise = null; reject(new Error('load failed')); };
+      document.head.appendChild(script);
+    });
+    return heic2anyLoadPromise;
+  }
+
   // Pan/zoom crop for a just-picked profile photo -- always outputs a square JPEG blob
   // (the avatar is displayed circular via CSS border-radius everywhere else, so a square
   // source keeps that consistent without baking the circle into the file itself). Built as
@@ -26,8 +54,7 @@ window.EssViews.profile = (function () {
   // than going through openEssModal, since that function closes whatever modal is already
   // open -- this needs to sit on TOP of the still-open Edit Profile modal without losing
   // whatever the employee already typed into phone/email/bank fields there.
-  function openPhotoCropOverlay(file, onCropped) {
-    const objectUrl = URL.createObjectURL(file);
+  async function openPhotoCropOverlay(file, onCropped) {
     const VIEWPORT = 260;
     const OUTPUT = 640;
     const img = new Image();
@@ -41,7 +68,10 @@ window.EssViews.profile = (function () {
       <div class="crop-card">
         <h2 style="margin:0 0 4px;">Adjust Photo</h2>
         <div class="ess-sub" style="margin-bottom:14px;">Drag to reposition, use the slider to zoom.</div>
-        <div class="crop-viewport" id="crop-viewport"><img id="crop-img" draggable="false" alt="" /></div>
+        <div class="crop-viewport" id="crop-viewport">
+          <img id="crop-img" draggable="false" alt="" />
+          <div id="crop-status" class="ess-sub" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:10px; color:#fff;">Loading photo…</div>
+        </div>
         <input type="range" id="crop-zoom" min="0" max="100" value="0" style="width:100%; margin:14px 0 6px;" />
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" id="crop-cancel">Cancel</button>
@@ -54,6 +84,9 @@ window.EssViews.profile = (function () {
     const viewport = overlay.querySelector('#crop-viewport');
     const imgEl = overlay.querySelector('#crop-img');
     const zoomSlider = overlay.querySelector('#crop-zoom');
+    const statusEl = overlay.querySelector('#crop-status');
+    const confirmBtn = overlay.querySelector('#crop-confirm');
+    confirmBtn.disabled = true; // stays disabled until the photo actually decodes successfully
 
     function applyTransform() {
       imgEl.style.width = (img.naturalWidth * scale) + 'px';
@@ -68,15 +101,22 @@ window.EssViews.profile = (function () {
       x = Math.max(Math.min(0, VIEWPORT - dispW), Math.min(0, x));
       y = Math.max(Math.min(0, VIEWPORT - dispH), Math.min(0, y));
     }
+    let objectUrl = null;
     img.onload = () => {
       minScale = Math.max(VIEWPORT / img.naturalWidth, VIEWPORT / img.naturalHeight);
       scale = minScale;
       x = (VIEWPORT - img.naturalWidth * scale) / 2;
       y = (VIEWPORT - img.naturalHeight * scale) / 2;
       applyTransform();
+      statusEl.style.display = 'none';
+      confirmBtn.disabled = false;
     };
-    img.src = objectUrl;
-    imgEl.src = objectUrl;
+    // A photo that isn't HEIC but still can't be decoded for some other reason (corrupt
+    // file, truly exotic format) lands here too -- same message either way, since there's
+    // nothing more specific to tell the employee.
+    img.onerror = () => {
+      statusEl.textContent = "Couldn't load this photo — it may be an unsupported format. Try a different photo, or a screenshot of it.";
+    };
 
     zoomSlider.addEventListener('input', () => {
       const t = Number(zoomSlider.value) / 100;
@@ -98,10 +138,32 @@ window.EssViews.profile = (function () {
 
     function close() {
       controller.abort();
-      URL.revokeObjectURL(objectUrl);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
       overlay.remove();
     }
     overlay.querySelector('#crop-cancel').addEventListener('click', close, { signal: controller.signal });
+
+    // HEIC (the default format for an iPhone camera roll photo) can't be decoded by every
+    // mobile browser's <img>/<canvas> pipeline -- convert it to JPEG first so cropping works
+    // the same regardless of source format, instead of leaving the viewport looking like a
+    // plain black box with no explanation. Converted (lazy-loaded) library, not built-in.
+    let workingFile = file;
+    if (looksLikeHeic(file)) {
+      statusEl.textContent = 'Converting photo…';
+      try {
+        const heic2any = await loadHeic2Any();
+        const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 });
+        workingFile = Array.isArray(converted) ? converted[0] : converted;
+      } catch (err) {
+        if (!controller.signal.aborted) statusEl.textContent = "Couldn't convert this photo automatically. Try a screenshot of it instead, or a different photo.";
+        return;
+      }
+      if (controller.signal.aborted) return; // cancelled while converting
+      statusEl.textContent = 'Loading photo…';
+    }
+    objectUrl = URL.createObjectURL(workingFile);
+    img.src = objectUrl;
+    imgEl.src = objectUrl;
     overlay.querySelector('#crop-confirm').addEventListener('click', () => {
       const canvas = document.createElement('canvas');
       canvas.width = OUTPUT;
