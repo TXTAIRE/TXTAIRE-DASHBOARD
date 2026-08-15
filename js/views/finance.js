@@ -105,6 +105,61 @@ window.Views.finance = (function () {
     toast('✔ Expenses downloaded.');
   }
 
+  // Printable version of the same list shown on screen (same columns as the Excel export),
+  // for a physical/PDF expense report to file or route for approval -- reuses the DTR's
+  // print overlay/table classes (js/app.js openDTR, css/styles.css .dtr-*) rather than
+  // duplicating that CSS, since they're already a generic print-ready document layout.
+  function openExpenseReportPrintView(rows, monthLabel, total) {
+    const overlay = document.createElement('div');
+    overlay.className = 'dtr-overlay';
+    overlay.innerHTML = `
+      <div class="dtr-print">
+        <div class="dtr-actions no-print">
+          <button class="btn btn-ghost btn-sm" id="report-close">Close</button>
+          <button class="btn btn-primary btn-sm" id="report-print-btn">Print / Save as PDF</button>
+        </div>
+        <div class="dtr-header">
+          <img src="assets/logo.svg" class="dtr-logo" alt="TxTAIRE" />
+          <h2>Expense Report</h2>
+        </div>
+        <div class="dtr-meta">
+          <div><strong>Period:</strong> ${escapeHtml(monthLabel)}</div>
+          <div><strong>Entries:</strong> ${rows.length}</div>
+        </div>
+        <div class="dtr-table-wrap">
+        <table class="dtr-table">
+          <thead><tr><th>Date</th><th>Entity</th><th>Vendor</th><th>Invoice #</th><th>TIN</th><th>Location</th><th>Particulars</th><th class="num">Amount</th></tr></thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td>${fmtDate(r.date)}</td>
+                <td>${escapeHtml(r.entity || ENTITY_OPTIONS[0])}</td>
+                <td>${escapeHtml(r.vendor)}</td>
+                <td>${escapeHtml(r.invoiceNumber || '—')}</td>
+                <td>${escapeHtml(r.tinNumber || '—')}</td>
+                <td>${escapeHtml(r.location || '—')}</td>
+                <td>${escapeHtml(r.category)}</td>
+                <td class="num">${fmtMoney(r.amount)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+          <tfoot><tr>
+            <td colspan="7" style="text-align:right;font-weight:600;">Total</td>
+            <td class="num" style="font-weight:600;">${fmtMoney(total)}</td>
+          </tr></tfoot>
+        </table>
+        </div>
+        <div class="dtr-signatures">
+          <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Prepared By</div></div>
+          <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Approved By</div></div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#report-close').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#report-print-btn').addEventListener('click', () => window.print());
+  }
+
   function sheetsBackupCard(main) {
     const url = Store.getAppSetting('expenseSheetWebhookUrl', '');
     const sheetUrl = Store.getAppSetting('expenseSheetSpreadsheetUrl', '');
@@ -170,6 +225,7 @@ window.Views.finance = (function () {
       ${sheetsBackupCard(main)}
       <div class="filters">
         <div class="field"><label>Month</label><input type="month" id="expense-month-input" value="${expenseMonth}" /></div>
+        <button class="btn btn-ghost btn-sm" id="btn-print-expenses" style="align-self:flex-end;" ${rows.length ? '' : 'disabled'}>🖨 Print Report</button>
         <button class="btn btn-ghost btn-sm" id="btn-export-expenses" style="align-self:flex-end;">📥 Export Excel</button>
       </div>
 
@@ -208,6 +264,8 @@ window.Views.finance = (function () {
     `;
 
     qs('#expense-month-input', body).addEventListener('change', (ev) => { expenseMonth = ev.target.value; renderExpensesTab(body, main); });
+    const printExpensesBtn = qs('#btn-print-expenses', body);
+    if (printExpensesBtn && !printExpensesBtn.disabled) printExpensesBtn.addEventListener('click', () => openExpenseReportPrintView(rows, monthLabel, total));
     qs('#btn-export-expenses', body).addEventListener('click', () => downloadExpensesWorkbook(rows, monthLabel));
     const backupBtn = qs('#btn-sheets-backup-settings', body);
     if (backupBtn) backupBtn.addEventListener('click', () => openSheetsBackupSettingsModal(main));
