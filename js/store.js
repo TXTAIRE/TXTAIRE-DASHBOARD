@@ -245,6 +245,18 @@ function paydayLabel(payCycle) {
   return `${ordinal(s.paydayADay)} & ${ordinal(s.paydayBDay)}`;
 }
 
+// Shared by every "generate a My Portal login password" flow (reset, and now account
+// creation) -- excludes visually-ambiguous characters (0/O, 1/l/I) since this is meant to
+// be read off-screen and typed/relayed to the employee, not just copy-pasted.
+function generateStrongPassword() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+  const arr = new Uint32Array(14);
+  crypto.getRandomValues(arr);
+  let pw = '';
+  for (let i = 0; i < arr.length; i++) pw += chars[arr[i] % chars.length];
+  return pw;
+}
+
 function pad2(n) { return String(n).padStart(2, '0'); }
 
 function daysInMonth(year, month) { return new Date(year, month, 0).getDate(); }

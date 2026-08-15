@@ -133,6 +133,10 @@ window.Views.recruitment = (function () {
         toast(c.name + ' marked as Hired.');
         closeDrawer();
         renderBoard(main);
+        // The decision itself is recorded regardless -- this just offers to create the
+        // actual employee record (and optionally a My Portal login) right away instead of
+        // making HR remember to do it separately later via + Add employee.
+        openCompleteHireModal(main, c);
       });
       const hold = qs('#btn-hold', dr);
       if (hold) hold.addEventListener('click', async () => {
@@ -154,6 +158,137 @@ window.Views.recruitment = (function () {
           closeDrawer();
           toast('Candidate removed.');
           renderBoard(main);
+        }
+      });
+    });
+  }
+
+  // Turns a Hired candidate into a real employee record -- pre-filled with everything the
+  // application already captured (name/category/position/contact); HR only has to add the
+  // pay details a candidate record never carries (Pay Type/Rate/Pay Cycle). Optionally also
+  // creates their My Portal login in the same step, via the admin-create-employee-account
+  // Edge Function (same pattern/precedent as staff.js's password-reset flow -- only
+  // Supabase's Admin API, service-role-key-only, can create another user's Auth account,
+  // so this can't just be a Store.* call). Skipping this modal (Cancel) is fine -- the
+  // Hired decision above is already saved either way; the employee record can always be
+  // added later by hand via Employee Management -> + Add employee.
+  function openCompleteHireModal(main, c) {
+    const suggestedPayCycle = c.category === 'Technician' ? '15-30' : '10-20';
+    openModal(`
+      <h2>Create Employee Record — ${escapeHtml(c.name)}</h2>
+      <div class="modal-sub">Pre-filled from ${escapeHtml(c.name)}'s application. Add their pay details to finish setting them up.</div>
+      <form id="complete-hire-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Full name</label><input name="name" required value="${escapeHtml(c.name)}" /></div>
+          <div class="field"><label>Category</label>
+            <select name="category">${CATEGORIES.map(cat => `<option ${cat === c.category ? 'selected' : ''}>${cat}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Position</label><input name="position" required value="${escapeHtml(c.positionAppliedFor || '')}" /></div>
+          <div class="field"><label>Employee ID</label><input name="employeeCode" placeholder="e.g. TXT021" /></div>
+          <div class="field"><label>Date hired</label><input type="date" name="dateHired" value="${todayISO()}" required /></div>
+          <div class="field"><label>Phone</label><input name="phone" value="${escapeHtml(c.phone || '')}" /></div>
+          <div class="field"><label>Email</label><input type="email" name="email" value="${escapeHtml(c.email || '')}" /></div>
+          <div class="field"><label>Pay cycle</label>
+            <select name="payCycle">
+              <option value="10-20" ${suggestedPayCycle === '10-20' ? 'selected' : ''}>Admins (${paydayLabel('10-20')})</option>
+              <option value="15-30" ${suggestedPayCycle === '15-30' ? 'selected' : ''}>Technicians (${paydayLabel('15-30')})</option>
+            </select>
+          </div>
+          <div class="field"><label>Pay type</label>
+            <select name="payType">${['Monthly', 'Daily'].map(p => `<option>${p}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Rate (PHP)</label><input type="number" name="rate" min="0" step="0.01" required /></div>
+          <div class="field full" style="display:flex; align-items:center; gap:8px;">
+            <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer;">
+              <input type="checkbox" name="createPortalAccount" checked style="width:auto;" />
+              Also create their My Portal login (needs an Employee ID above)
+            </label>
+          </div>
+        </div>
+        <div id="complete-hire-error"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Skip for now</button>
+          <button type="submit" class="btn btn-primary">Create Employee Record</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#complete-hire-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const createPortal = fd.get('createPortalAccount') === 'on';
+        const employeeCode = fd.get('employeeCode').trim().toUpperCase();
+        const errEl = qs('#complete-hire-error', bd);
+        errEl.innerHTML = '';
+        if (createPortal && !employeeCode) {
+          errEl.innerHTML = `<div class="auth-error">Set an Employee ID first, or uncheck "Also create their My Portal login".</div>`;
+          return;
+        }
+        const submitBtn = qs('button[type="submit"]', bd);
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Creating…';
+        try {
+          const patch = {
+            name: fd.get('name').trim(),
+            category: fd.get('category'),
+            position: fd.get('position').trim(),
+            employeeCode,
+            status: 'Active',
+            employmentStatus: 'Regular',
+            dateHired: fd.get('dateHired'),
+            phone: fd.get('phone').trim(),
+            email: fd.get('email').trim(),
+            payCycle: fd.get('payCycle'),
+            payType: fd.get('payType'),
+            rate: Number(fd.get('rate')) || 0,
+            allowancePerDay: 0, fixedAllowance: 0, housingAllowance: 0,
+            nightShiftDifferential: false, fixedHours: true,
+            notes: `Hired via Recruitment (candidate record: ${c.id}).`,
+          };
+          const newEmp = await Store.addEmployee(patch);
+
+          if (!createPortal) {
+            toast('✔ Employee record created.');
+            closeModal();
+            return;
+          }
+
+          const password = generateStrongPassword();
+          const { data: { session } } = await sb.auth.getSession();
+          const res = await fetch('https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/admin-create-employee-account', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+            body: JSON.stringify({ employeeId: newEmp.id, password }),
+          });
+          const result = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(result.error || 'Employee record was created, but the portal login failed -- grant it manually from Employee Management instead.');
+
+          closeModal();
+          openModal(`
+            <h2>✔ Employee &amp; Portal Login Created</h2>
+            <div class="modal-sub" style="margin-bottom:14px;">${escapeHtml(c.name)}'s My Portal login — copy it now and share it with them directly. It will not be shown again.</div>
+            <div class="page-sub" style="margin-bottom:6px;">Employee ID: <strong>${escapeHtml(employeeCode)}</strong></div>
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:16px;">
+              <input type="text" readonly value="${escapeHtml(password)}" id="new-hire-pw-display" style="flex:1; font-family:monospace; font-size:15px;" onclick="this.select()" />
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-copy-new-hire-pw">📋 Copy</button>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn btn-primary" data-close-modal>Done</button>
+            </div>
+          `, (bd2) => {
+            qs('#btn-copy-new-hire-pw', bd2).addEventListener('click', async () => {
+              try {
+                await navigator.clipboard.writeText(password);
+                toast('✔ Password copied.');
+              } catch (err) {
+                qs('#new-hire-pw-display', bd2).select();
+                toast('Select and copy manually (clipboard access blocked).');
+              }
+            });
+          });
+        } catch (err) {
+          errEl.innerHTML = `<div class="auth-error">${escapeHtml(err.message || 'Something went wrong.')}</div>`;
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Create Employee Record';
         }
       });
     });

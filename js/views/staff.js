@@ -508,17 +508,6 @@ window.Views.staff = (function () {
     });
   }
 
-  function generateStrongPassword() {
-    // Excludes visually-ambiguous characters (0/O, 1/l/I) since this is meant to be read
-    // off-screen and typed/relayed to the employee, not just copy-pasted.
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
-    const arr = new Uint32Array(14);
-    crypto.getRandomValues(arr);
-    let pw = '';
-    for (let i = 0; i < arr.length; i++) pw += chars[arr[i] % chars.length];
-    return pw;
-  }
-
   // Resets an employee's My Portal login password via the admin-reset-employee-password
   // Edge Function (server-side, using the service role key -- only Supabase's Admin API
   // can set another user's password; that key can never be exposed to client-side code,

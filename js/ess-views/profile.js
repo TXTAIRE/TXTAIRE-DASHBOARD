@@ -8,6 +8,117 @@ window.EssViews.profile = (function () {
     return `<span class="badge ${map[status] || 'badge-gray'}">${escapeHtml(status)}</span>`;
   }
 
+  // Synchronous data: URL -> Blob, no async callback involved at all (see the "why not
+  // canvas.toBlob" note at its one call site below).
+  function dataUrlToBlob(dataUrl) {
+    const [meta, base64] = dataUrl.split(',');
+    const mime = (meta.match(/:(.*?);/) || [, 'image/jpeg'])[1];
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  }
+
+  // Pan/zoom crop for a just-picked profile photo -- always outputs a square JPEG blob
+  // (the avatar is displayed circular via CSS border-radius everywhere else, so a square
+  // source keeps that consistent without baking the circle into the file itself). Built as
+  // its own hand-rolled overlay (same technique as the DTR/Voucher print overlays) rather
+  // than going through openEssModal, since that function closes whatever modal is already
+  // open -- this needs to sit on TOP of the still-open Edit Profile modal without losing
+  // whatever the employee already typed into phone/email/bank fields there.
+  function openPhotoCropOverlay(file, onCropped) {
+    const objectUrl = URL.createObjectURL(file);
+    const VIEWPORT = 260;
+    const OUTPUT = 640;
+    const img = new Image();
+    let scale = 1, minScale = 1, x = 0, y = 0;
+    let dragging = false, dragStartX = 0, dragStartY = 0, startX = 0, startY = 0;
+    const controller = new AbortController();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'crop-overlay';
+    overlay.innerHTML = `
+      <div class="crop-card">
+        <h2 style="margin:0 0 4px;">Adjust Photo</h2>
+        <div class="ess-sub" style="margin-bottom:14px;">Drag to reposition, use the slider to zoom.</div>
+        <div class="crop-viewport" id="crop-viewport"><img id="crop-img" draggable="false" alt="" /></div>
+        <input type="range" id="crop-zoom" min="0" max="100" value="0" style="width:100%; margin:14px 0 6px;" />
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="crop-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary" id="crop-confirm">Use Photo</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const viewport = overlay.querySelector('#crop-viewport');
+    const imgEl = overlay.querySelector('#crop-img');
+    const zoomSlider = overlay.querySelector('#crop-zoom');
+
+    function applyTransform() {
+      imgEl.style.width = (img.naturalWidth * scale) + 'px';
+      imgEl.style.height = (img.naturalHeight * scale) + 'px';
+      imgEl.style.transform = `translate(${x}px, ${y}px)`;
+    }
+    // Keeps the image covering the full viewport no matter how far it's dragged -- clamps
+    // each axis to the range where neither edge can pull inward past the viewport border.
+    function clamp() {
+      const dispW = img.naturalWidth * scale;
+      const dispH = img.naturalHeight * scale;
+      x = Math.max(Math.min(0, VIEWPORT - dispW), Math.min(0, x));
+      y = Math.max(Math.min(0, VIEWPORT - dispH), Math.min(0, y));
+    }
+    img.onload = () => {
+      minScale = Math.max(VIEWPORT / img.naturalWidth, VIEWPORT / img.naturalHeight);
+      scale = minScale;
+      x = (VIEWPORT - img.naturalWidth * scale) / 2;
+      y = (VIEWPORT - img.naturalHeight * scale) / 2;
+      applyTransform();
+    };
+    img.src = objectUrl;
+    imgEl.src = objectUrl;
+
+    zoomSlider.addEventListener('input', () => {
+      const t = Number(zoomSlider.value) / 100;
+      scale = minScale + t * (minScale * 3 - minScale);
+      clamp();
+      applyTransform();
+    }, { signal: controller.signal });
+
+    function pointerDown(cx, cy) { dragging = true; dragStartX = cx; dragStartY = cy; startX = x; startY = y; }
+    function pointerMove(cx, cy) { if (!dragging) return; x = startX + (cx - dragStartX); y = startY + (cy - dragStartY); clamp(); applyTransform(); }
+    function pointerUp() { dragging = false; }
+
+    viewport.addEventListener('mousedown', (ev) => pointerDown(ev.clientX, ev.clientY), { signal: controller.signal });
+    window.addEventListener('mousemove', (ev) => pointerMove(ev.clientX, ev.clientY), { signal: controller.signal });
+    window.addEventListener('mouseup', pointerUp, { signal: controller.signal });
+    viewport.addEventListener('touchstart', (ev) => { const t = ev.touches[0]; pointerDown(t.clientX, t.clientY); }, { signal: controller.signal, passive: true });
+    viewport.addEventListener('touchmove', (ev) => { ev.preventDefault(); const t = ev.touches[0]; pointerMove(t.clientX, t.clientY); }, { signal: controller.signal, passive: false });
+    viewport.addEventListener('touchend', pointerUp, { signal: controller.signal });
+
+    function close() {
+      controller.abort();
+      URL.revokeObjectURL(objectUrl);
+      overlay.remove();
+    }
+    overlay.querySelector('#crop-cancel').addEventListener('click', close, { signal: controller.signal });
+    overlay.querySelector('#crop-confirm').addEventListener('click', () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = OUTPUT;
+      canvas.height = OUTPUT;
+      const ctx = canvas.getContext('2d');
+      const sSize = VIEWPORT / scale;
+      ctx.drawImage(img, -x / scale, -y / scale, sSize, sSize, 0, 0, OUTPUT, OUTPUT);
+      // toDataURL (synchronous) instead of canvas.toBlob (callback-based) -- toBlob's
+      // callback can be deferred indefinitely while the page is backgrounded, which
+      // happens easily right here: many mobile browsers briefly background the page while
+      // their native photo picker sheet is on screen, i.e. exactly during this flow.
+      const blob = dataUrlToBlob(canvas.toDataURL('image/jpeg', 0.9));
+      close();
+      onCropped(blob);
+    }, { signal: controller.signal });
+  }
+
   function render(main, emp) {
     const history = Store.employmentHistoryForEmployee(emp.id);
     const docs = Store.employeeDocumentsForEmployee(emp.id);
@@ -317,6 +428,7 @@ window.EssViews.profile = (function () {
               <button type="button" class="link-btn" id="btn-remove-photo" style="margin-bottom:6px;">🗑 Remove current photo</button>
             ` : ''}
             <input type="file" accept="image/*" name="photo" id="input-photo" />
+            <div id="photo-crop-preview"></div>
           </div>
           <div class="field full"><label>Phone</label><input name="phone" value="${escapeHtml(emp.phone || '')}" /></div>
           <div class="field full"><label>Email</label><input type="email" name="email" value="${escapeHtml(emp.email || '')}" /></div>
@@ -345,8 +457,16 @@ window.EssViews.profile = (function () {
         removePhotoBtn.disabled = true;
       });
       qs('#input-photo', bd).addEventListener('change', (ev) => {
-        photoFile = ev.target.files[0] || null;
-        if (photoFile) removePhoto = false;
+        const file = ev.target.files[0];
+        ev.target.value = ''; // clear so picking the same file again after Cancel still fires 'change'
+        if (!file) return;
+        openPhotoCropOverlay(file, (croppedBlob) => {
+          photoFile = croppedBlob;
+          removePhoto = false;
+          const previewUrl = URL.createObjectURL(croppedBlob);
+          qs('#photo-crop-preview', bd).innerHTML =
+            `<img src="${previewUrl}" alt="Cropped preview" style="width:64px; height:64px; border-radius:50%; object-fit:cover; margin-top:8px; border:1px solid var(--border-soft);" />`;
+        });
       });
       const removeBtn = qs('#btn-remove-qr', bd);
       if (removeBtn) removeBtn.addEventListener('click', () => {
