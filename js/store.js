@@ -306,16 +306,31 @@ function hoursBetween(timeIn, timeOut) {
   return Math.round(((end - start) / 60) * 100) / 100;
 }
 
-// Did an employee clock out later than their own scheduled end time? Both actualTimeOut
-// and defaultTimeOut are anchored relative to timeIn (same "crosses midnight" handling as
-// hoursBetween) so an overnight shift (e.g. in 22:00, default out 06:00) compares
-// correctly instead of looking like it ended hours "early."
+// Shared leniency window around an employee's default Time In/Time Out -- a few minutes
+// either side of the schedule is normal, not something to auto-flag. Applies to both ends:
+// arriving up to this many minutes after defaultTimeIn still counts as on-time (not
+// "Late"), and clocking out has to exceed defaultTimeOut by more than this before it's
+// worth auto-filing an Overtime request.
+const ATTENDANCE_GRACE_MINUTES = 15;
+
+// Did an employee clock in late? No default Time In set -- never auto-marked late, since
+// there's nothing to compare against (HR can still set status manually either way).
+function isLateArrival(defaultTimeIn, actualTimeIn) {
+  if (!defaultTimeIn || !actualTimeIn) return false;
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  return toMin(actualTimeIn) > toMin(defaultTimeIn) + ATTENDANCE_GRACE_MINUTES;
+}
+
+// Did an employee clock out later than their own scheduled end time (past the grace
+// period)? Both actualTimeOut and defaultTimeOut are anchored relative to timeIn (same
+// "crosses midnight" handling as hoursBetween) so an overnight shift (e.g. in 22:00,
+// default out 06:00) compares correctly instead of looking like it ended hours "early."
 function exceedsDefaultTimeOut(timeIn, actualTimeOut, defaultTimeOut) {
   if (!timeIn || !actualTimeOut || !defaultTimeOut) return false;
   const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
   const start = toMin(timeIn);
   let actual = toMin(actualTimeOut);
-  let def = toMin(defaultTimeOut);
+  let def = toMin(defaultTimeOut) + ATTENDANCE_GRACE_MINUTES;
   if (actual <= start) actual += 1440;
   if (def <= start) def += 1440;
   return actual > def;

@@ -775,16 +775,20 @@ window.EssViews.attendance = (function () {
       // right before the actual write, not just at button-render time -- closes any
       // window for a second record to get created for the same day (e.g. HR logs the day
       // manually in the moments between the button rendering and this actually running).
+      // Arriving within the shared grace period of Default Time In (js/store.js
+      // ATTENDANCE_GRACE_MINUTES) still counts as on-time -- only actually late past that
+      // gets auto-marked 'Late'. No Default Time In set -- always 'Present', same as before.
+      const status = isLateArrival(emp.defaultTimeIn, timeStr) ? 'Late' : 'Present';
       const existing = Store.attendanceForDate(date).find(r => r.employeeId === emp.id);
       if (existing) {
         await Store.updateAttendance(existing.id, {
-          timeIn: timeStr, status: 'Present',
+          timeIn: timeStr, status,
           timeInPhotoPath: photoPath, timeInLocation: location,
         });
         return;
       }
       await Store.addAttendance({
-        employeeId: emp.id, date, status: 'Present',
+        employeeId: emp.id, date, status,
         timeIn: timeStr, timeOut: null, hours: 0,
         timeInPhotoPath: photoPath,
         timeInLocation: location,
@@ -799,7 +803,8 @@ window.EssViews.attendance = (function () {
         timeOutPhotoPath: photoPath,
         timeOutLocation: location,
       };
-      // Clocking out past this employee's own scheduled end time (or, if they have no
+      // Clocking out more than the grace period past this employee's own scheduled end time
+      // (js/store.js ATTENDANCE_GRACE_MINUTES/exceedsDefaultTimeOut -- or, if they have no
       // schedule set, past a flat 8-hour shift) automatically files the OT request for HR
       // instead of making the employee remember to click Request separately. Still just a
       // request: js/store.js computeDayPay never counts OT toward pay until HR reviews and
