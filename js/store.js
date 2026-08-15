@@ -855,6 +855,32 @@ const Store = (function () {
     if (error) console.error('Failed to delete bank QR photo', error);
   }
 
+  // Same pattern again, for the private "employee-photos" bucket (My Portal profile
+  // picture -- also viewable by HR on the Employee Management page).
+  async function uploadEmployeePhoto(employeeId, blob) {
+    const ext = (blob.type && blob.type.includes('png')) ? 'png' : 'jpg';
+    const path = `${employeeId}/${genId('photo')}.${ext}`;
+    const { error } = await sb.storage.from('employee-photos').upload(path, blob, { contentType: blob.type || 'image/jpeg' });
+    if (error) {
+      toast('Photo upload failed: ' + error.message);
+      throw error;
+    }
+    return path;
+  }
+
+  async function getSignedEmployeePhotoUrl(path) {
+    if (!path) return null;
+    const { data, error } = await sb.storage.from('employee-photos').createSignedUrl(path, 3600);
+    if (error) { console.error('Failed to sign employee photo URL', error); return null; }
+    return data.signedUrl;
+  }
+
+  async function deleteEmployeePhoto(path) {
+    if (!path) return;
+    const { error } = await sb.storage.from('employee-photos').remove([path]);
+    if (error) console.error('Failed to delete employee photo', error);
+  }
+
   // ---- Probation / Regularization ----
   function listProbations() { return state.probationRecords.slice(); }
   function getProbation(id) { return state.probationRecords.find(p => p.id === id); }
@@ -1419,6 +1445,7 @@ const Store = (function () {
     listAttendance, attendanceForDate, attendanceInRange, addAttendance, updateAttendance, deleteAttendance,
     uploadAttendancePhoto, getSignedPhotoUrl, deleteAttendancePhoto,
     uploadBankQr, getSignedBankQrUrl, deleteBankQrPhoto,
+    uploadEmployeePhoto, getSignedEmployeePhotoUrl, deleteEmployeePhoto,
     listDeductions, deductionsInRange, addDeduction, deleteDeduction,
     listBonuses, bonusesInRange, addBonus, deleteBonus,
     listProbations, getProbation, getProbationByEmployee, addProbation, updateProbation, deleteProbation,

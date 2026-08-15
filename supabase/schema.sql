@@ -47,6 +47,9 @@ create table employees (
   "bankQrPath" text,                           -- storage.objects path in the private "bank-qr" bucket.
                                                 -- Only ever readable by that one employee (RLS: id = my_employee_id())
                                                 -- or an admin -- never by any other employee.
+  "photoPath" text,                            -- storage.objects path in the private "employee-photos" bucket
+                                                -- (My Portal profile picture). Same visibility as bankQrPath --
+                                                -- only that employee or an admin can ever read it.
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -2320,3 +2323,34 @@ $$;
 
 alter table employees add column if not exists "defaultTimeIn" text;
 alter table employees add column if not exists "defaultTimeOut" text;
+
+-- =================================================================
+-- Employee profile photo -- My Portal profile picture, also viewable by HR on the
+-- Employee Management page. Same private-bucket-per-employee pattern as bankQrPath above:
+-- only that one employee or an admin can ever read it. Incremental migration. Run once
+-- against a database that already has the migrations above applied. Safe to re-run.
+-- =================================================================
+
+alter table employees add column if not exists "photoPath" text;
+
+insert into storage.buckets (id, name, public)
+values ('employee-photos', 'employee-photos', false)
+on conflict (id) do nothing;
+
+drop policy if exists "employee uploads own photo" on storage.objects;
+create policy "employee uploads own photo" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'employee-photos' and (storage.foldername(name))[1] = my_employee_id());
+drop policy if exists "employee reads own photo" on storage.objects;
+create policy "employee reads own photo" on storage.objects
+  for select to authenticated
+  using (bucket_id = 'employee-photos' and (storage.foldername(name))[1] = my_employee_id());
+drop policy if exists "employee deletes own photo" on storage.objects;
+create policy "employee deletes own photo" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'employee-photos' and (storage.foldername(name))[1] = my_employee_id());
+drop policy if exists "admin full access to employee photos" on storage.objects;
+create policy "admin full access to employee photos" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'employee-photos' and is_admin())
+  with check (bucket_id = 'employee-photos' and is_admin());

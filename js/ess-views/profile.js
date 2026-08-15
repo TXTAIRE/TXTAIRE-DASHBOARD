@@ -11,6 +11,7 @@ window.EssViews.profile = (function () {
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0;">My Profile</div>
       <div class="ess-card" style="text-align:center;">
+        <div id="profile-photo-wrap" style="margin-bottom:10px;"></div>
         <div style="font-size:18px; font-weight:700;">${escapeHtml(emp.name)}</div>
         <div class="ess-sub">${escapeHtml(emp.position || '—')}</div>
       </div>
@@ -69,6 +70,20 @@ window.EssViews.profile = (function () {
         </div>
       `).join('') : '<div class="ess-empty">No documents uploaded yet.</div>'}
     `;
+
+    const photoWrap = qs('#profile-photo-wrap', main);
+    const avatarStyle = 'width:88px; height:88px; border-radius:50%; object-fit:cover; border:1px solid var(--border-soft);';
+    if (emp.photoPath) {
+      photoWrap.innerHTML = `<div class="ess-sub">Loading photo…</div>`;
+      Store.getSignedEmployeePhotoUrl(emp.photoPath).then((url) => {
+        if (!qs('#profile-photo-wrap', main)) return; // view changed while the signed URL was loading
+        photoWrap.innerHTML = url
+          ? `<img src="${url}" alt="Profile photo" style="${avatarStyle}" />`
+          : `<div style="${avatarStyle} display:flex; align-items:center; justify-content:center; margin:0 auto; background:var(--bg-elevated);">📷</div>`;
+      });
+    } else {
+      photoWrap.innerHTML = `<div style="${avatarStyle} display:flex; align-items:center; justify-content:center; margin:0 auto; background:var(--bg-elevated); font-size:32px;">👤</div>`;
+    }
 
     const qrWrap = qs('#qr-preview-wrap', main);
     if (emp.bankQrPath) {
@@ -229,12 +244,24 @@ window.EssViews.profile = (function () {
   function openEditProfile(main, emp) {
     let qrFile = null;
     let removeQr = false;
+    let photoFile = null;
+    let removePhoto = false;
 
     openEssModal(`
       <h2>Edit Profile</h2>
       <div class="modal-sub">Update your contact info and bank details. Other fields are managed by HR.</div>
       <form id="profile-form">
         <div class="modal-grid">
+          <div class="field full">
+            <label>Profile Photo</label>
+            ${emp.photoPath ? `
+              <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+                <span class="ess-sub" id="photo-current-label" style="margin:0;">Current photo on file — pick a new image to replace it.</span>
+              </div>
+              <button type="button" class="link-btn" id="btn-remove-photo" style="margin-bottom:6px;">🗑 Remove current photo</button>
+            ` : ''}
+            <input type="file" accept="image/*" name="photo" id="input-photo" />
+          </div>
           <div class="field full"><label>Phone</label><input name="phone" value="${escapeHtml(emp.phone || '')}" /></div>
           <div class="field full"><label>Email</label><input type="email" name="email" value="${escapeHtml(emp.email || '')}" /></div>
           <div class="field full"><label>Bank Account Number</label><input name="bankAccountNumber" value="${escapeHtml(emp.bankAccountNumber || '')}" placeholder="e.g. GCash / bank account number" /></div>
@@ -255,6 +282,16 @@ window.EssViews.profile = (function () {
         </div>
       </form>
     `, (bd) => {
+      const removePhotoBtn = qs('#btn-remove-photo', bd);
+      if (removePhotoBtn) removePhotoBtn.addEventListener('click', () => {
+        removePhoto = true;
+        qs('#photo-current-label', bd).textContent = 'Current photo will be removed on save.';
+        removePhotoBtn.disabled = true;
+      });
+      qs('#input-photo', bd).addEventListener('change', (ev) => {
+        photoFile = ev.target.files[0] || null;
+        if (photoFile) removePhoto = false;
+      });
       const removeBtn = qs('#btn-remove-qr', bd);
       if (removeBtn) removeBtn.addEventListener('click', () => {
         removeQr = true;
@@ -278,6 +315,12 @@ window.EssViews.profile = (function () {
             email: fd.get('email').trim(),
             bankAccountNumber: fd.get('bankAccountNumber').trim(),
           };
+          const oldPhotoPath = emp.photoPath;
+          if (photoFile) {
+            patch.photoPath = await Store.uploadEmployeePhoto(emp.id, photoFile);
+          } else if (removePhoto) {
+            patch.photoPath = null;
+          }
           const oldQrPath = emp.bankQrPath;
           if (qrFile) {
             patch.bankQrPath = await Store.uploadBankQr(emp.id, qrFile);
@@ -285,6 +328,7 @@ window.EssViews.profile = (function () {
             patch.bankQrPath = null;
           }
           await Store.updateEmployee(emp.id, patch);
+          if ((photoFile || removePhoto) && oldPhotoPath) await Store.deleteEmployeePhoto(oldPhotoPath);
           if ((qrFile || removeQr) && oldQrPath) await Store.deleteBankQrPhoto(oldQrPath);
           Object.assign(emp, patch);
           toast('✔ Profile updated.');

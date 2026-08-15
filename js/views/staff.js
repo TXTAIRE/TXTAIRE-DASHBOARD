@@ -94,6 +94,7 @@ window.Views.staff = (function () {
     const history = Store.employmentHistoryForEmployee(id);
     const docs = Store.employeeDocumentsForEmployee(id);
     openDrawer(`
+      <div id="drawer-photo-wrap" style="margin-bottom:10px;"></div>
       <h2>${escapeHtml(e.name)}</h2>
       <div class="page-sub" style="margin-bottom:14px;">${e.category} · ${escapeHtml(e.position)}</div>
       <div class="kpi-row" style="grid-template-columns:1fr 1fr;">
@@ -180,6 +181,18 @@ window.Views.staff = (function () {
         <button class="btn btn-ghost" id="drawer-edit">Edit</button>
       </div>
     `, (dr) => {
+      const photoWrap = qs('#drawer-photo-wrap', dr);
+      const avatarStyle = 'width:72px; height:72px; border-radius:50%; object-fit:cover; border:1px solid var(--border-soft); display:block;';
+      if (e.photoPath) {
+        Store.getSignedEmployeePhotoUrl(e.photoPath).then((url) => {
+          if (!qs('#drawer-photo-wrap', dr)) return; // drawer closed/changed while the signed URL was loading
+          photoWrap.innerHTML = url
+            ? `<img src="${url}" alt="Profile photo" style="${avatarStyle}" />`
+            : `<div style="${avatarStyle} display:flex; align-items:center; justify-content:center; background:var(--bg-elevated); font-size:28px;">👤</div>`;
+        });
+      } else {
+        photoWrap.innerHTML = `<div style="${avatarStyle} display:flex; align-items:center; justify-content:center; background:var(--bg-elevated); font-size:28px;">👤</div>`;
+      }
       qs('#drawer-edit', dr).addEventListener('click', () => { closeDrawer(); openEmployeeModal(main, id); });
       const viewQrBtn = qs('#btn-view-bank-qr', dr);
       if (viewQrBtn) viewQrBtn.addEventListener('click', () => {
