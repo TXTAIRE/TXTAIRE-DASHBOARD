@@ -13,7 +13,7 @@ window.EssViews.settings = (function () {
         <button type="button" class="btn btn-primary btn-sm" id="btn-ess-toggle-push" disabled>…</button>
       </div>
     `;
-    qs('#btn-ess-test-sound', card).addEventListener('click', () => playEssNotificationTone());
+    qs('#btn-ess-test-sound', card).addEventListener('click', () => playEssNotificationTone(true));
 
     function setState(subscribed) {
       const btn = qs('#btn-ess-toggle-push', card);

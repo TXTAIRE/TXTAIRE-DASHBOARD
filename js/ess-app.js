@@ -140,9 +140,10 @@ async function disableEssPushNotifications() {
 // Same three-note chime as the admin dashboard's playReminderTone -- a service worker
 // can't play audio itself, so this only ever plays while a portal tab is actually open;
 // closed/backgrounded devices get the OS's own default notification sound instead.
-function playEssNotificationTone() {
+function playEssNotificationTone(debug) {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const startedAsState = ctx.state;
     const play = () => {
       const notes = [880, 1108.73, 1318.51];
       notes.forEach((freq, i) => {
@@ -159,15 +160,20 @@ function playEssNotificationTone() {
         osc.stop(start + 0.55);
       });
       setTimeout(() => ctx.close(), 1200);
+      if (debug) toast('Played (was ' + startedAsState + ', now ' + ctx.state + ')');
     };
     // iOS Safari routinely creates a new AudioContext already 'suspended' even inside a
     // tap handler -- scheduling notes before resuming just silently drops them. Resuming
     // first (and only scheduling once that resolves) is what actually makes sound come out.
-    if (ctx.state === 'suspended') ctx.resume().then(play).catch(() => {});
-    else play();
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(play).catch((err) => { if (debug) toast('Resume failed: ' + (err && err.message)); });
+    } else {
+      play();
+    }
   } catch (err) {
     // Autoplay/audio can be blocked until the user interacts with the page — silently
     // skip the tone rather than throwing; the visual toast still shows.
+    if (debug) toast('Tone error: ' + (err && err.message ? err.message : String(err)));
   }
 }
 
