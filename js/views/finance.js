@@ -114,7 +114,10 @@ window.Views.finance = (function () {
   // for a physical/PDF expense report to file or route for approval -- reuses the DTR's
   // print overlay/table classes (js/app.js openDTR, css/styles.css .dtr-*) rather than
   // duplicating that CSS, since they're already a generic print-ready document layout.
-  function openExpenseReportPrintView(rows, monthLabel, total, filterLabel) {
+  function openExpenseReportPrintView(rowsIn, monthLabel, total, filterLabel) {
+    // Printed report always reads oldest-to-newest (a ledger/chronological convention),
+    // independent of whatever order the on-screen table is currently sorted in.
+    const rows = rowsIn.slice().sort((a, b) => a.date.localeCompare(b.date));
     const overlay = document.createElement('div');
     overlay.className = 'dtr-overlay';
     overlay.innerHTML = `
@@ -226,7 +229,7 @@ window.Views.finance = (function () {
     const rows = (expenseFilterBy === 'encoded'
       ? Store.listExpenses().filter(e => { const d = (e.created_at || '').slice(0, 10); return d >= from && d <= to; })
       : Store.expensesInRange(from, to)
-    ).slice().sort((a, b) => b.date.localeCompare(a.date));
+    ).slice().sort((a, b) => a.date.localeCompare(b.date));
     const total = rows.reduce((s, r) => s + Number(r.amount), 0);
     const monthLabel = new Date(expenseMonth + '-01T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     const filterLabel = expenseFilterBy === 'encoded' ? 'Date Encoded' : 'Date Issued';
