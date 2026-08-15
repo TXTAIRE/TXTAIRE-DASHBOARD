@@ -2414,3 +2414,32 @@ drop trigger if exists trg_notify_new_schedule_change_request on "scheduleChange
 create trigger trg_notify_new_schedule_change_request
   after insert on "scheduleChangeRequests"
   for each row execute function notify_new_schedule_change_request();
+
+-- =================================================================
+-- Payment Vouchers -- new "Payment Vouchers" tab on the Office & Finance page. Admin-only,
+-- same access pattern as expenses/bills (no employee-facing policy at all). Incremental
+-- migration. Run once against a database that already has the migrations above applied.
+-- Safe to re-run.
+-- =================================================================
+
+create table if not exists "paymentVouchers" (
+  id text primary key,
+  "refNo" text not null,
+  date date not null,
+  amount numeric(12,2) not null default 0,
+  "paymentMethod" text not null default 'Cash',   -- 'Cash' | 'Check'
+  "checkNumber" text default '',
+  "payTo" text not null,
+  "sumOfWords" text default '',                   -- amount spelled out, e.g. "Five Thousand Pesos Only"
+  being text default '',                          -- purpose/description of the payment
+  "approvedBy" text default '',
+  "paidBy" text default '',
+  "enteredBy" text,
+  created_at timestamptz not null default now()
+);
+
+alter table "paymentVouchers" enable row level security;
+
+drop policy if exists "admin full access" on "paymentVouchers";
+create policy "admin full access" on "paymentVouchers"
+  for all to authenticated using (is_admin()) with check (is_admin());

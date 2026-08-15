@@ -12,6 +12,7 @@ window.Views.finance = (function () {
   const BILL_CATEGORIES = ['Rent', 'Utilities', 'Other'];
 
   let expenseMonth = todayISO().slice(0, 7); // 'YYYY-MM'
+  let voucherMonth = todayISO().slice(0, 7); // 'YYYY-MM'
 
   function renderView(main) {
     main.innerHTML = `
@@ -19,15 +20,17 @@ window.Views.finance = (function () {
       <div class="page-head">
         <div>
           <h1 class="page-title">Office &amp; Finance</h1>
-          <div class="page-sub">Expense/receipt log and bill reminders. Admin-only -- not part of the employee portal. Office file storage moved to Admin Files, on the sidebar below.</div>
+          <div class="page-sub">Expense/receipt log, bill reminders, and payment vouchers. Admin-only -- not part of the employee portal. Office file storage moved to Admin Files, on the sidebar below.</div>
         </div>
         ${activeTab === 'expenses' ? '<button class="btn btn-primary" id="btn-new-expense">+ Add expense</button>' : ''}
         ${activeTab === 'bills' ? '<button class="btn btn-primary" id="btn-new-bill">+ Add bill</button>' : ''}
+        ${activeTab === 'vouchers' ? '<button class="btn btn-primary" id="btn-new-voucher">+ Add payment voucher</button>' : ''}
       </div>
 
       <div class="tabs">
         <div class="tab ${activeTab === 'expenses' ? 'active' : ''}" data-tab="expenses">Expenses &amp; Receipts</div>
         <div class="tab ${activeTab === 'bills' ? 'active' : ''}" data-tab="bills">Bill Reminders</div>
+        <div class="tab ${activeTab === 'vouchers' ? 'active' : ''}" data-tab="vouchers">Payment Vouchers</div>
       </div>
 
       <div id="tab-body"></div>
@@ -38,9 +41,12 @@ window.Views.finance = (function () {
     if (btnNewExp) btnNewExp.addEventListener('click', () => openExpenseForm(main));
     const btnNewBill = qs('#btn-new-bill', main);
     if (btnNewBill) btnNewBill.addEventListener('click', () => openBillForm(main));
+    const btnNewVoucher = qs('#btn-new-voucher', main);
+    if (btnNewVoucher) btnNewVoucher.addEventListener('click', () => openVoucherForm(main));
 
     if (activeTab === 'expenses') renderExpensesTab(qs('#tab-body', main), main);
-    else renderBillsTab(qs('#tab-body', main), main);
+    else if (activeTab === 'bills') renderBillsTab(qs('#tab-body', main), main);
+    else renderVouchersTab(qs('#tab-body', main), main);
   }
 
   // ---------------- Expenses & Receipts ----------------
@@ -422,6 +428,209 @@ window.Views.finance = (function () {
         renderView(main);
       });
     });
+  }
+
+  // ---------------- Payment Vouchers ----------------
+
+  const PAYMENT_METHODS = ['Cash', 'Check'];
+
+  function renderVouchersTab(body, main) {
+    const from = voucherMonth + '-01';
+    const to = voucherMonth + '-31';
+    const rows = Store.paymentVouchersInRange(from, to).slice().sort((a, b) => b.date.localeCompare(a.date));
+    const total = rows.reduce((s, r) => s + Number(r.amount), 0);
+    const monthLabel = new Date(voucherMonth + '-01T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    body.innerHTML = `
+      <div class="filters">
+        <div class="field"><label>Month</label><input type="month" id="voucher-month-input" value="${voucherMonth}" /></div>
+        <button class="btn btn-ghost btn-sm" id="btn-print-vouchers" style="align-self:flex-end;" ${rows.length ? '' : 'disabled'}>🖨 Print Vouchers (4-up)</button>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-label">Total Vouchers — ${monthLabel}</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(total)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Entries</div><div class="kpi-value">${rows.length}</div></div>
+      </div>
+
+      <div class="panel">
+        ${rows.length ? `
+        <table>
+          <thead><tr><th>Ref No</th><th>Date</th><th class="num">Amount</th><th>Method</th><th>To</th><th>Being</th><th>Approved By</th><th>Paid By</th><th>Entered By</th><th></th></tr></thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td class="name">${escapeHtml(r.refNo)}</td>
+                <td class="dim">${fmtDate(r.date)}</td>
+                <td class="num">${fmtMoney(r.amount)}</td>
+                <td class="dim">${escapeHtml(r.paymentMethod)}${r.paymentMethod === 'Check' && r.checkNumber ? ' #' + escapeHtml(r.checkNumber) : ''}</td>
+                <td class="dim">${escapeHtml(r.payTo)}</td>
+                <td class="dim" style="max-width:200px;">${escapeHtml(r.being || '—')}</td>
+                <td class="dim">${escapeHtml(r.approvedBy || '—')}</td>
+                <td class="dim">${escapeHtml(r.paidBy || '—')}</td>
+                <td class="dim">${escapeHtml(r.enteredBy || '—')}</td>
+                <td style="white-space:nowrap;">
+                  <button class="link-btn" data-print-voucher="${r.id}">Print</button>
+                  <button class="link-btn" data-edit-voucher="${r.id}">Edit</button>
+                  <button class="link-btn" data-delete-voucher="${r.id}" style="color:var(--red);">Delete</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>` : '<div class="empty">No payment vouchers logged for this month.</div>'}
+      </div>
+    `;
+
+    qs('#voucher-month-input', body).addEventListener('change', (ev) => { voucherMonth = ev.target.value; renderVouchersTab(body, main); });
+    const printAllBtn = qs('#btn-print-vouchers', body);
+    if (printAllBtn && !printAllBtn.disabled) printAllBtn.addEventListener('click', () => openVoucherPrintView(rows));
+    qsa('[data-print-voucher]', body).forEach(b => b.addEventListener('click', () => {
+      const r = Store.getPaymentVoucher(b.dataset.printVoucher);
+      if (r) openVoucherPrintView([r]);
+    }));
+    qsa('[data-edit-voucher]', body).forEach(b => b.addEventListener('click', () => {
+      const r = Store.getPaymentVoucher(b.dataset.editVoucher);
+      if (r) openVoucherForm(main, r);
+    }));
+    qsa('[data-delete-voucher]', body).forEach(b => b.addEventListener('click', async () => {
+      const r = Store.getPaymentVoucher(b.dataset.deleteVoucher);
+      if (!r) return;
+      if (!confirm(`Delete payment voucher ${r.refNo} (${fmtMoney(r.amount)})? This cannot be undone.`)) return;
+      await Store.deletePaymentVoucher(r.id);
+      toast('✔ Payment voucher deleted.');
+      renderVouchersTab(body, main);
+    }));
+  }
+
+  function openVoucherForm(main, editing) {
+    const v = editing || {
+      date: todayISO(), amount: '', paymentMethod: 'Cash', checkNumber: '',
+      payTo: '', being: '', approvedBy: '', paidBy: '',
+    };
+    openModal(`
+      <h2>${editing ? 'Edit Payment Voucher' : 'Add Payment Voucher'}</h2>
+      ${editing ? `<div class="modal-sub">Ref No: <strong>${escapeHtml(editing.refNo)}</strong></div>` : '<div class="modal-sub">A Ref No. is assigned automatically when saved.</div>'}
+      <form id="voucher-form">
+        <div class="modal-grid">
+          <div class="field"><label>Date</label><input type="date" name="date" value="${v.date}" required /></div>
+          <div class="field"><label>Amount (PHP)</label><input type="number" name="amount" min="0" step="0.01" value="${v.amount}" required /></div>
+          <div class="field"><label>Method of Payment</label>
+            <select name="paymentMethod">${PAYMENT_METHODS.map(m => `<option ${m === v.paymentMethod ? 'selected' : ''}>${m}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Check # <span class="dim" style="font-weight:400;">(if Check)</span></label><input name="checkNumber" value="${escapeHtml(v.checkNumber || '')}" /></div>
+          <div class="field full"><label>To (Payee Name)</label><input name="payTo" value="${escapeHtml(v.payTo)}" required /></div>
+          <div class="field full"><label>Being <span class="dim" style="font-weight:400;">(purpose/description)</span></label><textarea name="being" rows="2">${escapeHtml(v.being || '')}</textarea></div>
+          <div class="field"><label>Approved By</label><input name="approvedBy" value="${escapeHtml(v.approvedBy || '')}" /></div>
+          <div class="field"><label>Paid By</label><input name="paidBy" value="${escapeHtml(v.paidBy || '')}" /></div>
+        </div>
+        <div class="modal-actions">
+          ${editing ? '<button type="button" class="btn btn-danger" id="btn-del-voucher">Delete</button>' : ''}
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">${editing ? 'Save changes' : 'Add voucher'}</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#voucher-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const submitBtn = qs('button[type="submit"]', bd);
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saving…';
+        try {
+          const amount = Number(fd.get('amount')) || 0;
+          const patch = {
+            date: fd.get('date'),
+            amount,
+            paymentMethod: fd.get('paymentMethod'),
+            checkNumber: fd.get('checkNumber').trim(),
+            payTo: fd.get('payTo').trim(),
+            sumOfWords: amountToWords(amount),
+            being: fd.get('being').trim(),
+            approvedBy: fd.get('approvedBy').trim(),
+            paidBy: fd.get('paidBy').trim(),
+          };
+          if (editing) {
+            await Store.updatePaymentVoucher(editing.id, patch);
+            toast('✔ Payment voucher updated.');
+          } else {
+            patch.enteredBy = currentUserEmail();
+            await Store.addPaymentVoucher(patch);
+            toast('✔ Payment voucher added.');
+          }
+          closeModal();
+          renderView(main);
+        } catch (err) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = editing ? 'Save changes' : 'Add voucher';
+        }
+      });
+      const delBtn = qs('#btn-del-voucher', bd);
+      if (delBtn) delBtn.addEventListener('click', async () => {
+        if (!confirm('Delete this payment voucher? This cannot be undone.')) return;
+        await Store.deletePaymentVoucher(editing.id);
+        closeModal();
+        toast('✔ Payment voucher deleted.');
+        renderView(main);
+      });
+    });
+  }
+
+  // One printable card per voucher, matching the office's paper Payment Voucher template
+  // (Ref No/Amount/Date, Method of Payment, To, The Sum of, Being/Payee, Approved By/Paid
+  // By/Signature) -- 4 per A4 sheet (2x2) so several can be printed and cut apart in one
+  // go, same overlay/print pattern as the DTR (js/app.js openDTR).
+  function voucherCardHtml(v) {
+    if (!v) return '<div class="voucher-card empty"></div>';
+    return `
+      <div class="voucher-card">
+        <div class="voucher-title">Payment Voucher</div>
+        <div class="voucher-refno">Ref No: <strong>${escapeHtml(v.refNo)}</strong></div>
+        <div class="voucher-row">
+          <div><span class="voucher-label">Amount</span><br/><span class="voucher-value">${fmtMoney(v.amount)}</span></div>
+          <div><span class="voucher-label">Date</span><br/><span class="voucher-value">${fmtDate(v.date)}</span></div>
+        </div>
+        <div class="voucher-method-header">Method of Payment</div>
+        <div class="voucher-row">
+          <div><span class="voucher-label">Cash</span><br/>${v.paymentMethod === 'Cash' ? '✔' : ''}</div>
+          <div><span class="voucher-label">Check #</span><br/>${v.paymentMethod === 'Check' ? escapeHtml(v.checkNumber || '') : ''}</div>
+        </div>
+        <div class="voucher-full"><span class="voucher-label">To</span><br/><span class="voucher-value">${escapeHtml(v.payTo)}</span></div>
+        <div class="voucher-full"><span class="voucher-label">The Sum of</span><br/>${escapeHtml(v.sumOfWords || amountToWords(v.amount))}</div>
+        <div class="voucher-row">
+          <div><span class="voucher-label">Being</span><br/>${escapeHtml(v.being || '—')}</div>
+          <div><span class="voucher-label">Payee</span><br/>${escapeHtml(v.payTo)}</div>
+        </div>
+        <div class="voucher-footer">
+          <div><span class="voucher-label">Approved By</span><br/>${escapeHtml(v.approvedBy || '')}</div>
+          <div><span class="voucher-label">Paid By</span><br/>${escapeHtml(v.paidBy || '')}</div>
+          <div><span class="voucher-label">Signature</span></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function openVoucherPrintView(vouchers) {
+    const pages = [];
+    for (let i = 0; i < vouchers.length; i += 4) pages.push(vouchers.slice(i, i + 4));
+    if (!pages.length) pages.push([]);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'voucher-overlay';
+    overlay.innerHTML = `
+      <div class="voucher-print">
+        <div class="voucher-actions no-print">
+          <button class="btn btn-ghost btn-sm" id="voucher-close">Close</button>
+          <button class="btn btn-primary btn-sm" id="voucher-print-btn">Print / Save as PDF</button>
+        </div>
+        ${pages.map(page => `
+          <div class="voucher-page">
+            ${[0, 1, 2, 3].map(i => voucherCardHtml(page[i])).join('')}
+          </div>
+        `).join('')}
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#voucher-close').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#voucher-print-btn').addEventListener('click', () => window.print());
   }
 
   return { render: renderView };

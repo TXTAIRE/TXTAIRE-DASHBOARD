@@ -117,6 +117,42 @@ function fmtMoney(n) {
   return '₱' + v.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Spells out a peso amount, e.g. amountToWords(1234.56) -> "One Thousand Two Hundred
+// Thirty Four Pesos and 56/100 Only" -- for the Payment Voucher's "The Sum of" line, the
+// standard way a paper voucher states the amount in words so it can't be altered later.
+function numberToWords(n) {
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  function chunk(num) {
+    let str = '';
+    if (num >= 100) { str += ones[Math.floor(num / 100)] + ' Hundred '; num %= 100; }
+    if (num >= 20) { str += tens[Math.floor(num / 10)] + ' '; num %= 10; }
+    if (num > 0) { str += ones[num] + ' '; }
+    return str.trim();
+  }
+  if (n === 0) return 'Zero';
+  const scales = ['', 'Thousand', 'Million', 'Billion'];
+  let scaleIdx = 0;
+  const words = [];
+  let rest = Math.floor(n);
+  while (rest > 0) {
+    const c = rest % 1000;
+    if (c) words.unshift((chunk(c) + ' ' + scales[scaleIdx]).trim());
+    rest = Math.floor(rest / 1000);
+    scaleIdx++;
+  }
+  return words.join(' ');
+}
+function amountToWords(amount) {
+  const num = Number(amount) || 0;
+  const pesos = Math.floor(num);
+  const centavos = Math.round((num - pesos) * 100);
+  let words = numberToWords(pesos) + ' Peso' + (pesos === 1 ? '' : 's');
+  if (centavos > 0) words += ' and ' + String(centavos).padStart(2, '0') + '/100';
+  return words + ' Only';
+}
+
 // Formats a "HH:MM" 24-hour string (as stored) into 12-hour "h:mm AM/PM" for display.
 function to12Hour(hhmm) {
   if (!hhmm || !/^\d{1,2}:\d{2}$/.test(hhmm)) return hhmm || '—';
@@ -625,6 +661,7 @@ const Store = (function () {
     leaveRequests: 'leaveRequests',
     attendanceCorrections: 'attendanceCorrections',
     scheduleChangeRequests: 'scheduleChangeRequests',
+    paymentVouchers: 'paymentVouchers',
     auditLog: 'auditLog',
     notifications: 'notifications',
     payrollReleases: 'payrollReleases',
@@ -643,7 +680,7 @@ const Store = (function () {
     employees: [], candidates: [], disciplinaryCases: [], complaints: [],
     attendance: [], deductions: [], bonuses: [], probationRecords: [], payrollOverrides: [], holidays: [],
     payCutoffSettings: [],
-    leaveRequests: [], attendanceCorrections: [], scheduleChangeRequests: [], auditLog: [],
+    leaveRequests: [], attendanceCorrections: [], scheduleChangeRequests: [], paymentVouchers: [], auditLog: [],
     notifications: [], payrollReleases: [], appSettings: [],
     expenses: [], bills: [], officeFiles: [],
     employmentHistory: [], employeeDocuments: [],
@@ -1373,6 +1410,29 @@ const Store = (function () {
     }
   }
 
+  // ---- Payment Vouchers (Office & Finance, admin-only) ----
+  function listPaymentVouchers() { return state.paymentVouchers.slice(); }
+  function getPaymentVoucher(id) { return state.paymentVouchers.find(v => v.id === id); }
+  function paymentVouchersInRange(from, to) { return state.paymentVouchers.filter(v => v.date >= from && v.date <= to); }
+  // Ref No is sequential (PV0001, PV0002, ...) based on how many vouchers exist so far --
+  // simple and predictable for a paper trail, not meant to survive deletions leaving gaps
+  // (same tradeoff any simple sequential paper form numbering has).
+  function nextVoucherRefNo() {
+    return 'PV' + String(state.paymentVouchers.length + 1).padStart(4, '0');
+  }
+  async function addPaymentVoucher(v) {
+    v.id = genId('pv');
+    v.refNo = nextVoucherRefNo();
+    return insertRow('paymentVouchers', v);
+  }
+  async function updatePaymentVoucher(id, patch) {
+    await updateRow('paymentVouchers', id, patch);
+    return getPaymentVoucher(id);
+  }
+  async function deletePaymentVoucher(id) {
+    await deleteRow('paymentVouchers', id);
+  }
+
   // ---- Office Files (Admin/Finance, admin-only) ----
   // Manually-uploaded documents (scanned receipts, contracts, etc.) -- staff scan using the
   // printer's own software, then upload the resulting file here.
@@ -1559,6 +1619,7 @@ const Store = (function () {
     listExpenses, getExpense, expensesInRange, addExpense, updateExpense, deleteExpense,
     uploadReceiptPhoto, getSignedReceiptUrl, deleteReceiptPhoto,
     listBills, getBill, addBill, updateBill, deleteBill, payBill,
+    listPaymentVouchers, getPaymentVoucher, paymentVouchersInRange, addPaymentVoucher, updatePaymentVoucher, deletePaymentVoucher,
     listOfficeFiles, uploadOfficeFile, getSignedOfficeFileUrl, deleteOfficeFile, updateOfficeFile, duplicateOfficeFile,
     listMaterialRequests, addMaterialRequest, updateMaterialRequest, deleteMaterialRequest,
     employeeDocumentsForEmployee, uploadEmployeeDocument, getSignedEmployeeDocumentUrl, updateEmployeeDocument, deleteEmployeeDocument,
