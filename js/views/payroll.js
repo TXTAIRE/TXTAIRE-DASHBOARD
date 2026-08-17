@@ -262,7 +262,13 @@ window.Views.payroll = (function () {
         <table>
           <thead><tr><th>Staff</th><th>Position</th><th class="num">Days Present</th><th class="num">Absent</th><th class="num">Base Pay</th><th class="num">COLA</th><th class="num">Housing Allowance</th><th class="num">NSD</th><th class="num">OT</th><th class="num">Holiday</th><th class="num">Rest Day</th><th class="num">Retro Pay</th><th class="num">Gross Pay</th><th class="num">Withholding Tax</th><th class="num">Deductions</th><th class="num">Bonus</th><th class="num">Net Pay</th><th></th></tr></thead>
           <tbody>
-            ${rows.map(r => `
+            ${rows.map(r => r.hasNotStartedYet ? `
+              <tr>
+                <td class="name">${escapeHtml(r.emp.name)}</td>
+                <td class="dim">${escapeHtml(r.emp.position)}</td>
+                <td class="dim" colspan="15">Not yet started — first day is ${fmtDate(r.emp.dateHired)}</td>
+              </tr>
+            ` : `
               <tr class="${r.emp.id === highlightedEmpId ? 'row-highlighted' : ''}">
                 <td class="name row-link" data-highlight-emp="${r.emp.id}" title="Click to highlight this row while you edit it">${escapeHtml(r.emp.name)}</td>
                 <td class="dim">${escapeHtml(r.emp.position)}</td>

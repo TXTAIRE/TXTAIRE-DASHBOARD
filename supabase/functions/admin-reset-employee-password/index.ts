@@ -25,12 +25,29 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
+// Called directly from the browser (js/views/staff.js fetch()) with a custom
+// Authorization header and a JSON content-type -- that combination triggers a CORS
+// preflight OPTIONS request first. Without these headers on every response (including
+// answering OPTIONS), the browser blocks the whole call before it ever reaches this
+// code and throws a generic "Failed to fetch" with no server-side trace at all. The
+// real access control here is the Authorization-token + admin check below, not origin
+// restriction, so '*' is fine for the CORS origin itself.
+var corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   var supabaseUrl = Deno.env.get('SUPABASE_URL');
   var serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   var anonKey = Deno.env.get('SUPABASE_ANON_KEY');
   if (!supabaseUrl || !serviceRoleKey || !anonKey) {
-    return new Response('Missing Supabase secrets', { status: 500 });
+    return new Response('Missing Supabase secrets', { status: 500, headers: corsHeaders });
   }
 
   var authHeader = req.headers.get('Authorization') || '';
@@ -38,7 +55,7 @@ Deno.serve(async (req) => {
   if (!token) {
     return new Response(
       JSON.stringify({ error: 'Missing Authorization header' }),
-      { status: 401, headers: { 'Content-Type': 'application/json' } }
+      { status: 401, headers: Object.assign({ 'Content-Type': 'application/json' }, corsHeaders) }
     );
   }
 
@@ -47,7 +64,7 @@ Deno.serve(async (req) => {
   if (callerResult.error || !callerResult.data || !callerResult.data.user) {
     return new Response(
       JSON.stringify({ error: 'Invalid session -- please sign in again' }),
-      { status: 401, headers: { 'Content-Type': 'application/json' } }
+      { status: 401, headers: Object.assign({ 'Content-Type': 'application/json' }, corsHeaders) }
     );
   }
   var callerId = callerResult.data.user.id;
@@ -60,7 +77,7 @@ Deno.serve(async (req) => {
   if (callerEmployeeRow.data) {
     return new Response(
       JSON.stringify({ error: 'Admin access required' }),
-      { status: 403, headers: { 'Content-Type': 'application/json' } }
+      { status: 403, headers: Object.assign({ 'Content-Type': 'application/json' }, corsHeaders) }
     );
   }
 
@@ -71,7 +88,7 @@ Deno.serve(async (req) => {
   if (!employeeId || newPassword.length < 8) {
     return new Response(
       JSON.stringify({ error: 'A valid employeeId and a password of at least 8 characters are required' }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } }
+      { status: 400, headers: Object.assign({ 'Content-Type': 'application/json' }, corsHeaders) }
     );
   }
 
@@ -80,7 +97,7 @@ Deno.serve(async (req) => {
   if (!target || !target.authUserId) {
     return new Response(
       JSON.stringify({ error: 'This employee has no portal account to reset' }),
-      { status: 404, headers: { 'Content-Type': 'application/json' } }
+      { status: 404, headers: Object.assign({ 'Content-Type': 'application/json' }, corsHeaders) }
     );
   }
 
@@ -88,12 +105,12 @@ Deno.serve(async (req) => {
   if (updateResult.error) {
     return new Response(
       JSON.stringify({ error: updateResult.error.message }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      { status: 500, headers: Object.assign({ 'Content-Type': 'application/json' }, corsHeaders) }
     );
   }
 
   return new Response(
     JSON.stringify({ success: true, employeeName: target.name }),
-    { headers: { 'Content-Type': 'application/json' } }
+    { headers: Object.assign({ 'Content-Type': 'application/json' }, corsHeaders) }
   );
 });

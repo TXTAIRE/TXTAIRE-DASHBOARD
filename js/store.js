@@ -551,7 +551,31 @@ function dedupeAttendanceByDate(records) {
   return byDate;
 }
 
+// dateHired doubles as this app's "start date" -- already the single anchor used
+// everywhere else (SIL eligibility, tenure, retirement pay), so a future-dated hire
+// (added to the system ahead of their actual first day) shouldn't show any pay yet.
+// Compared against min(to, today) rather than just `to` -- a cutoff's own end date
+// alone isn't enough for the CURRENT cutoff, which spans both before and after a
+// mid-cutoff start date: checking only `to` would already show the employee's full
+// pay for that whole cutoff the moment it's viewed, even on a day before they've
+// actually started (today < dateHired), since Monthly-rate basePay is a flat amount
+// not gated by attendance. Capping at today keeps a genuinely past cutoff (viewed
+// after the employee already started, today >= dateHired) computing normally, while
+// keeping "hasn't started as of today" hidden regardless of which cutoff -- past,
+// current, or future -- happens to be open.
 function computeRow(emp, from, to) {
+  const notStartedCutoff = todayISO() < to ? todayISO() : to;
+  if (emp.dateHired && emp.dateHired > notStartedCutoff) {
+    return {
+      emp, daysPresent: 0, isOverridden: false, workDays: workDaysInRange(from, to), daysAbsent: 0, isAbsentOverridden: false,
+      basePay: 0, isBasePayOverridden: false, colaPay: 0, isColaOverridden: false, housingPay: 0, isHousingOverridden: false,
+      nsdPay: 0, isNsdOverridden: false, otPay: 0, isOtOverridden: false, holidayPay: 0, isHolidayOverridden: false,
+      restDayPay: 0, retroPay: 0,
+      gross: 0, isGrossOverridden: false, taxableGross: 0, tax: 0, isTaxOverridden: false,
+      manualDed: 0, attendanceDed: 0, lateUndertimeDed: 0, dedTotal: 0, isDedTotalOverridden: false, bonusTotal: 0,
+      net: 0, isNetOverridden: false, hasNotStartedYet: true,
+    };
+  }
   const allRecords = Object.values(dedupeAttendanceByDate(Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id)));
   const presentRecords = allRecords.filter(a => a.status === 'Present' || a.status === 'Late');
   const attendanceDays = presentRecords.length;

@@ -51,6 +51,18 @@ window.EssViews.payroll = (function () {
       return pos.year === year && pos.month === month && pos.half === half;
     })();
 
+    if (row.hasNotStartedYet) {
+      main.innerHTML = `
+        <div class="ess-section-title" style="margin-top:0;">${t('title_payroll')}</div>
+        <div class="ess-card" style="text-align:center; padding:28px 16px;">
+          <div style="font-size:32px;">👋</div>
+          <div style="font-weight:700; margin-top:8px;">Welcome to the team!</div>
+          <div class="ess-sub" style="margin-top:6px;">Your payroll details will appear here once you start on ${fmtDate(emp.dateHired)}.</div>
+        </div>
+      `;
+      return;
+    }
+
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0;">${t('title_payroll')}</div>
 
