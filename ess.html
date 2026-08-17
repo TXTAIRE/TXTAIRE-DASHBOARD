@@ -26,28 +26,28 @@
   <nav id="ess-nav" class="ess-nav">
     <button class="ess-nav-btn" data-route="attendance">
       <span class="ess-nav-ic"><svg viewBox="0 0 36 36" width="22" height="22"><circle cx="18" cy="18" r="17" fill="#15803d"/><circle cx="18" cy="18" r="10" fill="none" stroke="#fff" stroke-width="2"/><path d="M18 12v6l4 3" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-      My Attendance
+      <span data-i18n="nav_attendance">My Attendance</span>
     </button>
     <button class="ess-nav-btn" data-route="payroll">
       <span class="ess-nav-ic"><svg viewBox="0 0 36 36" width="22" height="22"><circle cx="18" cy="18" r="17" fill="#15803d"/><rect x="8" y="13" width="20" height="12" rx="2" fill="none" stroke="#fff" stroke-width="2"/><circle cx="18" cy="19" r="3.2" fill="none" stroke="#fff" stroke-width="1.6"/></svg></span>
-      My Payroll
+      <span data-i18n="nav_payroll">My Payroll</span>
     </button>
     <button class="ess-nav-btn" data-route="leave">
       <span class="ess-nav-ic"><svg viewBox="0 0 36 36" width="22" height="22"><circle cx="18" cy="18" r="17" fill="#15803d"/><path d="M13 9h7l4 4v14a1 1 0 0 1-1 1H13a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1z" fill="#fff"/><path d="M20 9v4h4" fill="none" stroke="#15803d" stroke-width="1.4"/><line x1="14.5" y1="17" x2="21.5" y2="17" stroke="#15803d" stroke-width="1.4"/><line x1="14.5" y1="20" x2="21.5" y2="20" stroke="#15803d" stroke-width="1.4"/><line x1="14.5" y1="23" x2="19" y2="23" stroke="#15803d" stroke-width="1.4"/></svg></span>
-      My Leave
+      <span data-i18n="nav_leave">My Leave</span>
     </button>
     <div class="ess-nav-spacer"></div>
     <button class="ess-nav-btn" data-route="profile">
       <span class="ess-nav-ic"><svg viewBox="0 0 36 36" width="22" height="22"><defs><clipPath id="clip-person"><circle cx="18" cy="18" r="17"/></clipPath></defs><circle cx="18" cy="18" r="17" fill="#15803d"/><g clip-path="url(#clip-person)"><circle cx="18" cy="14.5" r="4.5" fill="#fff"/><path d="M9 28c1.2-4.8 5-7.5 9-7.5s7.8 2.7 9 7.5" fill="#fff"/></g></svg></span>
-      My Profile
+      <span data-i18n="nav_profile">My Profile</span>
     </button>
     <button class="ess-nav-btn" data-route="notifications">
       <span class="ess-nav-ic"><svg viewBox="0 0 36 36" width="22" height="22"><circle cx="18" cy="18" r="17" fill="#15803d"/><path d="M18 10c-3 0-5 2.2-5 5.5v3.3c0 1-.4 2-1.1 2.7l-.9.9h14l-.9-.9a3.8 3.8 0 0 1-1.1-2.7v-3.3c0-3.3-2-5.5-5-5.5z" fill="#fff"/><path d="M16 24a2 2 0 0 0 4 0" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg><span id="ess-nav-notif-badge" class="ess-bell-badge hidden">0</span></span>
-      Notifications
+      <span data-i18n="nav_notifications">Notifications</span>
     </button>
     <button class="ess-nav-btn" data-route="settings">
       <span class="ess-nav-ic"><svg viewBox="0 0 36 36" width="22" height="22"><circle cx="18" cy="18" r="17" fill="#15803d"/><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="4"/><path d="M18 8v2.4M18 25.6V28M28 18h-2.4M10.4 18H8M24.6 11.4l-1.7 1.7M13.1 22.9l-1.7 1.7M24.6 24.6l-1.7-1.7M13.1 13.1l-1.7-1.7"/></g></svg></span>
-      Settings
+      <span data-i18n="nav_settings">Settings</span>
     </button>
     <button type="button" id="ess-fab-clock" class="ess-fab" title="Time In / Time Out" aria-label="Quick Time In or Time Out">+</button>
   </nav>
@@ -59,6 +59,7 @@
 <script src="js/supabase-config.js"></script>
 <script src="js/store.js"></script>
 <script src="js/offline-queue.js"></script>
+<script src="js/ess-i18n.js"></script>
 <script src="js/ess-app.js"></script>
 <script src="js/ess-views/attendance.js"></script>
 <script src="js/ess-views/payroll.js"></script>

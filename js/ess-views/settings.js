@@ -133,10 +133,19 @@ window.EssViews.settings = (function () {
 
   function render(main, emp) {
     main.innerHTML = `
-      <div class="ess-section-title" style="margin-top:0;">Settings</div>
+      <div class="ess-section-title" style="margin-top:0;">${t('title_settings')}</div>
       <div class="ess-card">
         <div class="ess-row"><span class="label">Employee ID</span><span class="value">${escapeHtml(emp.employeeCode || '—')}</span></div>
         <div class="ess-row"><span class="label">Name</span><span class="value">${escapeHtml(emp.name)}</span></div>
+      </div>
+
+      <div class="ess-section-title">🌐 Wika / Language</div>
+      <div class="ess-card">
+        <div class="ess-sub" style="margin-bottom:8px;">Nav labels and page titles only, for now -- not every screen yet.</div>
+        <div class="seg" id="seg-lang" style="display:flex;">
+          <button type="button" data-lang="en" class="${essLang() === 'en' ? 'active' : ''}" style="flex:1;">English</button>
+          <button type="button" data-lang="fil" class="${essLang() === 'fil' ? 'active' : ''}" style="flex:1;">Filipino</button>
+        </div>
       </div>
 
       <div class="ess-section-title">🔔 Notifications</div>
@@ -174,6 +183,10 @@ window.EssViews.settings = (function () {
     `;
 
     renderNotificationsCard(main, emp);
+    qsa('#seg-lang button', main).forEach(b => b.addEventListener('click', () => {
+      setEssLang(b.dataset.lang);
+      render(main, emp);
+    }));
     qs('#btn-report-incident', main).addEventListener('click', () => openIncidentForm(emp));
     qs('#btn-file-concern', main).addEventListener('click', () => openConcernForm(emp));
 

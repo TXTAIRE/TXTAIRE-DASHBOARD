@@ -182,7 +182,7 @@ window.EssViews.profile = (function () {
     const scheduleRequests = Store.scheduleChangeRequestsForEmployee(emp.id).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
 
     main.innerHTML = `
-      <div class="ess-section-title" style="margin-top:0;">My Profile</div>
+      <div class="ess-section-title" style="margin-top:0;">${t('title_profile')}</div>
       <div class="ess-card" style="text-align:center;">
         <div style="position:relative; width:88px; height:88px; margin:0 auto 10px;">
           <div id="profile-photo-wrap" style="width:100%; height:100%;"></div>
@@ -197,6 +197,7 @@ window.EssViews.profile = (function () {
         <div class="ess-row"><span class="label">Category</span><span class="value">${escapeHtml(emp.category)}</span></div>
         <div class="ess-row"><span class="label">Employment Status</span><span class="value">${escapeHtml(emp.employmentStatus)}</span></div>
         <div class="ess-row"><span class="label">Date Hired</span><span class="value">${fmtDate(emp.dateHired)}</span></div>
+        ${emp.reportsTo ? `<div class="ess-row"><span class="label">Reports To</span><span class="value">${escapeHtml((Store.getEmployee(emp.reportsTo) || {}).name || '—')}</span></div>` : ''}
       </div>
       <div class="ess-card">
         <div class="ess-card-label">Contact</div>

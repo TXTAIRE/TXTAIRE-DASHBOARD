@@ -23,9 +23,20 @@ window.EssViews.notifications = (function () {
 
   function render(main, emp) {
     const list = Store.listNotificationsForEmployee(emp.id);
+    const announcements = Store.listAnnouncements();
     main.innerHTML = `
-      <div class="ess-section-title" style="margin-top:0; display:flex; justify-content:space-between; align-items:center;">
-        <span>Notifications</span>
+      ${announcements.length ? `
+      <div class="ess-section-title" style="margin-top:0;">📣 Announcements</div>
+      ${announcements.map(a => `
+        <div class="ess-card" style="margin-bottom:8px; ${a.pinned ? 'border-color:var(--accent);' : ''}">
+          <div style="font-weight:700;">${a.pinned ? '📌 ' : ''}${escapeHtml(a.title)}</div>
+          <div class="ess-sub" style="margin-top:4px; white-space:pre-wrap;">${escapeHtml(a.body)}</div>
+          <div class="ess-sub" style="margin-top:6px; font-size:11px;">${fmtDate((a.created_at || '').slice(0, 10))}</div>
+        </div>
+      `).join('')}
+      ` : ''}
+      <div class="ess-section-title" style="${announcements.length ? '' : 'margin-top:0;'} display:flex; justify-content:space-between; align-items:center;">
+        <span>${t('title_notifications')}</span>
         ${list.length ? '<button type="button" class="link-btn" id="btn-mark-all-read">Mark all as read</button>' : ''}
       </div>
       ${list.length ? list.map(n => `

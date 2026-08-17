@@ -243,7 +243,7 @@ window.EssViews.attendance = (function () {
 
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0; display:flex; justify-content:space-between; align-items:center;">
-        <span>Today's Attendance</span>
+        <span>${t('title_attendance')}</span>
         ${todayRec && withinEditWindow(todayRec) ? `<button type="button" class="link-btn" data-edit-day="${todayRec.id}" title="Edit or delete today's attendance">✏️ Edit</button>` : ''}
       </div>
       <div class="ess-card">

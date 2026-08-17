@@ -223,6 +223,7 @@ function renderEssRoute() {
   const main = qs('#ess-main');
   main.innerHTML = '';
   setActiveEssNav(essRoute);
+  applyEssNavLang();
   const view = window.EssViews[essRoute];
   if (view && view.render) view.render(main, myEmployee);
   updateEssBellBadge();

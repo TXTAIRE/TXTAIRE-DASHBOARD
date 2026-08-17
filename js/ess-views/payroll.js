@@ -52,7 +52,7 @@ window.EssViews.payroll = (function () {
     })();
 
     main.innerHTML = `
-      <div class="ess-section-title" style="margin-top:0;">My Payroll</div>
+      <div class="ess-section-title" style="margin-top:0;">${t('title_payroll')}</div>
 
       <div class="ess-card" style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 16px;">
         <button type="button" class="link-btn" id="btn-prev-cutoff">← Prev</button>

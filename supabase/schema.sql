@@ -2830,3 +2830,34 @@ begin
   return NEW;
 end;
 $$;
+
+-- =================================================================
+-- Company Announcements + Org Chart -- incremental migration. Run once against a
+-- database that already has every migration above applied. Safe to re-run.
+--
+-- Announcements: admin-authored, broadcast to every employee (not per-employee like
+-- "notifications" -- no employeeId, no read-tracking, just a company bulletin board).
+-- Org Chart: adds a self-referencing "reportsTo" column to employees; no new table.
+-- =================================================================
+
+create table if not exists announcements (
+  id text primary key,
+  title text not null,
+  body text not null,
+  pinned boolean not null default false,
+  "postedBy" text,
+  created_at timestamptz not null default now()
+);
+
+alter table announcements enable row level security;
+
+drop policy if exists "admin full access" on announcements;
+create policy "admin full access" on announcements
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "employee reads announcements" on announcements;
+create policy "employee reads announcements" on announcements
+  for select to authenticated using (true);
+
+alter publication supabase_realtime add table announcements;
+
+alter table employees add column if not exists "reportsTo" text references employees(id) on delete set null;

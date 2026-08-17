@@ -21,7 +21,7 @@ window.EssViews.leave = (function () {
     );
 
     main.innerHTML = `
-      <div class="ess-section-title" style="margin-top:0;">My Leave Requests</div>
+      <div class="ess-section-title" style="margin-top:0;">${t('title_leave')}</div>
       ${relevantPolicies.map(p => {
         const bal = Store.leaveBalance(emp, p.leaveType, year);
         const eligibility = Store.leaveEligibility(emp, p.leaveType, todayISO());

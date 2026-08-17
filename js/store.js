@@ -712,6 +712,7 @@ const Store = (function () {
     safetyIncidents: 'safetyIncidents',
     employeeRelationsCases: 'employeeRelationsCases',
     adminCodiMembers: 'adminCodiMembers',
+    announcements: 'announcements',
   };
 
   const state = {
@@ -727,6 +728,7 @@ const Store = (function () {
     thirteenthMonthPay: [], leaveTypePolicies: [], offboarding: [],
     sssContributionBrackets: [], contributionRates: [], regionalMinimumWage: [],
     safetyIncidents: [], employeeRelationsCases: [], adminCodiMembers: [],
+    announcements: [],
   };
 
   let remoteChangeCallback = null;
@@ -815,6 +817,17 @@ const Store = (function () {
   }
   async function deleteEmployee(id) {
     await deleteRow('employees', id);
+  }
+  // Direct reports of one manager -- active employees only, so someone Terminated
+  // doesn't linger as a phantom branch on the Org Chart.
+  function directReports(employeeId) {
+    return state.employees.filter(e => e.reportsTo === employeeId && e.status !== 'Terminated');
+  }
+  // Root-level employees (no manager on file, or reportsTo points at someone no longer
+  // active/on file) -- the Org Chart starts here and expands via directReports().
+  function orgChartRoots() {
+    const activeIds = new Set(state.employees.filter(e => e.status !== 'Terminated').map(e => e.id));
+    return state.employees.filter(e => e.status !== 'Terminated' && (!e.reportsTo || !activeIds.has(e.reportsTo)));
   }
 
   // ---- Recruitment ----
@@ -977,6 +990,23 @@ const Store = (function () {
   }
   async function deleteEmployeeRelationsCase(id) {
     await deleteRow('employeeRelationsCases', id);
+  }
+
+  // ---- Announcements (company-wide bulletin, admin-authored, every employee reads) ----
+  function listAnnouncements() {
+    return state.announcements.slice().sort((a, b) => (Number(b.pinned) - Number(a.pinned)) || (b.created_at || '').localeCompare(a.created_at || ''));
+  }
+  function getAnnouncement(id) { return state.announcements.find(a => a.id === id); }
+  async function addAnnouncement(a) {
+    a.id = genId('ann');
+    return insertRow('announcements', a);
+  }
+  async function updateAnnouncement(id, patch) {
+    await updateRow('announcements', id, patch);
+    return getAnnouncement(id);
+  }
+  async function deleteAnnouncement(id) {
+    await deleteRow('announcements', id);
   }
 
   // ---- Attendance ----
@@ -2069,5 +2099,7 @@ const Store = (function () {
     compute13thMonthPay, listThirteenthMonthPay, getThirteenthMonthPay, thirteenthMonthPayForEmployee, compute13thMonthForAllEmployees, release13thMonthPay,
     computeRetirementPay, yearsOfServiceAsOf,
     listOffboarding, getOffboarding, activeOffboardingForEmployee, startOffboarding, updateClearanceItem, computeFinalPay, saveFinalPaySnapshot, releaseFinalPay, issueCOE,
+    listAnnouncements, getAnnouncement, addAnnouncement, updateAnnouncement, deleteAnnouncement,
+    directReports, orgChartRoots,
   };
 })();
