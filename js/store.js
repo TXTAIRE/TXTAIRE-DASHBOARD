@@ -686,6 +686,15 @@ const Store = (function () {
     pushSubscriptions: 'pushSubscriptions',
     employeePushSubscriptions: 'employeePushSubscriptions',
     materialRequests: 'materialRequests',
+    thirteenthMonthPay: 'thirteenthMonthPay',
+    leaveTypePolicies: 'leaveTypePolicies',
+    offboarding: 'offboarding',
+    sssContributionBrackets: 'sssContributionBrackets',
+    contributionRates: 'contributionRates',
+    regionalMinimumWage: 'regionalMinimumWage',
+    safetyIncidents: 'safetyIncidents',
+    employeeRelationsCases: 'employeeRelationsCases',
+    adminCodiMembers: 'adminCodiMembers',
   };
 
   const state = {
@@ -698,6 +707,9 @@ const Store = (function () {
     employmentHistory: [], employeeDocuments: [],
     pushSubscriptions: [], employeePushSubscriptions: [],
     materialRequests: [],
+    thirteenthMonthPay: [], leaveTypePolicies: [], offboarding: [],
+    sssContributionBrackets: [], contributionRates: [], regionalMinimumWage: [],
+    safetyIncidents: [], employeeRelationsCases: [], adminCodiMembers: [],
   };
 
   let remoteChangeCallback = null;
@@ -865,6 +877,89 @@ const Store = (function () {
   }
   async function deleteComplaint(id) {
     await deleteRow('complaints', id);
+  }
+
+  // ---- Safety Incidents (OSH, RA 11058) ----
+  // Field technicians can self-report from My Portal (RLS lets an employee insert/select
+  // their own); HR works the full queue here. Simple Open/Resolved log, same shape as
+  // Complaints above -- no separate approval workflow.
+  function listSafetyIncidents() { return state.safetyIncidents.slice(); }
+  function getSafetyIncident(id) { return state.safetyIncidents.find(s => s.id === id); }
+  function safetyIncidentsForEmployee(employeeId) { return state.safetyIncidents.filter(s => s.employeeId === employeeId); }
+  async function addSafetyIncident(s) {
+    s.id = genId('si');
+    s.status = s.status || 'Open';
+    return insertRow('safetyIncidents', s);
+  }
+  async function updateSafetyIncident(id, patch) {
+    await updateRow('safetyIncidents', id, patch);
+    return getSafetyIncident(id);
+  }
+  // Marking Resolved notifies the reporting employee (if the incident has one on file --
+  // an incident reported about a location/general hazard may have no specific employeeId).
+  async function resolveSafetyIncident(id, correctiveAction) {
+    const s = getSafetyIncident(id);
+    await updateRow('safetyIncidents', id, { status: 'Resolved', correctiveAction: correctiveAction || (s && s.correctiveAction) || '' });
+    if (s && s.employeeId) {
+      await createNotification({
+        employeeId: s.employeeId,
+        type: 'safety_incident_resolved',
+        message: `Your safety incident report (${fmtDate(s.incidentDate)}) has been marked resolved.`,
+        relatedTable: 'safetyIncidents', relatedId: id,
+      });
+    }
+    return getSafetyIncident(id);
+  }
+  async function deleteSafetyIncident(id) {
+    await deleteRow('safetyIncidents', id);
+  }
+
+  // ---- Employee Relations Cases (Safe Spaces Act, RA 11313) ----
+  // Confidential by design -- RLS restricts admin read/write to accounts flagged
+  // "codiMember" (see js/views/staff.js), NOT every admin like every other table in this
+  // app. Employees can file their own case and see only their own submission's status,
+  // never the respondent's identity or committee notes (enforced server-side).
+  function listEmployeeRelationsCases() { return state.employeeRelationsCases.slice(); }
+  function getEmployeeRelationsCase(id) { return state.employeeRelationsCases.find(c => c.id === id); }
+  function employeeRelationsCasesFiledBy(employeeId) { return state.employeeRelationsCases.filter(c => c.complainantEmployeeId === employeeId); }
+  // True only for an admin account HR has explicitly flagged as a Committee on Decorum
+  // and Investigation (CODI) member -- gates whether the Employee Relations nav link and
+  // page render at all, mirroring the RLS policy so a non-member never even sees an empty
+  // page (their query would return zero rows anyway, but this avoids that confusing state).
+  // Admin accounts aren't rows in "employees" (see is_admin() in supabase/schema.sql --
+  // an admin is precisely an authenticated user who is NOT in employees), so membership
+  // lives in its own tiny "adminCodiMembers" table keyed by email instead.
+  function currentAdminIsCodiMember(currentUserEmail) {
+    if (!currentUserEmail) return false;
+    return state.adminCodiMembers.some(m => (m.email || '').toLowerCase() === currentUserEmail.toLowerCase());
+  }
+  function listAdminCodiMembers() { return state.adminCodiMembers.slice(); }
+  async function addAdminCodiMember(email, addedBy) {
+    return insertRow('adminCodiMembers', { id: genId('codi'), email: (email || '').toLowerCase(), addedBy: addedBy || null });
+  }
+  async function removeAdminCodiMember(id) {
+    await deleteRow('adminCodiMembers', id);
+  }
+  async function fileEmployeeRelationsCase(c) {
+    c.id = genId('erc');
+    c.status = 'Filed';
+    return insertRow('employeeRelationsCases', c);
+  }
+  async function updateEmployeeRelationsCase(id, patch) {
+    const c = getEmployeeRelationsCase(id);
+    await updateRow('employeeRelationsCases', id, patch);
+    if (c && patch.status && patch.status !== c.status) {
+      await createNotification({
+        employeeId: c.complainantEmployeeId,
+        type: 'relations_case_updated',
+        message: `Your filed concern (${fmtDate(c.dateFiled)}) status changed to ${patch.status}.`,
+        relatedTable: 'employeeRelationsCases', relatedId: id,
+      });
+    }
+    return getEmployeeRelationsCase(id);
+  }
+  async function deleteEmployeeRelationsCase(id) {
+    await deleteRow('employeeRelationsCases', id);
   }
 
   // ---- Attendance ----
@@ -1042,6 +1137,78 @@ const Store = (function () {
     await deleteRow('deductions', id);
   }
 
+  // ---- Contribution tables (SSS / PhilHealth / Pag-IBIG) ----
+  // HR-editable reference data (supabase/schema.sql seeds placeholder starting figures --
+  // verify against the current circulars). Used only to PRE-FILL the amount field when
+  // HR adds a matching deduction below -- never silently applied, always overridable.
+  function listSssContributionBrackets() { return state.sssContributionBrackets.slice().sort((a, b) => a.minSalary - b.minSalary); }
+  // Unlike every other table in this store, "id" here is a Postgres serial (auto-assigned
+  // on insert), not a client-generated genId() -- deliberately omitted from the row so the
+  // database assigns it, rather than every other table's client-side id convention.
+  async function addSssContributionBracket(b) {
+    const { error } = await sb.from(TABLES.sssContributionBrackets).insert(sanitize(b));
+    if (error) { toast('Save failed: ' + error.message); throw error; }
+    await refetch('sssContributionBrackets');
+    logAudit('sssContributionBrackets.insert', TABLES.sssContributionBrackets, null, b);
+  }
+  async function updateSssContributionBracket(id, patch) {
+    await updateRow('sssContributionBrackets', id, patch);
+  }
+  async function deleteSssContributionBracket(id) {
+    await deleteRow('sssContributionBrackets', id);
+  }
+  // Monthly-salary-equivalent bracket lookup -- the employee's own share only (not the
+  // employer's), since that's the number that actually lands on a payslip deduction line.
+  function suggestedSssDeduction(monthlySalary) {
+    const s = Number(monthlySalary) || 0;
+    const bracket = listSssContributionBrackets().find(b => s >= b.minSalary && (b.maxSalary == null || s <= b.maxSalary));
+    return bracket ? Number(bracket.employeeShare) : 0;
+  }
+
+  function listContributionRates() { return state.contributionRates.slice(); }
+  function getContributionRate(key) { return state.contributionRates.find(r => r.key === key); }
+  async function upsertContributionRate(row) {
+    const { error } = await sb.from(TABLES.contributionRates).upsert(sanitize(row), { onConflict: 'key' });
+    if (error) { toast('Save failed: ' + error.message); throw error; }
+    await refetch('contributionRates');
+    logAudit('contributionRates.update', TABLES.contributionRates, row.key, row);
+  }
+  function suggestedRateDeduction(key, monthlySalary) {
+    const r = getContributionRate(key);
+    if (!r) return 0;
+    const capped = Math.min(Math.max(Number(monthlySalary) || 0, Number(r.floorSalary) || 0), r.ceilingSalary != null ? Number(r.ceilingSalary) : Infinity);
+    const total = capped * (Number(r.ratePercent) || 0) / 100;
+    return total * (Number(r.employeeSharePercent) || 0) / 100;
+  }
+  function suggestedPhilhealthDeduction(monthlySalary) { return suggestedRateDeduction('philhealth', monthlySalary); }
+  function suggestedPagibigDeduction(monthlySalary) { return suggestedRateDeduction('pagibig', monthlySalary); }
+
+  // ---- Minimum wage flag (regional Wage Orders) ----
+  // HR-editable reference data, same "keep it current" caveat as the contribution tables
+  // above -- wage orders vary by region and change periodically.
+  function listRegionalMinimumWage() { return state.regionalMinimumWage.slice(); }
+  async function upsertRegionalMinimumWage(row) {
+    const { error } = await sb.from(TABLES.regionalMinimumWage).upsert(sanitize(row), { onConflict: 'region' });
+    if (error) { toast('Save failed: ' + error.message); throw error; }
+    await refetch('regionalMinimumWage');
+    logAudit('regionalMinimumWage.update', TABLES.regionalMinimumWage, row.region, row);
+  }
+  async function deleteRegionalMinimumWage(region) {
+    const { error } = await sb.from(TABLES.regionalMinimumWage).delete().eq('region', region);
+    if (error) { toast('Delete failed: ' + error.message); throw error; }
+    await refetch('regionalMinimumWage');
+  }
+  // Compares the employee's daily-rate equivalent against their region's floor -- null
+  // (not a warning) when the employee has no region on file, since there's nothing to
+  // compare against yet.
+  function isBelowMinimumWage(emp) {
+    if (!emp || !emp.region) return null;
+    const row = state.regionalMinimumWage.find(r => r.region === emp.region);
+    if (!row) return null;
+    const dailyRateEq = emp.payType === 'Daily' ? Number(emp.rate) : (Number(emp.rate) / 22); // rough monthly->daily fallback, same 22-working-day assumption used elsewhere for monthly-paid staff
+    return dailyRateEq < Number(row.dailyRate);
+  }
+
   // ---- Bonuses ----
   function listBonuses() { return state.bonuses.slice(); }
   function bonusesInRange(from, to) { return state.bonuses.filter(b => b.date >= from && b.date <= to); }
@@ -1099,6 +1266,60 @@ const Store = (function () {
       .filter(r => r.employeeId === employeeId && r.leaveType === 'SIL' && r.id !== excludeId
         && (r.status === 'Approved' || r.status === 'Pending') && (r.startDate || '').slice(0, 4) === String(year))
       .reduce((sum, r) => sum + dateRangeDays(r.startDate, r.endDate), 0);
+  }
+
+  // ---- Statutory leave policies + generalized balances ----
+  // Generalizes the SIL-only pattern above (silEligibleAsOf/silDaysUsed) to every leave
+  // type via the HR-editable "leaveTypePolicies" table -- leaveRequests.leaveType stays a
+  // free-text column, now driven by this list instead of a hardcoded dropdown array.
+  // silDaysUsed/silEligibleAsOf/silEligibleFrom/silDaysInRange above are left untouched
+  // (still used by the printable DTR and elsewhere) rather than refactored in place.
+  function listLeaveTypePolicies() { return state.leaveTypePolicies.slice(); }
+  function getLeaveTypePolicy(leaveType) { return state.leaveTypePolicies.find(p => p.leaveType === leaveType); }
+  async function updateLeaveTypePolicy(leaveType, patch) {
+    const { error } = await sb.from(TABLES.leaveTypePolicies).upsert(sanitize(Object.assign({ leaveType }, patch)), { onConflict: 'leaveType' });
+    if (error) { toast('Save failed: ' + error.message); throw error; }
+    await refetch('leaveTypePolicies');
+    logAudit('leaveTypePolicies.update', TABLES.leaveTypePolicies, leaveType, patch);
+  }
+  // Same yearly-cap counting rule as silDaysUsed, generalized to any leave type; for a
+  // perOccurrence type (Maternity/Paternity/VAWC) "year" is ignored and it instead counts
+  // days used against the SAME pregnancy/incident window isn't tracked automatically --
+  // HR reviews those case by case, this still returns a same-calendar-year total as a
+  // reference number on the request form, not a hard cap.
+  function leaveDaysUsed(employeeId, leaveType, year, excludeId) {
+    return state.leaveRequests
+      .filter(r => r.employeeId === employeeId && r.leaveType === leaveType && r.id !== excludeId
+        && (r.status === 'Approved' || r.status === 'Pending') && (r.startDate || '').slice(0, 4) === String(year))
+      .reduce((sum, r) => sum + dateRangeDays(r.startDate, r.endDate), 0);
+  }
+  // Soft eligibility check -- returns { eligible, reason } where reason explains a "no"
+  // (not yet 1 year of service, wrong gender restriction, missing Solo Parent status).
+  // Deliberately advisory: the request form shows this as a warning, not a hard block --
+  // HR makes the final call on approval (VAWC in particular needs documentation this
+  // system can't verify).
+  function leaveEligibility(emp, leaveType, asOfDate) {
+    const policy = getLeaveTypePolicy(leaveType);
+    if (!policy) return { eligible: true, reason: '' };
+    if (policy.minServiceMonths > 0) {
+      if (!emp || !emp.dateHired) return { eligible: false, reason: 'Date hired is not on file yet.' };
+      if (addMonths(emp.dateHired, policy.minServiceMonths) > (asOfDate || todayISO())) {
+        return { eligible: false, reason: `Not yet eligible -- requires ${policy.minServiceMonths} month(s) of service.` };
+      }
+    }
+    if (policy.genderRestriction && emp && emp.sex && emp.sex !== policy.genderRestriction) {
+      return { eligible: false, reason: `${leaveType} Leave is restricted to ${policy.genderRestriction} employees.` };
+    }
+    if (policy.requiresSoloParentStatus && (!emp || !emp.soloParentStatus)) {
+      return { eligible: false, reason: 'Requires Solo Parent status on file -- HR verifies against a Solo Parent ID.' };
+    }
+    return { eligible: true, reason: '' };
+  }
+  function leaveBalance(emp, leaveType, year, excludeId) {
+    const policy = getLeaveTypePolicy(leaveType);
+    const entitled = policy ? Number(policy.daysPerYear) : 0;
+    const used = emp ? leaveDaysUsed(emp.id, leaveType, year || new Date().getFullYear(), excludeId) : 0;
+    return { entitled, used, remaining: Math.max(0, entitled - used) };
   }
   async function addLeaveRequest(r) {
     r.id = genId('lr');
@@ -1445,6 +1666,188 @@ const Store = (function () {
     await deleteRow('paymentVouchers', id);
   }
 
+  // ---- 13th Month Pay (PD 851) ----
+  // Statutory: total basic salary actually earned within the calendar year, divided by
+  // 12. Pure computation over the same computeRow(emp, from, to).basePay used everywhere
+  // else, summed across every payroll cutoff of the year via the existing payCutoffs()
+  // generator (js/store.js, used by the Payroll tab's period picker) -- not a new cutoff
+  // system. A cutoff is only counted toward a year if its own "to" date falls in that
+  // year, so this is inherently prorated for a partial year (e.g. a new hire, or someone
+  // separating mid-year) without any extra scaling logic.
+  function compute13thMonthPay(emp, year) {
+    let basicSalaryEarned = 0;
+    for (let m = 1; m <= 12; m++) {
+      payCutoffs(emp.payCycle, year, m).forEach(c => {
+        if (c.to.slice(0, 4) === String(year)) {
+          basicSalaryEarned += computeRow(emp, c.from, c.to).basePay;
+        }
+      });
+    }
+    return { basicSalaryEarned, amount: basicSalaryEarned / 12 };
+  }
+  function listThirteenthMonthPay(year) { return state.thirteenthMonthPay.filter(t => !year || t.year === year); }
+  function getThirteenthMonthPay(id) { return state.thirteenthMonthPay.find(t => t.id === id); }
+  function thirteenthMonthPayForEmployee(employeeId, year) {
+    return state.thirteenthMonthPay.find(t => t.employeeId === employeeId && t.year === year);
+  }
+  // Computes and upserts one row per active employee for the given year -- re-running for
+  // a year that's already Released leaves that employee's row untouched (a released
+  // amount shouldn't silently change), only 'Computed' rows get refreshed.
+  async function compute13thMonthForAllEmployees(year, computedBy) {
+    const active = state.employees.filter(e => e.status !== 'Terminated');
+    for (const emp of active) {
+      const { basicSalaryEarned, amount } = compute13thMonthPay(emp, year);
+      const existing = thirteenthMonthPayForEmployee(emp.id, year);
+      if (existing) {
+        if (existing.status !== 'Released') {
+          await updateRow('thirteenthMonthPay', existing.id, { basicSalaryEarned, amount, computedBy: computedBy || null });
+        }
+      } else {
+        await insertRow('thirteenthMonthPay', { id: genId('t13'), employeeId: emp.id, year, basicSalaryEarned, amount, status: 'Computed', computedBy: computedBy || null });
+      }
+    }
+  }
+  async function release13thMonthPay(id, releaseDate) {
+    const row = getThirteenthMonthPay(id);
+    await updateRow('thirteenthMonthPay', id, { status: 'Released', releaseDate: releaseDate || todayISO() });
+    if (row) {
+      await createNotification({
+        employeeId: row.employeeId,
+        type: 'thirteenth_month_released',
+        message: `Your ${row.year} 13th Month Pay of ${fmtMoney(row.amount)} has been released.`,
+        relatedTable: 'thirteenthMonthPay', relatedId: id,
+      });
+    }
+    return getThirteenthMonthPay(id);
+  }
+
+  // ---- Retirement Pay (RA 7641) ----
+  // Statutory MINIMUM for an employee with no separate company retirement plan: at least
+  // 22.5 days' pay per year of service (conventional shorthand for 15 days basic + 5 days
+  // SIL cash-in-lieu + 1/12 of 13th month). Pure function, consumed by computeFinalPay
+  // below when separationType is 'Retirement'.
+  function yearsOfServiceAsOf(dateHired, asOfDate) {
+    if (!dateHired) return 0;
+    const start = new Date(dateHired + 'T00:00:00');
+    const end = new Date((asOfDate || todayISO()) + 'T00:00:00');
+    return Math.max(0, (end - start) / (365.25 * 86400000));
+  }
+  function computeRetirementPay(emp, retirementDate) {
+    const dailyRateEq = emp.payType === 'Daily' ? Number(emp.rate) : Number(emp.rate) / 22;
+    return dailyRateEq * 22.5 * yearsOfServiceAsOf(emp.dateHired, retirementDate);
+  }
+
+  // ---- Offboarding / Final Pay & Clearance ----
+  const DEFAULT_CLEARANCE_CHECKLIST = [
+    'Company equipment returned (tools, uniform, ID, keys)',
+    'No pending cash advances or unliquidated liabilities',
+    'Turnover of pending work/documents completed',
+    'Exit interview conducted',
+  ];
+  function listOffboarding() { return state.offboarding.slice(); }
+  function getOffboarding(id) { return state.offboarding.find(o => o.id === id); }
+  // The one active (not yet Released) offboarding case for an employee, if any -- an
+  // employee can only be mid-offboarding once at a time.
+  function activeOffboardingForEmployee(employeeId) {
+    return state.offboarding.find(o => o.employeeId === employeeId && o.status !== 'Released');
+  }
+  async function startOffboarding({ employeeId, separationType, noticeDate, separationDate, createdBy }) {
+    const row = {
+      id: genId('off'), employeeId, separationType, noticeDate: noticeDate || null, separationDate,
+      clearanceChecklist: DEFAULT_CLEARANCE_CHECKLIST.map(item => ({ item, done: false, doneBy: null, doneDate: null })),
+      status: 'Pending Clearance', createdBy: createdBy || null,
+    };
+    // Deliberately does NOT touch employees.status yet -- that only happens at
+    // releaseFinalPay, matching real-world practice of not cutting off an employee's
+    // access/records until clearance is actually done.
+    return insertRow('offboarding', row);
+  }
+  async function updateClearanceItem(offboardingId, index, done, doneBy) {
+    const o = getOffboarding(offboardingId);
+    if (!o) return;
+    const checklist = (o.clearanceChecklist || []).slice();
+    if (!checklist[index]) return;
+    checklist[index] = Object.assign({}, checklist[index], { done, doneBy: done ? (doneBy || null) : null, doneDate: done ? todayISO() : null });
+    await updateRow('offboarding', offboardingId, { clearanceChecklist: checklist });
+    return getOffboarding(offboardingId);
+  }
+  // Pure computation -- doesn't save anything, so HR can preview/recompute freely before
+  // committing via saveFinalPaySnapshot. "Last salary" is the cutoff containing (or the
+  // last cutoff before) the separation date; prorated 13th month reuses compute13thMonthPay
+  // as-is (already only sums cutoffs actually earned so far in the year); unused-leave
+  // cash-out uses the SIL balance specifically (the only leave type with a hard cap this
+  // app enforces) at the daily rate; outstanding liabilities sum any logged Cash Advance
+  // deductions up to the separation date. Every figure here is a snapshot for HR to review
+  // before release, not a final legal determination.
+  function computeFinalPay(offboardingId) {
+    const o = getOffboarding(offboardingId);
+    if (!o) return null;
+    const emp = getEmployee(o.employeeId);
+    if (!emp) return null;
+    const year = Number((o.separationDate || todayISO()).slice(0, 4));
+    const month = Number((o.separationDate || todayISO()).slice(5, 7));
+
+    const cutoffs = payCutoffs(emp.payCycle, year, month);
+    const relevantCutoff = cutoffs.find(c => o.separationDate >= c.from && o.separationDate <= c.to) || cutoffs[0];
+    const lastSalary = computeRow(emp, relevantCutoff.from, relevantCutoff.to).net;
+
+    const { amount: proratedThirteenthMonth } = compute13thMonthPay(emp, year);
+
+    const dailyRateEq = emp.payType === 'Daily' ? Number(emp.rate) : Number(emp.rate) / 22;
+    const unusedSilDays = leaveBalance(emp, 'SIL', year).remaining;
+    const unusedSILCashOut = unusedSilDays * dailyRateEq;
+
+    const outstandingLiabilities = state.deductions
+      .filter(d => d.employeeId === emp.id && d.kind === 'Cash Advance' && d.date <= o.separationDate)
+      .reduce((s, d) => s + Number(d.amount), 0);
+
+    const retirementPay = o.separationType === 'Retirement' ? computeRetirementPay(emp, o.separationDate) : 0;
+
+    const totalFinalPay = lastSalary + proratedThirteenthMonth + unusedSILCashOut + retirementPay - outstandingLiabilities;
+
+    return {
+      lastSalary, proratedThirteenthMonth, unusedSilDays, unusedSILCashOut,
+      retirementPay, outstandingLiabilities, totalFinalPay, computedDate: todayISO(),
+    };
+  }
+  async function saveFinalPaySnapshot(offboardingId) {
+    const snapshot = computeFinalPay(offboardingId);
+    if (!snapshot) throw new Error('Could not compute final pay -- employee record not found.');
+    await updateRow('offboarding', offboardingId, { finalPaySnapshot: snapshot, status: 'Ready for Release' });
+    return getOffboarding(offboardingId);
+  }
+  // Only now sets employees.status -- always 'Terminated' regardless of separationType,
+  // matching the one terminal status value the rest of the app already filters active
+  // employees by everywhere (attendance, payroll, releasePayroll, etc.); the real
+  // distinction (Resignation vs. Termination vs. Retirement vs. End of Contract) stays on
+  // this offboarding record's own separationType field for reporting/COE purposes.
+  async function releaseFinalPay(offboardingId, releaseDate) {
+    const o = getOffboarding(offboardingId);
+    if (!o) return;
+    await updateRow('offboarding', offboardingId, { status: 'Released', finalPayReleaseDate: releaseDate || todayISO() });
+    await updateEmployee(o.employeeId, { status: 'Terminated' });
+    await createNotification({
+      employeeId: o.employeeId,
+      type: 'final_pay_released',
+      message: `Your final pay (${fmtMoney((o.finalPaySnapshot && o.finalPaySnapshot.totalFinalPay) || 0)}) has been released.`,
+      relatedTable: 'offboarding', relatedId: offboardingId,
+    });
+    return getOffboarding(offboardingId);
+  }
+  async function issueCOE(offboardingId, coeIssuedDate) {
+    const o = getOffboarding(offboardingId);
+    await updateRow('offboarding', offboardingId, { coeIssuedDate: coeIssuedDate || todayISO() });
+    if (o) {
+      await createNotification({
+        employeeId: o.employeeId,
+        type: 'coe_issued',
+        message: 'Your Certificate of Employment has been issued -- coordinate with HR to receive it.',
+        relatedTable: 'offboarding', relatedId: offboardingId,
+      });
+    }
+    return getOffboarding(offboardingId);
+  }
+
   // ---- Office Files (Admin/Finance, admin-only) ----
   // Manually-uploaded documents (scanned receipts, contracts, etc.) -- staff scan using the
   // printer's own software, then upload the resulting file here.
@@ -1638,5 +2041,16 @@ const Store = (function () {
     listPushSubscriptions, savePushSubscription, deletePushSubscriptionByEndpoint,
     saveEmployeePushSubscription, deleteEmployeePushSubscriptionByEndpoint,
     exportAllData, logAudit,
+    listSafetyIncidents, getSafetyIncident, safetyIncidentsForEmployee, addSafetyIncident, updateSafetyIncident, resolveSafetyIncident, deleteSafetyIncident,
+    listEmployeeRelationsCases, getEmployeeRelationsCase, employeeRelationsCasesFiledBy, currentAdminIsCodiMember,
+    listAdminCodiMembers, addAdminCodiMember, removeAdminCodiMember,
+    fileEmployeeRelationsCase, updateEmployeeRelationsCase, deleteEmployeeRelationsCase,
+    listSssContributionBrackets, addSssContributionBracket, updateSssContributionBracket, deleteSssContributionBracket, suggestedSssDeduction,
+    listContributionRates, getContributionRate, upsertContributionRate, suggestedPhilhealthDeduction, suggestedPagibigDeduction,
+    listRegionalMinimumWage, upsertRegionalMinimumWage, deleteRegionalMinimumWage, isBelowMinimumWage,
+    listLeaveTypePolicies, getLeaveTypePolicy, updateLeaveTypePolicy, leaveDaysUsed, leaveEligibility, leaveBalance,
+    compute13thMonthPay, listThirteenthMonthPay, getThirteenthMonthPay, thirteenthMonthPayForEmployee, compute13thMonthForAllEmployees, release13thMonthPay,
+    computeRetirementPay, yearsOfServiceAsOf,
+    listOffboarding, getOffboarding, activeOffboardingForEmployee, startOffboarding, updateClearanceItem, computeFinalPay, saveFinalPaySnapshot, releaseFinalPay, issueCOE,
   };
 })();

@@ -1,5 +1,6 @@
 window.Views.leaveRequests = (function () {
   let filterStatus = 'Pending';
+  let activeTab = 'requests';
 
   function statusBadge(status) {
     // 'Rejected' kept as a display alias for any pre-migration rows still holding the old
@@ -10,11 +11,6 @@ window.Views.leaveRequests = (function () {
   }
 
   function renderList(main) {
-    const all = Store.listLeaveRequests();
-    let rows = all.slice();
-    if (filterStatus !== 'All') rows = rows.filter(r => r.status === filterStatus);
-    rows.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-
     main.innerHTML = `
       <div class="crumb">HR</div>
       <div class="page-head">
@@ -24,6 +20,25 @@ window.Views.leaveRequests = (function () {
         </div>
       </div>
 
+      <div class="tabs">
+        <div class="tab ${activeTab === 'requests' ? 'active' : ''}" data-tab="requests">Requests</div>
+        <div class="tab ${activeTab === 'policies' ? 'active' : ''}" data-tab="policies">Leave Policies</div>
+      </div>
+
+      <div id="tab-body"></div>
+    `;
+    qsa('.tab', main).forEach(t => t.addEventListener('click', () => { activeTab = t.dataset.tab; renderList(main); }));
+    if (activeTab === 'policies') renderPoliciesTab(qs('#tab-body', main), main);
+    else renderRequestsTab(qs('#tab-body', main), main);
+  }
+
+  function renderRequestsTab(body, main) {
+    const all = Store.listLeaveRequests();
+    let rows = all.slice();
+    if (filterStatus !== 'All') rows = rows.filter(r => r.status === filterStatus);
+    rows.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+
+    body.innerHTML = `
       <div class="filters">
         <div class="field">
           <label>Status</label>
@@ -53,14 +68,47 @@ window.Views.leaveRequests = (function () {
       </div>
     `;
 
-    qsa('#seg-status button', main).forEach(b => b.addEventListener('click', () => { filterStatus = b.dataset.val; renderList(main); }));
-    qsa('[data-open]', main).forEach(el => el.addEventListener('click', () => openDetail(main, el.dataset.open)));
+    qsa('#seg-status button', body).forEach(b => b.addEventListener('click', () => { filterStatus = b.dataset.val; renderRequestsTab(body, main); }));
+    qsa('[data-open]', body).forEach(el => el.addEventListener('click', () => openDetail(main, el.dataset.open)));
+  }
+
+  function renderPoliciesTab(body, main) {
+    const policies = Store.listLeaveTypePolicies();
+    body.innerHTML = `
+      <div class="panel">
+        <div class="page-sub" style="padding:10px 14px 0;">Day allotments used for the balance shown to employees when submitting a leave request. Statutory types (SIL, Maternity, Paternity, Solo Parent, VAWC) reflect the legal minimum -- editable here only if company policy is more generous.</div>
+        <table>
+          <thead><tr><th>Leave Type</th><th>Days/Year</th><th>Min. Service (months)</th><th>Restriction</th><th></th></tr></thead>
+          <tbody>
+            ${policies.map(p => `
+              <tr>
+                <td class="name">${escapeHtml(p.leaveType)} ${p.statutory ? '<span class="badge badge-blue" style="margin-left:6px;">Statutory</span>' : ''}</td>
+                <td><input type="number" step="0.5" min="0" data-days-for="${p.leaveType}" value="${p.daysPerYear}" style="width:80px;" /></td>
+                <td class="dim">${p.minServiceMonths || 0}</td>
+                <td class="dim">${[p.genderRestriction, p.requiresSoloParentStatus ? 'Solo Parent status' : ''].filter(Boolean).join(', ') || '—'}</td>
+                <td><button class="link-btn" data-save-policy="${p.leaveType}">Save</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+    qsa('[data-save-policy]', body).forEach(btn => btn.addEventListener('click', async () => {
+      const leaveType = btn.dataset.savePolicy;
+      const input = qs(`[data-days-for="${leaveType}"]`, body);
+      await Store.updateLeaveTypePolicy(leaveType, { daysPerYear: Number(input.value) || 0 });
+      toast(`✔ ${leaveType} updated.`);
+      renderPoliciesTab(body, main);
+    }));
   }
 
   function openDetail(main, id) {
     const r = Store.getLeaveRequest(id);
     if (!r) return;
     const emp = Store.getEmployee(r.employeeId);
+    const year = Number((r.startDate || todayISO()).slice(0, 4));
+    const eligibility = emp ? Store.leaveEligibility(emp, r.leaveType, r.startDate) : { eligible: true, reason: '' };
+    const balance = emp ? Store.leaveBalance(emp, r.leaveType, year, r.id) : null;
 
     openDrawer(`
       <h2>${escapeHtml(emp ? emp.name : 'Unknown employee')}</h2>
@@ -71,6 +119,8 @@ window.Views.leaveRequests = (function () {
         Dates: ${fmtDate(r.startDate)} – ${fmtDate(r.endDate)}<br/>
         Submitted: ${fmtDate((r.created_at || '').slice(0, 10))}
       </div>
+      ${balance ? `<div class="page-sub" style="margin-top:6px;">${year} balance: ${balance.used} of ${balance.entitled} day(s) used, ${balance.remaining} remaining (before this request).</div>` : ''}
+      ${!eligibility.eligible ? `<div class="page-sub" style="margin-top:6px; color:var(--red);">⚠ ${escapeHtml(eligibility.reason)} — review carefully before approving.</div>` : ''}
       <div class="section-title">Reason</div>
       <div class="page-sub">${escapeHtml(r.reason || '—')}</div>
       ${r.reviewedBy ? `

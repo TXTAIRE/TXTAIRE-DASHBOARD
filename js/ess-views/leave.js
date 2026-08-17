@@ -9,19 +9,30 @@ window.EssViews.leave = (function () {
 
   function render(main, emp) {
     const rows = Store.leaveRequestsForEmployee(emp.id).slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-    const silYear = Number(todayISO().slice(0, 4));
-    const silUsed = Store.silDaysUsed(emp.id, silYear);
-    const silLeft = Math.max(0, SIL_YEARLY_DAYS - silUsed);
-    const silEligible = silEligibleAsOf(emp);
+    const year = Number(todayISO().slice(0, 4));
+    // Only shows balance cards for leave types this employee could plausibly use --
+    // matches sex/solo-parent restrictions so a card for e.g. Paternity Leave doesn't
+    // show up for a female employee. Purely informational; eligibility is still checked
+    // (softly, except SIL's hard cap) when actually submitting a request below.
+    const relevantPolicies = Store.listLeaveTypePolicies().filter(p =>
+      Number(p.daysPerYear) > 0 &&
+      (!p.genderRestriction || p.genderRestriction === emp.sex) &&
+      (!p.requiresSoloParentStatus || emp.soloParentStatus)
+    );
 
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0;">My Leave Requests</div>
-      <div class="ess-card" style="margin-bottom:14px;">
-        <div class="ess-row"><span class="label">Service Incentive Leave (SIL) — ${silYear}</span><span class="value" style="font-weight:700;">${silEligible ? `${silLeft} of ${SIL_YEARLY_DAYS} days left` : 'Not yet eligible'}</span></div>
-        <div class="ess-sub" style="margin-top:4px;">${silEligible
-          ? '5 paid days per year, per the Labor Code of the Philippines. Includes Pending requests, not just Approved.'
-          : `Requires 1 year of service (Labor Code Art. 95). Eligible starting ${fmtDate(silEligibleFrom(emp))}.`}</div>
-      </div>
+      ${relevantPolicies.map(p => {
+        const bal = Store.leaveBalance(emp, p.leaveType, year);
+        const eligibility = Store.leaveEligibility(emp, p.leaveType, todayISO());
+        return `
+        <div class="ess-card" style="margin-bottom:10px;">
+          <div class="ess-row"><span class="label">${escapeHtml(p.leaveType)}${p.statutory ? ' <span class="badge badge-blue" style="font-size:10px;">Statutory</span>' : ''} — ${year}</span><span class="value" style="font-weight:700;">${eligibility.eligible ? `${bal.remaining} of ${bal.entitled} days left` : 'Not yet eligible'}</span></div>
+          <div class="ess-sub" style="margin-top:4px;">${eligibility.eligible
+            ? (p.notes ? escapeHtml(p.notes) : 'Includes Pending requests, not just Approved.')
+            : escapeHtml(eligibility.reason)}</div>
+        </div>`;
+      }).join('')}
       <button class="btn btn-primary btn-sm" id="btn-new-leave" style="width:100%; justify-content:center; margin-bottom:14px;">+ New Leave Request</button>
       ${rows.length ? rows.map(r => `
         <div class="ess-card">
@@ -61,7 +72,7 @@ window.EssViews.leave = (function () {
       <form id="leave-form">
         <div class="modal-grid">
           <div class="field full"><label>Type</label>
-            <select name="leaveType">${['Vacation', 'Sick', 'SIL', 'Emergency', 'Other'].map(t => `<option ${t === r.leaveType ? 'selected' : ''}>${t}</option>`).join('')}</select>
+            <select name="leaveType">${Store.listLeaveTypePolicies().map(p => p.leaveType).map(t => `<option ${t === r.leaveType ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select>
           </div>
           <div class="field"><label>Start date</label><input type="date" name="startDate" value="${r.startDate}" required /></div>
           <div class="field"><label>End date</label><input type="date" name="endDate" value="${r.endDate}" required /></div>
@@ -101,6 +112,12 @@ window.EssViews.leave = (function () {
             toast(`Only ${left} SIL day${left === 1 ? '' : 's'} left for ${year} — this request is for ${requestedDays}.`);
             return;
           }
+        } else {
+          // Every other statutory type is a soft warning, not a hard block -- HR makes the
+          // final eligibility call on approval (VAWC in particular needs documentation this
+          // system can't verify), so the employee can still submit and let HR review it.
+          const eligibility = Store.leaveEligibility(emp, patch.leaveType, patch.startDate);
+          if (!eligibility.eligible && !confirm(`${eligibility.reason}\n\nSubmit anyway for HR to review?`)) return;
         }
         if (existing) {
           await Store.updateLeaveRequest(existing.id, patch);

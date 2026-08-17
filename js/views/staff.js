@@ -147,6 +147,12 @@ window.Views.staff = (function () {
         <div class="kpi-card"><div class="kpi-label">Status</div><div class="kpi-value" style="font-size:16px;">${employeeStatusDot(e.status)}</div></div>
         <div class="kpi-card"><div class="kpi-label">Employment</div><div class="kpi-value" style="font-size:16px;">${employmentStatusBadge(e.employmentStatus)}</div></div>
       </div>
+      ${(() => {
+        const activeOffboarding = Store.activeOffboardingForEmployee(e.id);
+        if (activeOffboarding) return `<div class="page-sub" style="margin-top:8px;">Offboarding in progress (${escapeHtml(activeOffboarding.status)}). <button type="button" class="link-btn" id="btn-goto-offboarding">Open →</button></div>`;
+        if (e.status === 'Terminated') return '';
+        return `<div class="page-sub" style="margin-top:8px;">Separating this employee? <button type="button" class="link-btn" id="btn-goto-offboarding-new">Start Offboarding →</button> (handles clearance and final pay — don't just set Status to Terminated below.)</div>`;
+      })()}
       <div class="section-title" style="margin-top:18px;">Profile <span class="dim" style="font-weight:400;">(same info this employee sees on My Portal → My Profile)</span></div>
       <div class="page-sub">
         Employee ID: ${e.employeeCode ? `<strong>${escapeHtml(e.employeeCode)}</strong>` : '<span class="dim">not assigned</span>'}<br/>
@@ -243,6 +249,8 @@ window.Views.staff = (function () {
       }
       qs('#drawer-edit', dr).addEventListener('click', () => { closeDrawer(); openEmployeeModal(main, id); });
       qs('#btn-set-hours', dr).addEventListener('click', () => openSetHoursModal(main, id, () => { closeDrawer(); openEmployeeDetail(main, id); }));
+      const gotoOffboarding = qs('#btn-goto-offboarding', dr) || qs('#btn-goto-offboarding-new', dr);
+      if (gotoOffboarding) gotoOffboarding.addEventListener('click', () => { closeDrawer(); location.hash = '#offboarding'; });
       const viewQrBtn = qs('#btn-view-bank-qr', dr);
       if (viewQrBtn) viewQrBtn.addEventListener('click', () => {
         const win = window.open('', '_blank');
@@ -592,7 +600,8 @@ window.Views.staff = (function () {
 
   function openEmployeeModal(main, id) {
     const editing = id ? Store.getEmployee(id) : null;
-    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, housingAllowance: 0, nightShiftDifferential: false, fixedHours: true, defaultTimeIn: '', defaultTimeOut: '', payCycle: '10-20', notes: '', bankAccountNumber: '' };
+    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, housingAllowance: 0, nightShiftDifferential: false, fixedHours: true, defaultTimeIn: '', defaultTimeOut: '', payCycle: '10-20', notes: '', bankAccountNumber: '', sex: '', region: '', soloParentStatus: false };
+    const wageCheck = editing ? Store.isBelowMinimumWage(editing) : null;
 
     openModal(`
       <h2>${editing ? 'Edit employee' : 'Add employee'}</h2>
@@ -614,6 +623,17 @@ window.Views.staff = (function () {
           <div class="field"><label>Date hired</label><input type="date" name="dateHired" value="${e.dateHired}" /></div>
           <div class="field"><label>Phone</label><input name="phone" value="${escapeHtml(e.phone)}" /></div>
           <div class="field"><label>Email</label><input type="email" name="email" value="${escapeHtml(e.email)}" /></div>
+          <div class="field"><label>Sex <span class="dim">(for Maternity/Paternity leave eligibility)</span></label>
+            <select name="sex"><option value="">Not set</option>${['Male', 'Female'].map(s => `<option ${s === e.sex ? 'selected' : ''}>${s}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Region <span class="dim">(for minimum wage check)</span></label><input name="region" value="${escapeHtml(e.region || '')}" placeholder="e.g. NCR" /></div>
+          <div class="field" style="display:flex; align-items:flex-end; gap:8px; padding-bottom:6px;">
+            <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer;">
+              <input type="checkbox" name="soloParentStatus" ${e.soloParentStatus ? 'checked' : ''} style="width:auto;" />
+              Solo Parent (verified against Solo Parent ID)
+            </label>
+          </div>
+          ${wageCheck ? '<div class="field full page-sub" style="margin-top:-8px; color:var(--red);">⚠ This employee\'s rate is below the minimum wage on file for their region.</div>' : ''}
           <div class="field"><label>Pay cycle</label>
             <select name="payCycle">
               <option value="10-20" ${e.payCycle === '10-20' ? 'selected' : ''}>Admins (${paydayLabel('10-20')})</option>
@@ -665,6 +685,9 @@ window.Views.staff = (function () {
           dateHired: fd.get('dateHired'),
           phone: fd.get('phone').trim(),
           email: fd.get('email').trim(),
+          sex: fd.get('sex') || null,
+          region: fd.get('region').trim() || null,
+          soloParentStatus: fd.get('soloParentStatus') === 'on',
           payCycle: fd.get('payCycle'),
           payType: fd.get('payType'),
           rate: Number(fd.get('rate')) || 0,

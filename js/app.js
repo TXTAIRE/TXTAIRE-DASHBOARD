@@ -320,7 +320,7 @@ function employeeStatusDot(status) {
   return '<span class="status-dot ' + (map[status] || '') + '">' + escapeHtml(status) + '</span>';
 }
 
-const ROUTES = ['overview', 'staff', 'recruitment', 'probation', 'disciplinary', 'attendance', 'payroll', 'complaints', 'leaveRequests', 'attendanceCorrections', 'scheduleRequests', 'auditLog', 'finance', 'adminFiles', 'materials'];
+const ROUTES = ['overview', 'staff', 'recruitment', 'probation', 'disciplinary', 'attendance', 'payroll', 'complaints', 'leaveRequests', 'attendanceCorrections', 'scheduleRequests', 'offboarding', 'safetyIncidents', 'employeeRelations', 'auditLog', 'finance', 'adminFiles', 'materials'];
 
 function currentRoute() {
   const h = (location.hash || '').replace('#', '').split('/')[0];
@@ -349,11 +349,17 @@ function updateNavBadges() {
   const pendingAttendanceRequests = Store.listAttendance().reduce((n, r) =>
     n + (r.nsdStatus === 'Requested' ? 1 : 0) + (r.otStatus === 'Requested' ? 1 : 0) + (r.holidayStatus === 'Requested' ? 1 : 0), 0);
   const openComplaints = Store.listComplaints().filter(c => c.status === 'Open').length;
+  const pendingOffboarding = Store.listOffboarding().filter(o => o.status !== 'Released').length;
+  const openSafetyIncidents = Store.listSafetyIncidents().filter(s => s.status === 'Open').length;
+  const openRelationsCases = Store.listEmployeeRelationsCases().filter(c => c.status !== 'Resolved').length;
   setNavBadge('leaveRequests', pendingLeave);
   setNavBadge('attendanceCorrections', pendingCorrections);
   setNavBadge('scheduleRequests', pendingScheduleRequests);
   setNavBadge('attendance', pendingAttendanceRequests);
   setNavBadge('complaints', openComplaints);
+  setNavBadge('offboarding', pendingOffboarding);
+  setNavBadge('safetyIncidents', openSafetyIncidents);
+  setNavBadge('employeeRelations', openRelationsCases);
 }
 
 function render() {

@@ -29,6 +29,11 @@ var TITLES = {
   holiday_approved: 'Holiday Pay Approved',
   payroll_released: 'Payroll Released',
   nte_issued: 'Notice to Explain Issued',
+  thirteenth_month_released: '13th Month Pay Released',
+  final_pay_released: 'Final Pay Released',
+  coe_issued: 'Certificate of Employment Issued',
+  safety_incident_resolved: 'Safety Incident Resolved',
+  relations_case_updated: 'Employee Relations Case Update',
 };
 
 Deno.serve(async (req) => {

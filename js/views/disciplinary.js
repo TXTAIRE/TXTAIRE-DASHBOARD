@@ -73,12 +73,36 @@ window.Views.disciplinary = (function () {
         <div class="modal-actions" style="justify-content:flex-start;">
           <button class="btn btn-ghost btn-sm" id="btn-log-investigation">Add note</button>
         </div>
+        ${c.terminationTrack ? `
+        <div class="section-title">Twin-Notice Process (Art. 297)</div>
+        <div class="page-sub" style="margin-bottom:8px;">Just-cause termination requires a hearing between the first and second notice, and a written second notice stating the decision.</div>
+        <div class="modal-grid">
+          <div class="field"><label>Hearing date</label><input type="date" id="hearing-date" value="${c.hearingDate || ''}" /></div>
+          <div class="field full"><label>Hearing notes</label><textarea id="hearing-notes" rows="2">${escapeHtml(c.hearingNotes || '')}</textarea></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="btn-save-hearing">Save hearing</button>
+        <div class="modal-grid" style="margin-top:12px;">
+          <div class="field"><label>Second notice date</label><input type="date" id="second-notice-date" value="${c.secondNoticeDate || ''}" /></div>
+          <div class="field"><label>Decision</label>
+            <select id="second-notice-decision">
+              <option value="">Select…</option>
+              ${['Reinstated', 'Suspended', 'Terminated'].map(d => `<option ${d === c.secondNoticeDecision ? 'selected' : ''}>${d}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field full"><label>Resolution / sanction details</label><textarea id="res-text" rows="2" placeholder="Resolution / sanction..."></textarea></div>
+        </div>
+        <div class="modal-actions" style="justify-content:flex-start;">
+          <button class="btn btn-primary btn-sm" id="btn-resolve-twin-notice">Record second notice &amp; resolve</button>
+          <button class="btn btn-danger btn-sm" id="btn-escalate">Escalate</button>
+        </div>
+        ` : `
         <div class="section-title">Resolve Case</div>
         <div class="field full"><textarea id="res-text" rows="2" placeholder="Resolution / sanction..."></textarea></div>
         <div class="modal-actions" style="justify-content:flex-start;">
           <button class="btn btn-primary btn-sm" id="btn-resolve">Resolve case</button>
           <button class="btn btn-danger btn-sm" id="btn-escalate">Escalate</button>
         </div>
+        `}
       `;
     }
 
@@ -91,6 +115,8 @@ window.Views.disciplinary = (function () {
       <div class="page-sub">${escapeHtml(c.noticeText)}</div>
       ${c.employeeResponse ? `<div class="section-title">Employee Response</div><div class="page-sub">${escapeHtml(c.employeeResponse)} <span style="color:var(--text-faint);">(${fmtDate(c.employeeResponseDate)})</span></div>` : ''}
       ${c.investigationNotes ? `<div class="section-title">Investigation Notes</div><div class="page-sub">${escapeHtml(c.investigationNotes)}</div>` : ''}
+      ${c.terminationTrack && c.hearingDate ? `<div class="section-title">Hearing</div><div class="page-sub">${fmtDate(c.hearingDate)}${c.hearingNotes ? ' — ' + escapeHtml(c.hearingNotes) : ''}</div>` : ''}
+      ${c.terminationTrack && c.secondNoticeDecision ? `<div class="section-title">Second Notice</div><div class="page-sub">${fmtDate(c.secondNoticeDate)} — Decision: <strong>${escapeHtml(c.secondNoticeDecision)}</strong>${c.secondNoticeDecision === 'Terminated' ? ` <button type="button" class="link-btn" id="btn-goto-offboarding-from-case">Start Offboarding →</button>` : ''}</div>` : ''}
       ${c.resolution ? `<div class="section-title">Resolution</div><div class="page-sub">${escapeHtml(c.resolution)} <span style="color:var(--text-faint);">(${fmtDate(c.resolvedDate)})</span></div>` : ''}
 
       ${actionHtml}
@@ -138,6 +164,31 @@ window.Views.disciplinary = (function () {
         closeDrawer();
         renderList(main);
       });
+      const hearingBtn = qs('#btn-save-hearing', dr);
+      if (hearingBtn) hearingBtn.addEventListener('click', async () => {
+        const hearingDate = qs('#hearing-date', dr).value;
+        const hearingNotes = qs('#hearing-notes', dr).value.trim();
+        await Store.updateCase(c.id, { hearingDate: hearingDate || null, hearingNotes }, { action: 'Hearing', note: hearingNotes || ('Hearing held ' + fmtDate(hearingDate)) });
+        toast('✔ Hearing recorded.');
+        openCaseDetail(main, c.id);
+        renderList(main);
+      });
+      const twinResolveBtn = qs('#btn-resolve-twin-notice', dr);
+      if (twinResolveBtn) twinResolveBtn.addEventListener('click', async () => {
+        const decision = qs('#second-notice-decision', dr).value;
+        const secondNoticeDate = qs('#second-notice-date', dr).value;
+        const text = qs('#res-text', dr).value.trim();
+        if (!decision || !secondNoticeDate) { toast('Enter the second notice date and decision first.'); return; }
+        await Store.updateCase(c.id, {
+          secondNoticeDate, secondNoticeDecision: decision,
+          resolution: text || `Second notice issued — ${decision}.`, resolvedDate: todayISO(), status: 'Resolved',
+        }, { action: 'Second Notice — ' + decision, note: text || ('Decision: ' + decision) });
+        toast('✔ Case resolved.');
+        closeDrawer();
+        renderList(main);
+      });
+      const gotoOffboardingFromCase = qs('#btn-goto-offboarding-from-case', dr);
+      if (gotoOffboardingFromCase) gotoOffboardingFromCase.addEventListener('click', () => { closeDrawer(); location.hash = '#offboarding'; });
       const escBtn = qs('#btn-escalate', dr);
       if (escBtn) escBtn.addEventListener('click', async () => {
         await Store.updateCase(c.id, { status: 'Escalated' }, { action: 'Escalated', note: 'Case escalated to Management for further action.' });
@@ -168,6 +219,12 @@ window.Views.disciplinary = (function () {
           <div class="field full"><label>Issued by</label><input name="issuedBy" placeholder="e.g. HR Officer name" /></div>
           <div class="field full"><label>Violation</label><input name="violation" required placeholder="e.g. Habitual Tardiness" /></div>
           <div class="field full"><label>Notice details</label><textarea name="noticeText" rows="3" required placeholder="Describe the incident/violation..."></textarea></div>
+          <div class="field full" style="padding-top:4px;">
+            <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer;">
+              <input type="checkbox" name="terminationTrack" style="width:auto;" />
+              May result in termination (enables the Art. 297 twin-notice hearing/second-notice steps)
+            </label>
+          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
@@ -187,6 +244,7 @@ window.Views.disciplinary = (function () {
           noticeText: fd.get('noticeText').trim(),
           employeeResponse: '', employeeResponseDate: null,
           investigationNotes: '', resolution: '', resolvedDate: null,
+          terminationTrack: fd.get('terminationTrack') === 'on',
         });
         toast('NTE issued.');
         closeModal();

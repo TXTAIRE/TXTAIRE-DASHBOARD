@@ -2443,3 +2443,390 @@ alter table "paymentVouchers" enable row level security;
 drop policy if exists "admin full access" on "paymentVouchers";
 create policy "admin full access" on "paymentVouchers"
   for all to authenticated using (is_admin()) with check (is_admin());
+
+-- =================================================================
+-- Philippine Labor Code compliance features -- one consolidated incremental migration
+-- covering: 13th Month Pay, statutory leave types/balances, offboarding/final pay,
+-- twin-notice termination, SSS/PhilHealth/Pag-IBIG contribution tables, minimum wage
+-- flag, OSH incident tracking, and Safe Spaces Act case handling. Run once against a
+-- database that already has every migration above applied. Safe to re-run except the
+-- "alter publication ... add table" lines, same caveat as every earlier migration in
+-- this file that adds one.
+--
+-- IMPORTANT: SSS/PhilHealth/Pag-IBIG bracket figures and the regional minimum wage row
+-- seeded below are PLACEHOLDERS for a working starting point only -- verify them against
+-- the current SSS contribution table and the latest DOLE/PhilHealth/Pag-IBIG/Wage Order
+-- circulars before relying on them for real payroll. This app has no live government
+-- data feed; HR must keep these current from the Contribution Tables / Minimum Wage
+-- admin screens.
+-- =================================================================
+
+-- ---------- 1. 13th Month Pay (PD 851) ----------
+-- Statutory: total basic salary actually earned within the calendar year, divided by
+-- 12, due on/before Dec 24. Computed from the same computeRow(emp, from, to).basePay
+-- used everywhere else in js/store.js, summed across every payroll cutoff of the year.
+-- Distinct from the existing free-text "13th Month" option in the ad-hoc Bonuses table
+-- (js/views/payroll.js), which remains available as a manual override for one-off cases.
+
+create table if not exists "thirteenthMonthPay" (
+  id text primary key,
+  "employeeId" text not null references employees(id) on delete cascade,
+  year int not null,
+  "basicSalaryEarned" numeric(12,2) not null default 0,
+  amount numeric(12,2) not null default 0,
+  status text not null default 'Computed',        -- 'Computed' | 'Released'
+  "releaseDate" date,
+  "computedBy" text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique ("employeeId", year)
+);
+
+alter table "thirteenthMonthPay" enable row level security;
+
+drop policy if exists "admin full access" on "thirteenthMonthPay";
+create policy "admin full access" on "thirteenthMonthPay"
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "employee reads own 13th month pay" on "thirteenthMonthPay";
+create policy "employee reads own 13th month pay" on "thirteenthMonthPay"
+  for select to authenticated using ("employeeId" = my_employee_id());
+
+alter publication supabase_realtime add table "thirteenthMonthPay";
+
+-- ---------- 2. Statutory leave types + balances ----------
+-- Generalizes the SIL-only eligibility/balance logic that already exists in js/store.js
+-- (silEligibleAsOf/silDaysUsed) to every leave type via an HR-editable policy table.
+-- Only SIL (Art. 95), Maternity (RA 11210), Paternity (RA 8187), Solo Parent (RA 11861),
+-- and VAWC (RA 9262) are actual statutory minimums -- Vacation/Sick/Emergency/Other are
+-- company-policy rows HR can freely edit.
+
+alter table employees add column if not exists "sex" text;                                        -- 'Male' | 'Female', nullable -- gates Maternity/Paternity eligibility
+alter table employees add column if not exists "soloParentStatus" boolean not null default false;  -- HR-verified against a Solo Parent ID (RA 11861)
+
+create table if not exists "leaveTypePolicies" (
+  "leaveType" text primary key,
+  "daysPerYear" numeric(6,2) not null default 0,
+  "minServiceMonths" int not null default 0,
+  "genderRestriction" text,                        -- null | 'Male' | 'Female'
+  "requiresSoloParentStatus" boolean not null default false,
+  "perOccurrence" boolean not null default false,   -- true = allotment is per qualifying event (e.g. per delivery/pregnancy), not a running calendar-year total
+  paid boolean not null default true,
+  statutory boolean not null default false,         -- informational badge only -- doesn't change any computation
+  notes text default ''
+);
+
+insert into "leaveTypePolicies" ("leaveType", "daysPerYear", "minServiceMonths", "genderRestriction", "requiresSoloParentStatus", "perOccurrence", paid, statutory, notes) values
+  ('Vacation', 5, 0, null, false, false, true, false, 'Company policy -- adjust freely.'),
+  ('Sick', 5, 0, null, false, false, true, false, 'Company policy -- adjust freely.'),
+  ('SIL', 5, 12, null, false, false, true, true, 'Labor Code Art. 95 -- 5 days/year after 1 year of service.'),
+  ('Maternity', 105, 0, 'Female', false, true, true, true, 'RA 11210 -- 105 days per qualifying pregnancy (120 if solo parent, HR verifies).'),
+  ('Paternity', 7, 0, 'Male', false, true, true, true, 'RA 8187 -- 7 days, first 4 deliveries of the employee''s legitimate spouse.'),
+  ('Solo Parent', 7, 0, null, true, false, true, true, 'RA 11861 -- 7 days/year, requires a Solo Parent ID on file.'),
+  ('VAWC', 10, 0, null, false, true, true, true, 'RA 9262 -- up to 10 days per qualifying incident. HR verifies documentation manually.'),
+  ('Emergency', 3, 0, null, false, false, true, false, 'Company policy -- adjust freely.'),
+  ('Other', 0, 0, null, false, false, true, false, 'Catch-all -- HR reviews case by case.')
+on conflict ("leaveType") do nothing;
+
+alter table "leaveTypePolicies" enable row level security;
+
+drop policy if exists "admin full access" on "leaveTypePolicies";
+create policy "admin full access" on "leaveTypePolicies"
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "employee reads leave policies" on "leaveTypePolicies";
+create policy "employee reads leave policies" on "leaveTypePolicies"
+  for select to authenticated using (true);
+
+alter publication supabase_realtime add table "leaveTypePolicies";
+
+-- ---------- 3. Holiday calendar automation ----------
+-- No schema changes -- js/views/payroll.js's Holidays tab gets a bulk "auto-fill fixed
+-- holidays" action against the existing FIXED_PH_HOLIDAYS constant and existing holidays
+-- table, plus a "still need manual entry" checklist from the existing MOVABLE_HOLIDAYS
+-- reference list. Purely additive UI.
+
+-- ---------- 4. Offboarding / Final Pay & Clearance ----------
+
+create table if not exists offboarding (
+  id text primary key,
+  "employeeId" text not null references employees(id) on delete cascade,
+  "separationType" text not null,      -- 'Resignation' | 'Termination - Just Cause' | 'Termination - Authorized Cause' | 'End of Contract' | 'Retirement'
+  "noticeDate" date,
+  "separationDate" date not null,
+  "clearanceChecklist" jsonb not null default '[]',
+  "finalPaySnapshot" jsonb,
+  "finalPayReleaseDate" date,
+  "coeIssuedDate" date,
+  status text not null default 'Pending Clearance',   -- 'Pending Clearance' | 'Ready for Release' | 'Released'
+  "createdBy" text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table offboarding enable row level security;
+
+drop policy if exists "admin full access" on offboarding;
+create policy "admin full access" on offboarding
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "employee reads own offboarding record" on offboarding;
+create policy "employee reads own offboarding record" on offboarding
+  for select to authenticated using ("employeeId" = my_employee_id());
+
+alter publication supabase_realtime add table offboarding;
+
+-- ---------- 5. Twin-notice termination (extends Disciplinary) ----------
+-- Art. 297 just-cause termination requires two written notices + a hearing -- additive
+-- columns on the existing single-notice disciplinaryCases flow, used only when HR flags
+-- a case as "may result in termination."
+
+alter table "disciplinaryCases" add column if not exists "terminationTrack" boolean not null default false;
+alter table "disciplinaryCases" add column if not exists "hearingDate" date;
+alter table "disciplinaryCases" add column if not exists "hearingNotes" text;
+alter table "disciplinaryCases" add column if not exists "secondNoticeDate" date;
+alter table "disciplinaryCases" add column if not exists "secondNoticeDecision" text; -- 'Reinstated' | 'Suspended' | 'Terminated'
+
+-- ---------- 6. Contribution tables (SSS / PhilHealth / Pag-IBIG) ----------
+-- HR-editable reference data used only to PRE-FILL (never silently auto-apply) the
+-- amount field when adding a matching deduction on the existing Payroll tab.
+
+create table if not exists "sssContributionBrackets" (
+  id serial primary key,
+  "minSalary" numeric(12,2) not null,
+  "maxSalary" numeric(12,2),           -- null = open-ended top bracket
+  "employeeShare" numeric(12,2) not null,
+  "employerShare" numeric(12,2) not null
+);
+
+create table if not exists "contributionRates" (
+  key text primary key,                -- 'philhealth' | 'pagibig'
+  "ratePercent" numeric(5,2) not null,
+  "floorSalary" numeric(12,2) not null default 0,
+  "ceilingSalary" numeric(12,2),
+  "employeeSharePercent" numeric(5,2) not null
+);
+
+do $$
+begin
+  if not exists (select 1 from "sssContributionBrackets") then
+    insert into "sssContributionBrackets" ("minSalary", "maxSalary", "employeeShare", "employerShare") values
+      (0, 4249.99, 180, 380),
+      (4250, 4749.99, 202.50, 427.50),
+      (4750, 24749.99, 450, 950),
+      (24750, null, 1350, 2850);
+  end if;
+end $$;
+
+insert into "contributionRates" (key, "ratePercent", "floorSalary", "ceilingSalary", "employeeSharePercent") values
+  ('philhealth', 5.00, 10000, 100000, 50.00),
+  ('pagibig', 2.00, 0, 10000, 50.00)
+on conflict (key) do nothing;
+
+alter table "sssContributionBrackets" enable row level security;
+drop policy if exists "admin full access" on "sssContributionBrackets";
+create policy "admin full access" on "sssContributionBrackets"
+  for all to authenticated using (is_admin()) with check (is_admin());
+
+alter table "contributionRates" enable row level security;
+drop policy if exists "admin full access" on "contributionRates";
+create policy "admin full access" on "contributionRates"
+  for all to authenticated using (is_admin()) with check (is_admin());
+
+alter publication supabase_realtime add table "sssContributionBrackets", "contributionRates";
+
+-- ---------- 7. Retirement pay (RA 7641) ----------
+-- No schema changes -- js/store.js computeRetirementPay() is a pure function (daily
+-- rate x 22.5 x years of service), consumed by §4's final-pay computation when
+-- separationType = 'Retirement'.
+
+-- ---------- 8. Minimum wage flag ----------
+
+alter table employees add column if not exists "region" text;
+
+create table if not exists "regionalMinimumWage" (
+  region text primary key,
+  "dailyRate" numeric(12,2) not null,
+  "effectiveDate" date,
+  notes text default ''
+);
+
+insert into "regionalMinimumWage" (region, "dailyRate", "effectiveDate", notes) values
+  ('NCR', 645, current_date, 'Placeholder -- verify against the current NCR Wage Order before relying on this.')
+on conflict (region) do nothing;
+
+alter table "regionalMinimumWage" enable row level security;
+drop policy if exists "admin full access" on "regionalMinimumWage";
+create policy "admin full access" on "regionalMinimumWage"
+  for all to authenticated using (is_admin()) with check (is_admin());
+
+alter publication supabase_realtime add table "regionalMinimumWage";
+
+-- ---------- 9. OSH incident tracking (RA 11058) ----------
+
+create table if not exists "safetyIncidents" (
+  id text primary key,
+  "employeeId" text references employees(id) on delete set null,
+  "incidentDate" date not null,
+  location text default '',
+  description text not null,
+  "injuryType" text default '',
+  "ppeInvolved" text default '',
+  "correctiveAction" text default '',
+  "reportedBy" text,
+  status text not null default 'Open',   -- 'Open' | 'Resolved'
+  created_at timestamptz not null default now()
+);
+
+alter table "safetyIncidents" enable row level security;
+
+drop policy if exists "admin full access" on "safetyIncidents";
+create policy "admin full access" on "safetyIncidents"
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "employee reads own safety incidents" on "safetyIncidents";
+create policy "employee reads own safety incidents" on "safetyIncidents"
+  for select to authenticated using ("employeeId" = my_employee_id());
+drop policy if exists "employee reports safety incidents" on "safetyIncidents";
+create policy "employee reports safety incidents" on "safetyIncidents"
+  for insert to authenticated with check ("employeeId" = my_employee_id());
+
+alter publication supabase_realtime add table "safetyIncidents";
+
+create or replace function notify_new_safety_incident() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  emp_name text;
+begin
+  select name into emp_name from employees where id = NEW."employeeId";
+  perform net.http_post(
+    url := 'https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/employee-request-notify',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', '5f24f19fdf651e99db5d397158bda6a8a4c48f59c06df3cc'),
+    body := jsonb_build_object(
+      'employeeName', coalesce(emp_name, 'An employee'),
+      'detail', 'Safety incident reported: ' || left(NEW.description, 120)
+    )
+  );
+  return NEW;
+end;
+$$;
+
+drop trigger if exists trg_notify_new_safety_incident on "safetyIncidents";
+create trigger trg_notify_new_safety_incident
+  after insert on "safetyIncidents"
+  for each row execute function notify_new_safety_incident();
+
+-- ---------- 10. Safe Spaces Act case handling (RA 11313) ----------
+-- Deliberately NOT is_admin() for read access -- unlike every other admin table in this
+-- app, these cases must stay confidential to designated Committee on Decorum and
+-- Investigation (CODI) members only, not every HR/admin account. The HR-alert push
+-- notification below also deliberately withholds the complainant's name.
+--
+-- Admin/HR accounts are precisely the authenticated users who are NOT rows in
+-- "employees" (see is_admin() above) -- so CODI membership can't live on the employees
+-- table the way it would for an employee-side flag. It lives in its own tiny table
+-- instead, keyed by the admin's own auth.uid().
+
+create table if not exists "adminCodiMembers" (
+  id text primary key,
+  "authUserId" uuid references auth.users(id) on delete cascade,
+  email text not null,
+  "addedBy" text,
+  created_at timestamptz not null default now()
+);
+
+alter table "adminCodiMembers" enable row level security;
+drop policy if exists "admin full access" on "adminCodiMembers";
+create policy "admin full access" on "adminCodiMembers"
+  for all to authenticated using (is_admin()) with check (is_admin());
+
+alter publication supabase_realtime add table "adminCodiMembers";
+
+-- Populates authUserId for a member row added by email before that admin's account
+-- existed in auth.users yet, or whenever a new admin auth user signs in -- keeps the
+-- RLS check below (which matches on auth.uid(), not email) working without requiring
+-- HR to know the Auth UUID upfront the way "Grant portal access" does for employees.
+create or replace function sync_admin_codi_member_auth_id() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  update "adminCodiMembers" set "authUserId" = NEW.id
+  where "authUserId" is null and lower(email) = lower(NEW.email);
+  return NEW;
+end;
+$$;
+
+drop trigger if exists trg_sync_admin_codi_member_auth_id on auth.users;
+create trigger trg_sync_admin_codi_member_auth_id
+  after insert on auth.users
+  for each row execute function sync_admin_codi_member_auth_id();
+
+create table if not exists "employeeRelationsCases" (
+  id text primary key,
+  "complainantEmployeeId" text references employees(id) on delete set null,
+  "respondentEmployeeId" text references employees(id) on delete set null,
+  "dateFiled" date not null,
+  category text default '',
+  description text not null,
+  "committeeNotes" text default '',
+  status text not null default 'Filed',   -- 'Filed' | 'Under Review' | 'Resolved'
+  "resolvedDate" date,
+  "resolutionSummary" text default '',
+  created_at timestamptz not null default now()
+);
+
+alter table "employeeRelationsCases" enable row level security;
+
+drop policy if exists "codi member full access" on "employeeRelationsCases";
+create policy "codi member full access" on "employeeRelationsCases"
+  for all to authenticated using (
+    exists (select 1 from "adminCodiMembers" where "authUserId" = auth.uid())
+  ) with check (
+    exists (select 1 from "adminCodiMembers" where "authUserId" = auth.uid())
+  );
+drop policy if exists "employee reads own filed cases" on "employeeRelationsCases";
+create policy "employee reads own filed cases" on "employeeRelationsCases"
+  for select to authenticated using ("complainantEmployeeId" = my_employee_id());
+drop policy if exists "employee files own case" on "employeeRelationsCases";
+create policy "employee files own case" on "employeeRelationsCases"
+  for insert to authenticated with check ("complainantEmployeeId" = my_employee_id());
+
+alter publication supabase_realtime add table "employeeRelationsCases";
+
+create or replace function notify_new_relations_case() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  perform net.http_post(
+    url := 'https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/employee-request-notify',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', '5f24f19fdf651e99db5d397158bda6a8a4c48f59c06df3cc'),
+    body := jsonb_build_object(
+      'employeeName', 'A confidential filer',
+      'detail', 'A new employee relations concern was filed -- review in the Employee Relations page.'
+    )
+  );
+  return NEW;
+end;
+$$;
+
+drop trigger if exists trg_notify_new_relations_case on "employeeRelationsCases";
+create trigger trg_notify_new_relations_case
+  after insert on "employeeRelationsCases"
+  for each row execute function notify_new_relations_case();
+
+-- ---------- Notification whitelist update ----------
+-- Re-defines notify_employee_push() (same trigger, already installed) to also push for
+-- the new employee-facing notification types added by this migration. Full replacement,
+-- not additive SQL -- must include every type from the original list too.
+
+create or replace function notify_employee_push() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if NEW.type not in (
+    'leave_approved', 'correction_approved', 'nsd_approved', 'ot_approved', 'holiday_approved', 'payroll_released', 'nte_issued',
+    'thirteenth_month_released', 'final_pay_released', 'coe_issued', 'safety_incident_resolved', 'relations_case_updated'
+  ) then
+    return NEW;
+  end if;
+  perform net.http_post(
+    url := 'https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/employee-notification-push',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', '5f24f19fdf651e99db5d397158bda6a8a4c48f59c06df3cc'),
+    body := jsonb_build_object('employeeId', NEW."employeeId", 'type', NEW.type, 'message', NEW.message)
+  );
+  return NEW;
+end;
+$$;

@@ -18,6 +18,7 @@ window.Views.finance = (function () {
   // catch-up session should land in August's report, not get scattered back into May's.
   let expenseFilterBy = 'encoded'; // 'encoded' | 'issued'
   let voucherMonth = todayISO().slice(0, 7); // 'YYYY-MM'
+  let thirteenthMonthYear = new Date(todayISO() + 'T00:00:00').getFullYear();
 
   function renderView(main) {
     main.innerHTML = `
@@ -36,6 +37,7 @@ window.Views.finance = (function () {
         <div class="tab ${activeTab === 'expenses' ? 'active' : ''}" data-tab="expenses">Expenses &amp; Receipts</div>
         <div class="tab ${activeTab === 'bills' ? 'active' : ''}" data-tab="bills">Bill Reminders</div>
         <div class="tab ${activeTab === 'vouchers' ? 'active' : ''}" data-tab="vouchers">Payment Vouchers</div>
+        <div class="tab ${activeTab === 'thirteenthMonth' ? 'active' : ''}" data-tab="thirteenthMonth">13th Month Pay</div>
       </div>
 
       <div id="tab-body"></div>
@@ -51,7 +53,97 @@ window.Views.finance = (function () {
 
     if (activeTab === 'expenses') renderExpensesTab(qs('#tab-body', main), main);
     else if (activeTab === 'bills') renderBillsTab(qs('#tab-body', main), main);
-    else renderVouchersTab(qs('#tab-body', main), main);
+    else if (activeTab === 'vouchers') renderVouchersTab(qs('#tab-body', main), main);
+    else render13thMonthTab(qs('#tab-body', main), main);
+  }
+
+  // ---------------- 13th Month Pay ----------------
+
+  function render13thMonthTab(body, main) {
+    const rows = Store.listThirteenthMonthPay(thirteenthMonthYear).slice()
+      .sort((a, b) => employeeName(a.employeeId).localeCompare(employeeName(b.employeeId)));
+    const totalAmount = rows.reduce((s, r) => s + Number(r.amount), 0);
+
+    body.innerHTML = `
+      <div class="filters">
+        <div class="field">
+          <label>Year</label>
+          <input type="number" id="thirteenth-year" value="${thirteenthMonthYear}" style="width:100px;" />
+        </div>
+        <div style="display:flex; align-items:flex-end; gap:8px;">
+          <button class="btn btn-primary btn-sm" id="btn-compute-13th">Compute for all employees</button>
+          <button class="btn btn-ghost btn-sm" id="btn-print-13th" ${!rows.length ? 'disabled' : ''}>🖨️ Print Summary</button>
+        </div>
+      </div>
+      <div class="panel">
+        ${rows.length ? `
+        <table>
+          <thead><tr><th>Employee</th><th>Basic Salary Earned</th><th>13th Month Pay</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td class="name">${escapeHtml(employeeName(r.employeeId))}</td>
+                <td class="dim">${fmtMoney(r.basicSalaryEarned)}</td>
+                <td>${fmtMoney(r.amount)}</td>
+                <td><span class="badge ${r.status === 'Released' ? 'badge-green' : 'badge-yellow'}">${escapeHtml(r.status)}</span></td>
+                <td>${r.status !== 'Released' ? `<button class="link-btn" data-release="${r.id}">Release →</button>` : `<span class="dim">${fmtDate(r.releaseDate)}</span>`}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+          <tfoot><tr style="font-weight:700;"><td colspan="2">Total</td><td>${fmtMoney(totalAmount)}</td><td colspan="2"></td></tr></tfoot>
+        </table>` : `<div class="empty">No 13th Month Pay computed for ${thirteenthMonthYear} yet — click "Compute for all employees."</div>`}
+      </div>
+    `;
+
+    qs('#thirteenth-year', body).addEventListener('change', (ev) => {
+      thirteenthMonthYear = Number(ev.target.value) || thirteenthMonthYear;
+      render13thMonthTab(body, main);
+    });
+    qs('#btn-compute-13th', body).addEventListener('click', async () => {
+      const btn = qs('#btn-compute-13th', body);
+      btn.disabled = true;
+      btn.textContent = 'Computing…';
+      await Store.compute13thMonthForAllEmployees(thirteenthMonthYear, currentUserEmail());
+      toast('✔ 13th Month Pay computed for ' + thirteenthMonthYear + '.');
+      render13thMonthTab(body, main);
+    });
+    qsa('[data-release]', body).forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirm('Mark this employee\'s 13th Month Pay as released?')) return;
+      await Store.release13thMonthPay(btn.dataset.release);
+      toast('✔ Released.');
+      render13thMonthTab(body, main);
+    }));
+    const printBtn = qs('#btn-print-13th', body);
+    if (printBtn) printBtn.addEventListener('click', () => open13thMonthPrintView(rows, thirteenthMonthYear, totalAmount));
+  }
+
+  // Reuses the same generic .dtr-overlay/.dtr-print/.dtr-table CSS classes already used
+  // for the DTR, Expense Report, and Final Pay Computation sheet.
+  function open13thMonthPrintView(rows, year, total) {
+    const sorted = rows.slice().sort((a, b) => employeeName(a.employeeId).localeCompare(employeeName(b.employeeId)));
+    const overlay = document.createElement('div');
+    overlay.className = 'dtr-overlay';
+    overlay.innerHTML = `
+      <div class="dtr-print">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <h2 style="margin:0;">13th Month Pay — ${year}</h2>
+          <div>
+            <button class="btn btn-ghost btn-sm" id="btn-close-print">Close</button>
+            <button class="btn btn-primary btn-sm" id="btn-do-print">Print</button>
+          </div>
+        </div>
+        <table class="dtr-table">
+          <thead><tr><th>Employee</th><th>Basic Salary Earned</th><th>13th Month Pay</th><th>Status</th></tr></thead>
+          <tbody>
+            ${sorted.map(r => `<tr><td>${escapeHtml(employeeName(r.employeeId))}</td><td style="text-align:right;">${fmtMoney(r.basicSalaryEarned)}</td><td style="text-align:right;">${fmtMoney(r.amount)}</td><td>${escapeHtml(r.status)}</td></tr>`).join('')}
+            <tr style="font-weight:700; border-top:2px solid #000;"><td colspan="2">TOTAL</td><td style="text-align:right;">${fmtMoney(total)}</td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    qs('#btn-close-print', overlay).addEventListener('click', () => overlay.remove());
+    qs('#btn-do-print', overlay).addEventListener('click', () => window.print());
   }
 
   // ---------------- Expenses & Receipts ----------------

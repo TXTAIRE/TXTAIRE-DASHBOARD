@@ -158,6 +158,7 @@ window.Views.payroll = (function () {
         <div class="tab ${activeTab === 'deductions' ? 'active' : ''}" data-tab="deductions">Deductions</div>
         <div class="tab ${activeTab === 'bonuses' ? 'active' : ''}" data-tab="bonuses">Bonuses</div>
         <div class="tab ${activeTab === 'holidays' ? 'active' : ''}" data-tab="holidays">Holidays</div>
+        <div class="tab ${activeTab === 'contributions' ? 'active' : ''}" data-tab="contributions">Contribution Rates</div>
       </div>
 
       <div id="tab-body"></div>
@@ -175,7 +176,8 @@ window.Views.payroll = (function () {
     if (activeTab === 'payroll') renderPayrollTab(qs('#tab-body', main), main);
     else if (activeTab === 'deductions') renderDeductionsTab(qs('#tab-body', main), main);
     else if (activeTab === 'bonuses') renderBonusesTab(qs('#tab-body', main), main);
-    else renderHolidaysTab(qs('#tab-body', main), main);
+    else if (activeTab === 'holidays') renderHolidaysTab(qs('#tab-body', main), main);
+    else renderContributionsTab(qs('#tab-body', main), main);
   }
 
   function renderPayrollTab(body, main) {
@@ -475,9 +477,21 @@ window.Views.payroll = (function () {
     const thisYear = new Date(todayISO() + 'T00:00:00').getFullYear();
     const namesThisYear = new Set(rows.filter(h => h.date.startsWith(String(thisYear))).map(h => h.name));
     const missingMovable = MOVABLE_HOLIDAYS.filter(mh => !namesThisYear.has(mh.name));
+    const missingFixed = Object.keys(FIXED_PH_HOLIDAYS).filter(mmdd => {
+      const iso = thisYear + '-' + mmdd;
+      return !rows.some(h => h.date === iso);
+    });
 
     body.innerHTML = `
       <div class="hint">Holiday pay is computed automatically on the Payroll tab from this calendar. Add the officially proclaimed dates for each year as they're announced — regular-holiday dates that are fixed by law (Jan 1, Apr 9, May 1, Jun 12, Nov 30, Dec 25, Dec 30, plus Maundy Thursday/Good Friday) can be added as soon as the year is known; movable/proclaimed dates (special non-working days, Eid'l Fitr, Eid'l Adha, National Heroes Day, etc.) should wait for the Malacañang proclamation.</div>
+      ${missingFixed.length ? `
+      <div class="panel" style="margin-bottom:14px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div style="font-weight:700;">${missingFixed.length} fixed holiday${missingFixed.length === 1 ? '' : 's'} not yet on the calendar for ${thisYear}</div>
+          <div class="page-sub">New Year's Day, Labor Day, Independence Day, etc. -- always the same date every year, safe to add automatically.</div>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-autofill-holidays">Auto-fill fixed holidays</button>
+      </div>` : ''}
       ${missingMovable.length ? `
       <div class="panel" style="margin-bottom:14px;">
         <div class="panel-head"><h3>⚠ Movable holidays not yet added for ${thisYear}</h3></div>
@@ -512,6 +526,17 @@ window.Views.payroll = (function () {
         renderHolidaysTab(body, main);
       }
     }));
+    const autofillBtn = qs('#btn-autofill-holidays', body);
+    if (autofillBtn) autofillBtn.addEventListener('click', async () => {
+      autofillBtn.disabled = true;
+      autofillBtn.textContent = 'Adding…';
+      for (const mmdd of missingFixed) {
+        const info = FIXED_PH_HOLIDAYS[mmdd];
+        await Store.addHoliday({ date: thisYear + '-' + mmdd, type: info.type, name: info.name });
+      }
+      toast(`✔ Added ${missingFixed.length} fixed holiday${missingFixed.length === 1 ? '' : 's'} for ${thisYear}.`);
+      renderHolidaysTab(body, main);
+    });
   }
 
   function openHolidayForm(main) {
@@ -571,6 +596,124 @@ window.Views.payroll = (function () {
     });
   }
 
+  function renderContributionsTab(body, main) {
+    const brackets = Store.listSssContributionBrackets();
+    const philhealth = Store.getContributionRate('philhealth') || {};
+    const pagibig = Store.getContributionRate('pagibig') || {};
+    const wages = Store.listRegionalMinimumWage();
+
+    body.innerHTML = `
+      <div class="hint">⚠ These figures are placeholders -- verify against the current SSS contribution table and the latest PhilHealth/Pag-IBIG/Wage Order circulars before relying on them. Used only to pre-fill the amount when adding a matching deduction -- never applied automatically.</div>
+
+      <div class="panel" style="margin-bottom:14px;">
+        <div class="panel-head"><h3>SSS Contribution Brackets (employee share)</h3></div>
+        <table>
+          <thead><tr><th>Min Salary</th><th>Max Salary</th><th>Employee Share</th><th>Employer Share</th><th></th></tr></thead>
+          <tbody>
+            ${brackets.map(b => `
+              <tr>
+                <td class="dim">${fmtMoney(b.minSalary)}</td>
+                <td class="dim">${b.maxSalary == null ? 'and up' : fmtMoney(b.maxSalary)}</td>
+                <td>${fmtMoney(b.employeeShare)}</td>
+                <td class="dim">${fmtMoney(b.employerShare)}</td>
+                <td><button class="link-btn" data-del-bracket="${b.id}">Delete</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <form id="bracket-form" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+          <input type="number" name="minSalary" placeholder="Min salary" required step="0.01" style="width:110px;" />
+          <input type="number" name="maxSalary" placeholder="Max (blank = open-ended)" step="0.01" style="width:170px;" />
+          <input type="number" name="employeeShare" placeholder="Employee share" required step="0.01" style="width:120px;" />
+          <input type="number" name="employerShare" placeholder="Employer share" required step="0.01" style="width:120px;" />
+          <button type="submit" class="btn btn-ghost btn-sm">+ Add bracket</button>
+        </form>
+      </div>
+
+      <div class="panel" style="margin-bottom:14px;">
+        <div class="panel-head"><h3>PhilHealth &amp; Pag-IBIG Rates</h3></div>
+        <div class="modal-grid">
+          <div class="field"><label>PhilHealth rate %</label><input type="number" id="ph-rate" step="0.01" value="${philhealth.ratePercent || 0}" /></div>
+          <div class="field"><label>Employee share %</label><input type="number" id="ph-share" step="0.01" value="${philhealth.employeeSharePercent || 0}" /></div>
+          <div class="field"><label>Salary floor</label><input type="number" id="ph-floor" step="0.01" value="${philhealth.floorSalary || 0}" /></div>
+          <div class="field"><label>Salary ceiling</label><input type="number" id="ph-ceiling" step="0.01" value="${philhealth.ceilingSalary || ''}" /></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="btn-save-philhealth">Save PhilHealth</button>
+        <div class="modal-grid" style="margin-top:14px;">
+          <div class="field"><label>Pag-IBIG rate %</label><input type="number" id="pi-rate" step="0.01" value="${pagibig.ratePercent || 0}" /></div>
+          <div class="field"><label>Employee share %</label><input type="number" id="pi-share" step="0.01" value="${pagibig.employeeSharePercent || 0}" /></div>
+          <div class="field"><label>Salary floor</label><input type="number" id="pi-floor" step="0.01" value="${pagibig.floorSalary || 0}" /></div>
+          <div class="field"><label>Salary ceiling</label><input type="number" id="pi-ceiling" step="0.01" value="${pagibig.ceilingSalary || ''}" /></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="btn-save-pagibig">Save Pag-IBIG</button>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h3>Regional Minimum Wage</h3></div>
+        <div class="page-sub" style="padding-bottom:8px;">Flags an employee on Employee Management if their daily rate falls below their region's floor. Set each employee's region on their profile.</div>
+        <table>
+          <thead><tr><th>Region</th><th>Daily Rate</th><th>Effective Date</th><th></th></tr></thead>
+          <tbody>
+            ${wages.map(w => `<tr><td class="name">${escapeHtml(w.region)}</td><td>${fmtMoney(w.dailyRate)}</td><td class="dim">${fmtDate(w.effectiveDate)}</td><td><button class="link-btn" data-del-wage="${escapeHtml(w.region)}">Delete</button></td></tr>`).join('')}
+          </tbody>
+        </table>
+        <form id="wage-form" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+          <input type="text" name="region" placeholder="Region, e.g. NCR" required style="width:120px;" />
+          <input type="number" name="dailyRate" placeholder="Daily rate" required step="0.01" style="width:110px;" />
+          <input type="date" name="effectiveDate" value="${todayISO()}" />
+          <button type="submit" class="btn btn-ghost btn-sm">+ Add / Update</button>
+        </form>
+      </div>
+    `;
+
+    qs('#bracket-form', body).addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(ev.target);
+      await Store.addSssContributionBracket({
+        minSalary: Number(fd.get('minSalary')) || 0,
+        maxSalary: fd.get('maxSalary') ? Number(fd.get('maxSalary')) : null,
+        employeeShare: Number(fd.get('employeeShare')) || 0,
+        employerShare: Number(fd.get('employerShare')) || 0,
+      });
+      toast('✔ Bracket added.');
+      renderContributionsTab(body, main);
+    });
+    qsa('[data-del-bracket]', body).forEach(b => b.addEventListener('click', async () => {
+      if (confirm('Delete this SSS bracket?')) { await Store.deleteSssContributionBracket(Number(b.dataset.delBracket)); renderContributionsTab(body, main); }
+    }));
+    qs('#btn-save-philhealth', body).addEventListener('click', async () => {
+      await Store.upsertContributionRate({
+        key: 'philhealth', ratePercent: Number(qs('#ph-rate', body).value) || 0,
+        employeeSharePercent: Number(qs('#ph-share', body).value) || 0,
+        floorSalary: Number(qs('#ph-floor', body).value) || 0,
+        ceilingSalary: qs('#ph-ceiling', body).value ? Number(qs('#ph-ceiling', body).value) : null,
+      });
+      toast('✔ PhilHealth rate saved.');
+    });
+    qs('#btn-save-pagibig', body).addEventListener('click', async () => {
+      await Store.upsertContributionRate({
+        key: 'pagibig', ratePercent: Number(qs('#pi-rate', body).value) || 0,
+        employeeSharePercent: Number(qs('#pi-share', body).value) || 0,
+        floorSalary: Number(qs('#pi-floor', body).value) || 0,
+        ceilingSalary: qs('#pi-ceiling', body).value ? Number(qs('#pi-ceiling', body).value) : null,
+      });
+      toast('✔ Pag-IBIG rate saved.');
+    });
+    qs('#wage-form', body).addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(ev.target);
+      await Store.upsertRegionalMinimumWage({
+        region: fd.get('region').trim(), dailyRate: Number(fd.get('dailyRate')) || 0,
+        effectiveDate: fd.get('effectiveDate') || null,
+      });
+      toast('✔ Saved.');
+      renderContributionsTab(body, main);
+    });
+    qsa('[data-del-wage]', body).forEach(b => b.addEventListener('click', async () => {
+      if (confirm('Delete this region\'s minimum wage entry?')) { await Store.deleteRegionalMinimumWage(b.dataset.delWage); renderContributionsTab(body, main); }
+    }));
+  }
+
   function openDeductionForm(main) {
     openModal(`
       <h2>New deduction</h2>
@@ -590,6 +733,24 @@ window.Views.payroll = (function () {
         </div>
       </form>
     `, (bd) => {
+      // Pre-fills (never overwrites a value HR already typed) the amount when the kind
+      // matches a contribution table this app tracks -- SSS/PhilHealth/Pag-IBIG rates are
+      // HR-editable reference data (Payroll -> Contribution Rates), always overridable here.
+      const suggestAmount = () => {
+        const amountInput = qs('input[name="amount"]', bd);
+        if (amountInput.value) return;
+        const emp = Store.getEmployee(qs('select[name="employeeId"]', bd).value);
+        if (!emp) return;
+        const monthlySalary = emp.payType === 'Monthly' ? Number(emp.rate) : Number(emp.rate) * 22;
+        const kind = qs('select[name="kind"]', bd).value;
+        let suggestion = 0;
+        if (kind === 'SSS Contribution') suggestion = Store.suggestedSssDeduction(monthlySalary);
+        else if (kind === 'PhilHealth') suggestion = Store.suggestedPhilhealthDeduction(monthlySalary);
+        else if (kind === 'Pag-IBIG Premium') suggestion = Store.suggestedPagibigDeduction(monthlySalary);
+        if (suggestion > 0) amountInput.value = suggestion.toFixed(2);
+      };
+      qs('select[name="employeeId"]', bd).addEventListener('change', suggestAmount);
+      qs('select[name="kind"]', bd).addEventListener('change', suggestAmount);
       qs('#ded-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);

@@ -67,6 +67,70 @@ window.EssViews.settings = (function () {
     getCurrentEssPushSubscription().then((sub) => setState(!!sub));
   }
 
+  function openIncidentForm(emp) {
+    openEssModal(`
+      <h2>Report a Safety Incident</h2>
+      <div class="modal-sub">HR (and Safety Officer, if designated) will be alerted right away.</div>
+      <form id="incident-form">
+        <div class="modal-grid">
+          <div class="field"><label>Date</label><input type="date" name="incidentDate" value="${todayISO()}" required /></div>
+          <div class="field"><label>Location</label><input name="location" placeholder="e.g. Client site" /></div>
+          <div class="field full"><label>What happened?</label><textarea name="description" rows="3" required></textarea></div>
+          <div class="field full"><label>Injury type <span class="dim">(if any)</span></label><input name="injuryType" placeholder="e.g. Cut, burn, none" /></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Submit</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#incident-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        await Store.addSafetyIncident({
+          employeeId: emp.id,
+          incidentDate: fd.get('incidentDate'),
+          location: fd.get('location').trim(),
+          description: fd.get('description').trim(),
+          injuryType: fd.get('injuryType').trim(),
+          reportedBy: emp.name,
+        });
+        toast('✔ Incident reported to HR.');
+        closeEssModal();
+      });
+    });
+  }
+
+  function openConcernForm(emp) {
+    openEssModal(`
+      <h2>File a Concern</h2>
+      <div class="modal-sub">Confidential -- only designated committee members can see this. Use this for anything under the Safe Spaces Act (RA 11313) you'd rather not raise through your usual supervisor.</div>
+      <form id="concern-form">
+        <div class="modal-grid">
+          <div class="field full"><label>Category</label><input name="category" placeholder="e.g. Harassment, Discrimination" /></div>
+          <div class="field full"><label>What happened?</label><textarea name="description" rows="4" required></textarea></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Submit</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#concern-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        await Store.fileEmployeeRelationsCase({
+          complainantEmployeeId: emp.id,
+          dateFiled: todayISO(),
+          category: fd.get('category').trim(),
+          description: fd.get('description').trim(),
+        });
+        toast('✔ Filed confidentially with HR.');
+        closeEssModal();
+      });
+    });
+  }
+
   function render(main, emp) {
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0;">Settings</div>
@@ -77,6 +141,18 @@ window.EssViews.settings = (function () {
 
       <div class="ess-section-title">🔔 Notifications</div>
       <div class="ess-card" id="ess-push-card"></div>
+
+      <div class="ess-section-title">⛑️ Safety</div>
+      <div class="ess-card">
+        <div class="ess-sub" style="margin-bottom:8px;">Saw a hazard, near-miss, or got hurt on the job? Let HR know.</div>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-report-incident" style="width:100%; justify-content:center;">Report a Safety Incident</button>
+      </div>
+
+      <div class="ess-section-title">🤝 Employee Relations</div>
+      <div class="ess-card">
+        <div class="ess-sub" style="margin-bottom:8px;">Something you'd rather raise privately with HR's Committee on Decorum and Investigation, not your usual supervisor? File it here -- only committee members can see the details.</div>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-file-concern" style="width:100%; justify-content:center;">File a Concern</button>
+      </div>
 
       <div class="ess-section-title">Change Password</div>
       <div class="ess-card">
@@ -98,6 +174,8 @@ window.EssViews.settings = (function () {
     `;
 
     renderNotificationsCard(main, emp);
+    qs('#btn-report-incident', main).addEventListener('click', () => openIncidentForm(emp));
+    qs('#btn-file-concern', main).addEventListener('click', () => openConcernForm(emp));
 
     qs('#pw-form', main).addEventListener('submit', async (ev) => {
       ev.preventDefault();

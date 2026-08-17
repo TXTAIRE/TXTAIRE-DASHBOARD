@@ -106,6 +106,28 @@ window.EssViews.payroll = (function () {
         <div class="ess-row"><span class="label" style="font-weight:700;">Net Pay</span><span class="value" style="color:var(--green);">${money(row.net)}</span></div>
       </div>
       ` : ''}
+
+      ${(() => {
+        const t13 = Store.thirteenthMonthPayForEmployee(emp.id, year);
+        if (!t13) return '';
+        return `
+        <div class="ess-card" style="margin-top:12px;">
+          <div class="ess-card-label">13th Month Pay — ${year}</div>
+          <div class="ess-row"><span class="label">Amount</span><span class="value" style="font-weight:700;">${money(t13.amount)}</span></div>
+          <div class="ess-sub">${t13.status === 'Released' ? 'Released ' + fmtDate(t13.releaseDate) : 'Computed — not yet released.'}</div>
+        </div>`;
+      })()}
+
+      ${(() => {
+        const offRow = Store.listOffboarding().find(o => o.employeeId === emp.id && o.status === 'Released');
+        if (!offRow || !offRow.finalPaySnapshot) return '';
+        return `
+        <div class="ess-card" style="margin-top:12px;">
+          <div class="ess-card-label">Final Pay</div>
+          <div class="ess-row"><span class="label">Total</span><span class="value" style="font-weight:700; color:var(--green);">${money(offRow.finalPaySnapshot.totalFinalPay)}</span></div>
+          <div class="ess-sub">Released ${fmtDate(offRow.finalPayReleaseDate)}${offRow.coeIssuedDate ? ' — Certificate of Employment issued ' + fmtDate(offRow.coeIssuedDate) : ''}</div>
+        </div>`;
+      })()}
     `;
 
     qs('#btn-eye', main).addEventListener('click', () => {
