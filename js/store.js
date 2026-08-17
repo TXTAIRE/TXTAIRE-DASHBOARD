@@ -458,18 +458,23 @@ function nightOverlapHours(timeIn, timeOut) {
 // days in the cutoff if Monthly); `rec` is that day's attendance record (or null/undefined
 // if absent); `holiday` is that day's holidays-calendar entry (or null/undefined).
 //
-// Overtime: 125% ordinary / 169% special-day-worked / 260% regular-holiday-worked, applied
-// to hours beyond 8. Night Shift Differential: +10% of the hourly rate for each hour
-// actually worked 10pm-6am, regardless of holiday. Holiday pay: a worked holiday earns a
-// premium on top of its already-counted 1x base (200% regular / 130% special, prorated by
-// regular hours worked up to 8); an unworked REGULAR holiday still pays a full day ("no
-// work, no pay" does not apply to regular holidays); an unworked special day pays nothing
-// extra.
+// Overtime: 125% ordinary / 169% special-day-or-rest-day-worked / 260% regular-holiday-
+// worked, applied to hours beyond 8. Night Shift Differential: +10% of the hourly rate for
+// each hour actually worked 10pm-6am, regardless of holiday. Holiday pay: a worked holiday
+// earns a premium on top of its already-counted 1x base (200% regular / 130% special,
+// prorated by regular hours worked up to 8); an unworked REGULAR holiday still pays a full
+// day ("no work, no pay" does not apply to regular holidays); an unworked special day pays
+// nothing extra. Rest Day pay (Art. 93): work on the employee's weekly rest day (Sunday --
+// see workDaysInRange; not yet configurable per employee) earns the same 30% premium as a
+// worked Special Non-Working holiday, only when no actual holiday already covers that date.
 // NSD/OT/Holiday-premium pay only count once HR has approved that specific day's request
 // (rec.otStatus/nsdStatus/holidayStatus === 'Approved') — a Requested-but-not-yet-approved
 // day pays neither. The one exception, required by Philippine labor law: an employee who
 // was ABSENT on a declared Regular Holiday is still owed their full daily rate regardless
 // of any request/approval, since there's no attendance record for them to request against.
+// Rest Day pay is likewise unrequested/ungated (unlike OT/NSD/Holiday) since it's a plain
+// fact derived from the date and the attendance record already on file, not an elective
+// request that could be disputed the way OT hours can.
 function computeDayPay(dailyRateEq, rec, holiday, emp) {
   const hourlyRate = dailyRateEq / 8;
   const hrs = rec ? (Number(rec.hours) || 0) : 0;
@@ -485,13 +490,18 @@ function computeDayPay(dailyRateEq, rec, holiday, emp) {
   // still-paid rule below stays tied to the real shared-list holiday only, since there's
   // no per-record override possible for a day nobody clocked in for.
   const effectiveType = (rec && rec.holidayType) ? rec.holidayType : (holiday ? holiday.type : null);
+  const isRestDayWorked = !effectiveType && !!rec && rec.status !== 'Absent' && new Date(rec.date + 'T00:00:00').getDay() === 0;
+  // Rest-day work uses the exact same OT/premium tier as a worked Special Non-Working
+  // holiday (both are 30%-premium days under the Labor Code) -- reusing 'effectiveType's
+  // multiplier logic below rather than adding a parallel branch.
+  const premiumType = effectiveType || (isRestDayWorked ? 'Special' : null);
 
   // otHours lets HR override the derived "effective hours - 8" figure (e.g. to exclude a
   // break, or cap it) — null/undefined falls back to the original derived calculation.
   const otHrs = (rec && rec.otStatus === 'Approved')
     ? (rec.otHours != null ? Number(rec.otHours) : Math.max(0, effHrs - 8))
     : 0;
-  const otMultiplier = effectiveType ? (effectiveType === 'Regular' ? 2.6 : 1.69) : 1.25;
+  const otMultiplier = premiumType ? (premiumType === 'Regular' ? 2.6 : 1.69) : 1.25;
   const otPay = otHrs * hourlyRate * otMultiplier;
   const nsdHrs = (rec && rec.nsdStatus === 'Approved') ? nightOverlapHours(rec.timeIn, rec.timeOut) : 0;
   const nsdPay = nsdHrs * hourlyRate * 0.10;
@@ -507,7 +517,13 @@ function computeDayPay(dailyRateEq, rec, holiday, emp) {
     }
   }
 
-  return { otHrs, otPay, nsdHrs, nsdPay, holidayPay };
+  let restDayPay = 0;
+  if (isRestDayWorked) {
+    const regHrs = Math.min(effHrs, 8);
+    restDayPay = dailyRateEq * 0.3 * (regHrs / 8);
+  }
+
+  return { otHrs, otPay, nsdHrs, nsdPay, holidayPay, restDayPay };
 }
 
 // Full payroll computation for one employee over one cutoff — shared by the admin
@@ -578,11 +594,12 @@ function computeRow(emp, from, to) {
   const isHousingOverridden = !!(override && override.housing != null);
   if (isHousingOverridden) housingPay = Number(override.housing);
 
-  let otPay = 0, nsdPay = 0;
+  let otPay = 0, nsdPay = 0, restDayPay = 0;
   presentRecords.forEach(r => {
     const day = computeDayPay(dailyRateEq, r, holidayByDate[r.date], emp);
     otPay += day.otPay;
     nsdPay += day.nsdPay;
+    restDayPay += day.restDayPay;
   });
   const isNsdOverridden = !!(override && override.nsd != null);
   if (isNsdOverridden) nsdPay = Number(override.nsd);
@@ -614,7 +631,7 @@ function computeRow(emp, from, to) {
     });
   }
 
-  let gross = basePay + colaPay + housingPay + nsdPay + otPay + holidayPay + retroPay;
+  let gross = basePay + colaPay + housingPay + nsdPay + otPay + holidayPay + restDayPay + retroPay;
   const isGrossOverridden = !!(override && override.gross != null);
   if (isGrossOverridden) gross = Number(override.gross);
 
@@ -639,7 +656,7 @@ function computeRow(emp, from, to) {
   // attendanceDed. Taxing the undiminished amount meant a cutoff with zero attendance
   // logged yet (e.g. before HR has entered it) showed a confusing negative "net": real tax
   // charged on pay that was then fully deducted right back out.
-  const taxableGross = basePay + otPay + nsdPay + holidayPay;
+  const taxableGross = basePay + otPay + nsdPay + holidayPay + restDayPay;
   let tax = withholdingTax(Math.max(0, taxableGross - attendanceDed));
   const isTaxOverridden = !!(override && override.tax != null);
   if (isTaxOverridden) tax = Number(override.tax);
@@ -651,7 +668,7 @@ function computeRow(emp, from, to) {
   return {
     emp, daysPresent, isOverridden, workDays, daysAbsent, isAbsentOverridden, basePay, isBasePayOverridden,
     colaPay, isColaOverridden, housingPay, isHousingOverridden, nsdPay, isNsdOverridden,
-    otPay, isOtOverridden, holidayPay, isHolidayOverridden, retroPay,
+    otPay, isOtOverridden, holidayPay, isHolidayOverridden, restDayPay, retroPay,
     gross, isGrossOverridden, taxableGross, tax, isTaxOverridden, manualDed, attendanceDed, lateUndertimeDed,
     dedTotal, isDedTotalOverridden, bonusTotal, net, isNetOverridden,
   };

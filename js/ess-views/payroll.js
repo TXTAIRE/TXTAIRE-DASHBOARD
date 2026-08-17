@@ -82,6 +82,7 @@ window.EssViews.payroll = (function () {
         <div class="ess-row"><span class="label">Gross Pay</span><span class="value">${money(row.gross)}</span></div>
         <div class="ess-row"><span class="label">Overtime Pay</span><span class="value">${money(row.otPay)}</span></div>
         <div class="ess-row"><span class="label">Holiday Pay</span><span class="value">${money(row.holidayPay)}</span></div>
+        ${row.restDayPay ? `<div class="ess-row"><span class="label">Rest Day Pay</span><span class="value">${money(row.restDayPay)}</span></div>` : ''}
         <div class="ess-row"><span class="label">COLA</span><span class="value">${money(row.colaPay)}</span></div>
         <div class="ess-row"><span class="label">Deductions</span><span class="value">${money(row.dedTotal)}</span></div>
         <div class="ess-row"><span class="label" style="${row.bonusTotal ? 'font-weight:700;' : ''}">Bonus</span><span class="value" style="${row.bonusTotal ? 'color:var(--green);' : ''}">${row.bonusTotal ? money(row.bonusTotal) : '—'}</span></div>
@@ -100,6 +101,7 @@ window.EssViews.payroll = (function () {
         <div class="ess-row"><span class="label">Night Shift Differential</span><span class="value">${money(row.nsdPay)}</span></div>
         <div class="ess-row"><span class="label">Overtime Pay</span><span class="value">${money(row.otPay)}</span></div>
         <div class="ess-row"><span class="label">Holiday Pay</span><span class="value">${money(row.holidayPay)}</span></div>
+        <div class="ess-row"><span class="label">Rest Day Pay</span><span class="value">${money(row.restDayPay)}</span></div>
         <div class="ess-row"><span class="label">Withholding Tax</span><span class="value">${money(row.tax)}</span></div>
         <div class="ess-row"><span class="label">Deductions</span><span class="value">${money(row.dedTotal)}</span></div>
         <div class="ess-row"><span class="label">Bonus</span><span class="value" style="${row.bonusTotal ? 'color:var(--green);' : ''}">${row.bonusTotal ? money(row.bonusTotal) : '—'}</span></div>

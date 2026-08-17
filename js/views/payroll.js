@@ -197,6 +197,7 @@ window.Views.payroll = (function () {
     const totalNsd = rows.reduce((s, r) => s + r.nsdPay, 0);
     const totalOt = rows.reduce((s, r) => s + r.otPay, 0);
     const totalHoliday = rows.reduce((s, r) => s + r.holidayPay, 0);
+    const totalRestDay = rows.reduce((s, r) => s + r.restDayPay, 0);
     const totalRetroPay = rows.reduce((s, r) => s + r.retroPay, 0);
     const totalTax = rows.reduce((s, r) => s + r.tax, 0);
     const totalDed = rows.reduce((s, r) => s + r.dedTotal, 0);
@@ -245,7 +246,7 @@ window.Views.payroll = (function () {
       <div class="page-sub" style="margin-bottom:10px;">${monthLabel} · ${selected.label} · payday ${fmtDate(selected.payDate)} · ${rows.length} staff on this schedule</div>
 
       <div class="kpi-row">
-        <div class="kpi-card"><div class="kpi-label">Total Gross</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(totalGross)}</div><div class="kpi-sub">incl. ${fmtMoney(totalCola)} COLA, ${fmtMoney(totalHousing)} housing allowance,${fmtMoney(totalNsd)} NSD, ${fmtMoney(totalOt)} OT, ${fmtMoney(totalHoliday)} holiday, ${fmtMoney(totalRetroPay)} retro pay</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Gross</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(totalGross)}</div><div class="kpi-sub">incl. ${fmtMoney(totalCola)} COLA, ${fmtMoney(totalHousing)} housing allowance,${fmtMoney(totalNsd)} NSD, ${fmtMoney(totalOt)} OT, ${fmtMoney(totalHoliday)} holiday, ${fmtMoney(totalRestDay)} rest day, ${fmtMoney(totalRetroPay)} retro pay</div></div>
         <div class="kpi-card"><div class="kpi-label">Total Withholding Tax</div><div class="kpi-value ${totalTax ? 'red' : ''}" style="font-size:20px;">${fmtMoney(totalTax)}</div></div>
         <div class="kpi-card"><div class="kpi-label">Total Deductions</div><div class="kpi-value ${totalDed ? 'red' : ''}" style="font-size:20px;">${fmtMoney(totalDed)}</div>${totalAttendanceDed || totalLateUndertimeDed ? `<div class="kpi-sub">incl. ${fmtMoney(totalAttendanceDed)} absences, ${fmtMoney(totalLateUndertimeDed)} late/undertime</div>` : ''}</div>
         <div class="kpi-card"><div class="kpi-label">Total Absent Days</div><div class="kpi-value ${totalAbsentDays ? 'red' : ''}" style="font-size:20px;">${totalAbsentDays}</div></div>
@@ -254,12 +255,12 @@ window.Views.payroll = (function () {
         <div class="kpi-card"><div class="kpi-label">Staff on Schedule</div><div class="kpi-value">${rows.length}</div></div>
       </div>
 
-      <div class="hint">Days Present, Absent, Base Pay, COLA, Housing, NSD, OT, Holiday, and Retro Pay are all editable — type over any of them and press Enter or click away to save and recompute Gross/Net Pay for that cutoff. Each is saved independently per employee per cutoff and takes priority over the computed value (highlighted with a blue border) until cleared back to the computed figure. Left alone, COLA/Housing come from the employee's profile, and NSD/OT/Holiday are computed automatically from logged time in/out and the Holidays tab's calendar (10% NSD differential; 125%/169%/260% OT tiers; 200%/130% holiday premiums, full pay for an unworked regular holiday). Retro Pay (back pay owed from a prior period) has no computed baseline — it's 0 unless entered, and is taxed as real wages like the rest of gross pay. Absences are unpaid automatically for daily-rate staff (base pay only counts days present); for monthly-rate staff they're converted into an automatic deduction. Late/undertime (a logged day under 8 hours) is also unpaid for the shortfall, unless the employee's profile has "Fixed 8-hour workday" unchecked (flexible/no set schedule). Both fold into the Deductions total.</div>
+      <div class="hint">Days Present, Absent, Base Pay, COLA, Housing, NSD, OT, Holiday, and Retro Pay are all editable — type over any of them and press Enter or click away to save and recompute Gross/Net Pay for that cutoff. Each is saved independently per employee per cutoff and takes priority over the computed value (highlighted with a blue border) until cleared back to the computed figure. Left alone, COLA/Housing come from the employee's profile, and NSD/OT/Holiday are computed automatically from logged time in/out and the Holidays tab's calendar (10% NSD differential; 125%/169%/260% OT tiers; 200%/130% holiday premiums, full pay for an unworked regular holiday). Rest Day (right after Holiday) is a 30% premium automatically computed whenever an employee actually worked on a Sunday with no holiday that day (Labor Code Art. 93) — not yet editable/overridable here, unlike the other columns. Retro Pay (back pay owed from a prior period) has no computed baseline — it's 0 unless entered, and is taxed as real wages like the rest of gross pay. Absences are unpaid automatically for daily-rate staff (base pay only counts days present); for monthly-rate staff they're converted into an automatic deduction. Late/undertime (a logged day under 8 hours) is also unpaid for the shortfall, unless the employee's profile has "Fixed 8-hour workday" unchecked (flexible/no set schedule). Both fold into the Deductions total.</div>
 
       <div class="panel">
         ${rows.length ? `
         <table>
-          <thead><tr><th>Staff</th><th>Position</th><th class="num">Days Present</th><th class="num">Absent</th><th class="num">Base Pay</th><th class="num">COLA</th><th class="num">Housing Allowance</th><th class="num">NSD</th><th class="num">OT</th><th class="num">Holiday</th><th class="num">Retro Pay</th><th class="num">Gross Pay</th><th class="num">Withholding Tax</th><th class="num">Deductions</th><th class="num">Bonus</th><th class="num">Net Pay</th><th></th></tr></thead>
+          <thead><tr><th>Staff</th><th>Position</th><th class="num">Days Present</th><th class="num">Absent</th><th class="num">Base Pay</th><th class="num">COLA</th><th class="num">Housing Allowance</th><th class="num">NSD</th><th class="num">OT</th><th class="num">Holiday</th><th class="num">Rest Day</th><th class="num">Retro Pay</th><th class="num">Gross Pay</th><th class="num">Withholding Tax</th><th class="num">Deductions</th><th class="num">Bonus</th><th class="num">Net Pay</th><th></th></tr></thead>
           <tbody>
             ${rows.map(r => `
               <tr class="${r.emp.id === highlightedEmpId ? 'row-highlighted' : ''}">
@@ -289,6 +290,7 @@ window.Views.payroll = (function () {
                 <td class="num">
                   <div class="money-input-wrap"><span class="currency-prefix">₱</span><input type="number" class="holiday-input" min="0" step="0.01" value="${r.holidayPay.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isHolidayOverridden ? 'Manually edited — overrides the computed holiday pay' : 'Computed from the Holidays tab calendar'}" style="${r.isHolidayOverridden ? 'border-color:var(--accent);' : ''}" /></div>
                 </td>
+                <td class="num" title="30% premium for work on this employee's weekly rest day (Sunday) — Labor Code Art. 93. Auto-computed, not yet editable here.">${fmtMoney(r.restDayPay)}</td>
                 <td class="num">
                   <div class="money-input-wrap"><span class="currency-prefix">₱</span><input type="number" class="retropay-input" min="0" step="0.01" value="${r.retroPay.toFixed(2)}" data-emp="${r.emp.id}" title="Back pay owed from a prior period — no computed baseline, 0 unless entered. Taxed as real wages, same as base pay." style="${r.retroPay ? 'border-color:var(--accent);' : ''}" /></div>
                 </td>

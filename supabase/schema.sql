@@ -2521,7 +2521,7 @@ insert into "leaveTypePolicies" ("leaveType", "daysPerYear", "minServiceMonths",
   ('SIL', 5, 12, null, false, false, true, true, 'Labor Code Art. 95 -- 5 days/year after 1 year of service.'),
   ('Maternity', 105, 0, 'Female', false, true, true, true, 'RA 11210 -- 105 days per qualifying pregnancy (120 if solo parent, HR verifies).'),
   ('Paternity', 7, 0, 'Male', false, true, true, true, 'RA 8187 -- 7 days, first 4 deliveries of the employee''s legitimate spouse.'),
-  ('Solo Parent', 7, 0, null, true, false, true, true, 'RA 11861 -- 7 days/year, requires a Solo Parent ID on file.'),
+  ('Solo Parent', 7, 12, null, true, false, true, true, 'RA 8972/11861 -- 7 days/year, requires 1 year of service AND a Solo Parent ID on file.'),
   ('VAWC', 10, 0, null, false, true, true, true, 'RA 9262 -- up to 10 days per qualifying incident. HR verifies documentation manually.'),
   ('Emergency', 3, 0, null, false, false, true, false, 'Company policy -- adjust freely.'),
   ('Other', 0, 0, null, false, false, true, false, 'Catch-all -- HR reviews case by case.')

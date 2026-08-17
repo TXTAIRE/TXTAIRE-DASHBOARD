@@ -161,6 +161,7 @@ function openDTR(emp, from, to) {
             <tr><td>Overtime Pay</td><td class="num">${fmtMoney(row.otPay)}</td></tr>
             <tr><td>SIL (Service Incentive Leave)</td><td class="num">${silDaysInRange(emp.id, from, to)} day(s)</td></tr>
             <tr><td>Holiday Pay</td><td class="num">${fmtMoney(row.holidayPay)}</td></tr>
+            ${row.restDayPay ? `<tr><td>Rest Day Pay</td><td class="num">${fmtMoney(row.restDayPay)}</td></tr>` : ''}
           </tbody>
         </table>
       </div>
