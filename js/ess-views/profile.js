@@ -197,7 +197,6 @@ window.EssViews.profile = (function () {
         <div class="ess-row"><span class="label">Category</span><span class="value">${escapeHtml(emp.category)}</span></div>
         <div class="ess-row"><span class="label">Employment Status</span><span class="value">${escapeHtml(emp.employmentStatus)}</span></div>
         <div class="ess-row"><span class="label">Date Hired</span><span class="value">${fmtDate(emp.dateHired)}</span></div>
-        ${emp.reportsTo ? `<div class="ess-row"><span class="label">Reports To</span><span class="value">${escapeHtml((Store.getEmployee(emp.reportsTo) || {}).name || '—')}</span></div>` : ''}
       </div>
       <div class="ess-card">
         <div class="ess-card-label">Contact</div>

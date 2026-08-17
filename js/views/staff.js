@@ -600,8 +600,7 @@ window.Views.staff = (function () {
 
   function openEmployeeModal(main, id) {
     const editing = id ? Store.getEmployee(id) : null;
-    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, housingAllowance: 0, nightShiftDifferential: false, fixedHours: true, defaultTimeIn: '', defaultTimeOut: '', payCycle: '10-20', notes: '', bankAccountNumber: '', sex: '', region: '', soloParentStatus: false, reportsTo: '' };
-    const managerOptions = Store.listEmployees().filter(m => m.status !== 'Terminated' && m.id !== (editing && editing.id));
+    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, housingAllowance: 0, nightShiftDifferential: false, fixedHours: true, defaultTimeIn: '', defaultTimeOut: '', payCycle: '10-20', notes: '', bankAccountNumber: '', sex: '', region: '', soloParentStatus: false };
     const wageCheck = editing ? Store.isBelowMinimumWage(editing) : null;
 
     openModal(`
@@ -615,9 +614,6 @@ window.Views.staff = (function () {
           </div>
           <div class="field"><label>Position</label><input name="position" required value="${escapeHtml(e.position)}" /></div>
           <div class="field"><label>Employee ID</label><input name="employeeCode" value="${escapeHtml(e.employeeCode || '')}" placeholder="e.g. TXT001" /></div>
-          <div class="field"><label>Reports To <span class="dim">(for Org Chart)</span></label>
-            <select name="reportsTo"><option value="">No manager set</option>${managerOptions.map(m => `<option value="${m.id}" ${m.id === e.reportsTo ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('')}</select>
-          </div>
           <div class="field"><label>Status</label>
             <select name="status">${['Active', 'On Leave', 'Off', 'Terminated'].map(s => `<option ${s === e.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
           </div>
@@ -692,7 +688,6 @@ window.Views.staff = (function () {
           sex: fd.get('sex') || null,
           region: fd.get('region').trim() || null,
           soloParentStatus: fd.get('soloParentStatus') === 'on',
-          reportsTo: fd.get('reportsTo') || null,
           payCycle: fd.get('payCycle'),
           payType: fd.get('payType'),
           rate: Number(fd.get('rate')) || 0,

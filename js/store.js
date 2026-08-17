@@ -818,17 +818,6 @@ const Store = (function () {
   async function deleteEmployee(id) {
     await deleteRow('employees', id);
   }
-  // Direct reports of one manager -- active employees only, so someone Terminated
-  // doesn't linger as a phantom branch on the Org Chart.
-  function directReports(employeeId) {
-    return state.employees.filter(e => e.reportsTo === employeeId && e.status !== 'Terminated');
-  }
-  // Root-level employees (no manager on file, or reportsTo points at someone no longer
-  // active/on file) -- the Org Chart starts here and expands via directReports().
-  function orgChartRoots() {
-    const activeIds = new Set(state.employees.filter(e => e.status !== 'Terminated').map(e => e.id));
-    return state.employees.filter(e => e.status !== 'Terminated' && (!e.reportsTo || !activeIds.has(e.reportsTo)));
-  }
 
   // ---- Recruitment ----
   function listCandidates() { return state.candidates.slice(); }
@@ -2100,6 +2089,5 @@ const Store = (function () {
     computeRetirementPay, yearsOfServiceAsOf,
     listOffboarding, getOffboarding, activeOffboardingForEmployee, startOffboarding, updateClearanceItem, computeFinalPay, saveFinalPaySnapshot, releaseFinalPay, issueCOE,
     listAnnouncements, getAnnouncement, addAnnouncement, updateAnnouncement, deleteAnnouncement,
-    directReports, orgChartRoots,
   };
 })();
