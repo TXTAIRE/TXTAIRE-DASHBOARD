@@ -63,13 +63,45 @@ function openDrawer(innerHtml, onMount) {
   return dr;
 }
 
-// Printable Daily Time Record for one employee over a date range (typically a payroll
-// cutoff). Opens as a fixed overlay; @media print rules in styles.css hide everything
-// else on the page so "Print" (or the browser's Print > Save as PDF) yields a clean sheet.
+// Printable payslip for one employee over a date range (typically a payroll cutoff) --
+// a separate print from the Daily Time Record below (openDTR). Opens as a fixed
+// overlay; @media print rules in styles.css hide everything else on the page so "Print"
+// (or the browser's Print > Save as PDF) yields a clean sheet. Matches the office's
+// existing paper payslip template exactly -- every figure here comes from the same
+// shared computeRow() the Payroll tab and My Payroll use, so it always matches those.
+function openPayslip(emp, from, to) {
+  // Guard against stacking multiple prints in the DOM (e.g. clicking twice without
+  // closing) — each one would render on its own printed page since printing renders
+  // every .dtr-overlay in document order, not just the visually-topmost one.
+  qsa('.dtr-overlay').forEach(el => el.remove());
+
+  const row = computeRow(emp, from, to);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'dtr-overlay';
+  overlay.innerHTML = `
+    <div class="dtr-print">
+      <div class="dtr-actions no-print">
+        <button class="btn btn-ghost btn-sm" id="dtr-close">Close</button>
+        <button class="btn btn-primary btn-sm" id="dtr-print-btn">Print / Save as PDF</button>
+      </div>
+
+      ${payslipSectionHtml(emp, from, to, row)}
+
+      <div class="dtr-signatures">
+        <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Employee's Signature Over Printed Name</div></div>
+        <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Human Resource Department</div></div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#dtr-close').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#dtr-print-btn').addEventListener('click', () => window.print());
+}
+
+// Printable Daily Time Record (day-by-day log) for one employee over a date range --
+// a separate print from the Payslip above (openPayslip). Same overlay/print pattern.
 function openDTR(emp, from, to) {
-  // Guard against stacking multiple DTRs in the DOM (e.g. clicking "DTR →" more than once
-  // without closing) — each one would render on its own printed page since printing
-  // renders every .dtr-overlay in document order, not just the visually-topmost one.
   qsa('.dtr-overlay').forEach(el => el.remove());
 
   const records = Store.attendanceInRange(from, to).filter(a => a.employeeId === emp.id);
@@ -81,10 +113,6 @@ function openDTR(emp, from, to) {
 
   const workDays = workDaysInRange(from, to);
   const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (workDays > 0 ? emp.rate / workDays : 0);
-  // Same shared computeRow() the Payroll tab and My Payroll use, so the DTR's total pay
-  // always matches those exactly -- gross/net for the whole cutoff, not just the NSD/OT/
-  // Holiday premiums computed below.
-  const row = computeRow(emp, from, to);
 
   const days = [];
   let d = from;
@@ -151,23 +179,6 @@ function openDTR(emp, from, to) {
       </table>
       </div>
 
-      <div class="dtr-summary">
-        <div class="dtr-summary-title">Summary — ${fmtDate(from)} to ${fmtDate(to)}</div>
-        <table class="dtr-table">
-          <thead><tr><th>Item</th><th class="num">Total</th></tr></thead>
-          <tbody>
-            <tr><td>Days Present</td><td class="num">${row.daysPresent}</td></tr>
-            <tr><td>Night Shift Differential</td><td class="num">${fmtMoney(row.nsdPay)}</td></tr>
-            <tr><td>Overtime Pay</td><td class="num">${fmtMoney(row.otPay)}</td></tr>
-            <tr><td>SIL (Service Incentive Leave)</td><td class="num">${silDaysInRange(emp.id, from, to)} day(s)</td></tr>
-            <tr><td>Holiday Pay</td><td class="num">${fmtMoney(row.holidayPay)}</td></tr>
-            ${row.restDayPay ? `<tr><td>Rest Day Pay</td><td class="num">${fmtMoney(row.restDayPay)}</td></tr>` : ''}
-          </tbody>
-        </table>
-      </div>
-
-      ${payslipSectionHtml(emp, from, to, row)}
-
       <div class="dtr-signatures">
         <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Employee's Signature Over Printed Name</div></div>
         <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Human Resource Department</div></div>
@@ -199,7 +210,10 @@ function payslipSectionHtml(emp, from, to, row) {
 
   return `
       <div class="payslip">
-        <div class="payslip-title">PAYSLIP</div>
+        <div class="payslip-title-row">
+          <img src="assets/logo.svg" class="payslip-logo" alt="TxTAIRE" />
+          <div class="payslip-title">PAYSLIP</div>
+        </div>
         <div class="payslip-meta">
           <div><b>Pay Period</b> : ${fmtDate(from)} – ${fmtDate(to)}</div>
           <div><b>Designation</b> : ${escapeHtml(emp.position || '—')}</div>

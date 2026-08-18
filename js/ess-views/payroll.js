@@ -101,6 +101,7 @@ window.EssViews.payroll = (function () {
       </div>
 
       <button class="btn btn-ghost btn-sm" id="btn-toggle-details" style="width:100%; justify-content:center; margin-bottom:6px;">${showDetails ? 'Hide' : 'View'} full details</button>
+      <button class="btn btn-ghost btn-sm" id="btn-print-payslip" style="width:100%; justify-content:center; margin-bottom:6px;">🖨 View / Print Payslip for this period</button>
       <button class="btn btn-ghost btn-sm" id="btn-print-dtr" style="width:100%; justify-content:center;">🖨 View / Print DTR for this period</button>
 
       ${showDetails ? `
@@ -155,6 +156,7 @@ window.EssViews.payroll = (function () {
     if (btnToday) btnToday.addEventListener('click', () => { goToToday(emp); render(main, emp); });
     qsa('#seg-cutoff button', main).forEach(b => b.addEventListener('click', () => { half = b.dataset.val; render(main, emp); }));
     qs('#btn-toggle-details', main).addEventListener('click', () => { showDetails = !showDetails; render(main, emp); });
+    qs('#btn-print-payslip', main).addEventListener('click', () => openPayslip(emp, selected.from, selected.to));
     qs('#btn-print-dtr', main).addEventListener('click', () => openDTR(emp, selected.from, selected.to));
   }
 

@@ -313,7 +313,7 @@ window.Views.payroll = (function () {
                 <td class="num">
                   <div class="money-input-wrap"><span class="currency-prefix">₱</span><input type="number" class="net-input" min="0" step="0.01" value="${r.net.toFixed(2)}" data-emp="${r.emp.id}" title="${r.isNetOverridden ? 'Manually edited — overrides Gross Pay − Withholding Tax − Deductions + Bonus' : 'Computed from the fields above'}" style="font-weight:700; ${r.isNetOverridden ? 'border-color:var(--accent);' : ''}" /></div>
                 </td>
-                <td><button class="link-btn" data-dtr="${r.emp.id}">DTR →</button></td>
+                <td style="white-space:nowrap;"><button class="link-btn" data-payslip="${r.emp.id}">Payslip</button> · <button class="link-btn" data-dtr="${r.emp.id}">DTR</button></td>
               </tr>
             `).join('')}
           </tbody>
@@ -359,6 +359,10 @@ window.Views.payroll = (function () {
     qsa('[data-dtr]', body).forEach(btn => btn.addEventListener('click', () => {
       const row = rows.find(r => r.emp.id === btn.dataset.dtr);
       if (row) openDTR(row.emp, selected.from, selected.to);
+    }));
+    qsa('[data-payslip]', body).forEach(btn => btn.addEventListener('click', () => {
+      const row = rows.find(r => r.emp.id === btn.dataset.payslip);
+      if (row) openPayslip(row.emp, selected.from, selected.to);
     }));
     qsa('[data-highlight-emp]', body).forEach(td => td.addEventListener('click', () => {
       highlightedEmpId = highlightedEmpId === td.dataset.highlightEmp ? null : td.dataset.highlightEmp;
