@@ -99,28 +99,29 @@ function downloadFilenameFor(emp, label, from, to) {
 // Close/Print/Download toolbar itself, which sits outside .dtr-capture) to a PNG and
 // downloads it directly, or into a same-aspect-ratio single-page PDF. Both share the
 // html2canvas render step; only what happens with the resulting canvas differs.
-// Safari (iOS and Mac alike) has never reliably honored the `download` attribute on an
-// <a> pointing at a blob:/data: URL -- clicking it just opens or ignores the file instead
-// of saving it. Opening the blob in a new tab is the one thing Safari does handle
-// consistently: it shows the image/PDF full-screen with its own Share/Save controls
-// (long-press on iOS, right-click or the toolbar's Share icon on Mac), which is the
-// well-known manual workaround for this WebKit limitation. Every other engine (Chrome,
-// Edge, Firefox) honors `download` normally, so they keep the direct-download path.
+//
+// Safari (iOS and Mac alike) needs two workarounds neither other engine does:
+// (1) it has never reliably honored the `download` attribute on a blob:/data: URL --
+//     clicking such a link just opens or ignores the file -- so the fallback there is
+//     to open the file in a new tab instead, where the user can long-press (iPhone) or
+//     right-click (Mac) to save it;
+// (2) a blob: URL opened via window.open() in a NEW tab is a long-standing WebKit bug
+//     (the tab opens but the resource never actually loads -- it just spins forever),
+//     so that new tab must be given a data: URL instead, never a blob: URL.
+// window.open() itself must also happen synchronously, in direct response to the click,
+// or Safari's popup blocker silently kills it -- awaiting the html2canvas render first
+// and calling window.open() afterward is too late. So the tab is opened blank right at
+// the top of downloadCapture, before any awaited work, and only gets its real content
+// (or gets closed, if navigator.share() ends up handling it instead) once that's ready.
 const isSafariBrowser = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
-  if (isSafariBrowser) {
-    window.open(url, '_blank');
-    toast('Opened in a new tab — press and hold (iPhone) or right-click (Mac) the file to save it.');
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  } else {
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-  }
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 // A plain <a download> only ever lands a file in the Downloads folder -- on iOS it's
@@ -129,40 +130,53 @@ function downloadBlob(blob, filename) {
 // Chrome/Samsung Internet) is the only cross-platform way to get the OS's native
 // "Save Image"/"Save to Photos" option, so it's tried first; desktop Chrome/Edge/
 // Firefox/Safari on Mac and Windows don't support sharing files and fall back to the
-// normal Downloads-folder save, which is the correct/expected behavior there.
-async function shareOrDownload(blob, filename, mimeType) {
+// normal Downloads-folder save, which is the correct/expected behavior there. On Safari
+// specifically, if share() isn't available or fails, safariTab (opened synchronously by
+// the caller before any of this ran) is filled with a data: URL instead of using a blob
+// link, since neither the `download` attribute nor a blob: URL work reliably there.
+async function shareOrDownload(blob, filename, mimeType, safariTab, getDataUrl) {
   const file = new File([blob], filename, { type: mimeType });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file] });
+      if (safariTab) safariTab.close();
       return;
     } catch (err) {
-      if (err && err.name === 'AbortError') return; // user cancelled the share sheet
-      // fall through to a plain download if sharing itself failed
+      if (err && err.name === 'AbortError') { if (safariTab) safariTab.close(); return; } // user cancelled the share sheet
+      // fall through if sharing itself failed
     }
   }
-  downloadBlob(blob, filename);
+  if (safariTab) {
+    safariTab.location.href = getDataUrl();
+    toast('Opened in a new tab — press and hold (iPhone) or right-click (Mac) the file to save it.');
+  } else if (isSafariBrowser) {
+    toast('Please allow pop-ups for this site, then try again.');
+  } else {
+    downloadBlob(blob, filename);
+  }
 }
 
 async function downloadCapture(captureEl, filenameBase, format, btn) {
   const originalText = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Preparing…';
+  const safariTab = isSafariBrowser ? window.open('', '_blank') : null;
   try {
     const html2canvas = await loadHtml2Canvas();
     const canvas = await html2canvas(captureEl, { scale: 2, backgroundColor: '#ffffff' });
     if (format === 'image') {
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-      await shareOrDownload(blob, filenameBase + '.png', 'image/png');
+      await shareOrDownload(blob, filenameBase + '.png', 'image/png', safariTab, () => canvas.toDataURL('image/png'));
     } else {
       const JsPDF = await loadJsPdf();
       const imgData = canvas.toDataURL('image/jpeg', 0.92);
       const pdf = new JsPDF({ orientation: canvas.width >= canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height] });
       pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
       const pdfBlob = pdf.output('blob');
-      await shareOrDownload(pdfBlob, filenameBase + '.pdf', 'application/pdf');
+      await shareOrDownload(pdfBlob, filenameBase + '.pdf', 'application/pdf', safariTab, () => pdf.output('datauristring'));
     }
   } catch (err) {
+    if (safariTab) safariTab.close();
     toast('Could not generate the download — try again.');
   } finally {
     btn.disabled = false;
