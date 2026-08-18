@@ -238,6 +238,66 @@ function updateEssBellBadge() {
   badge.classList.toggle('hidden', count === 0);
 }
 
+// Lazy-loaded CDN libraries for the Image/PDF download buttons below -- same pattern as
+// the admin dashboard's js/app.js (and the heic2any lazy-load used elsewhere): check
+// window.<lib> first, cache the load Promise, inject a <script> tag pointed at a pinned
+// jsdelivr CDN URL (already allow-listed in ess.html's script-src CSP).
+let html2canvasLoadPromise = null;
+function loadHtml2Canvas() {
+  if (window.html2canvas) return Promise.resolve(window.html2canvas);
+  if (html2canvasLoadPromise) return html2canvasLoadPromise;
+  html2canvasLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+    script.onload = () => resolve(window.html2canvas);
+    script.onerror = () => { html2canvasLoadPromise = null; reject(new Error('load failed')); };
+    document.head.appendChild(script);
+  });
+  return html2canvasLoadPromise;
+}
+let jspdfLoadPromise = null;
+function loadJsPdf() {
+  if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve(window.jspdf.jsPDF);
+  if (jspdfLoadPromise) return jspdfLoadPromise;
+  jspdfLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+    script.onload = () => resolve(window.jspdf && window.jspdf.jsPDF);
+    script.onerror = () => { jspdfLoadPromise = null; reject(new Error('load failed')); };
+    document.head.appendChild(script);
+  });
+  return jspdfLoadPromise;
+}
+function downloadFilenameFor(emp, label, from, to) {
+  return (label + '_' + emp.name + '_' + from + '_to_' + to).replace(/[^a-z0-9]+/gi, '_');
+}
+async function downloadCapture(captureEl, filenameBase, format, btn) {
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Preparing…';
+  try {
+    const html2canvas = await loadHtml2Canvas();
+    const canvas = await html2canvas(captureEl, { scale: 2, backgroundColor: '#ffffff' });
+    if (format === 'image') {
+      const link = document.createElement('a');
+      link.href = canvas.toDataURL('image/png');
+      link.download = filenameBase + '.png';
+      link.click();
+    } else {
+      const JsPDF = await loadJsPdf();
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      const pdf = new JsPDF({ orientation: canvas.width >= canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height] });
+      pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
+      pdf.save(filenameBase + '.pdf');
+    }
+  } catch (err) {
+    toast('Could not generate the download — try again.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
 // Printable payslip — same overlay/markup as the admin dashboard's (js/app.js
 // openPayslip), duplicated here rather than shared since each entry point already keeps
 // its own small self-contained helpers (qs/qsa/escapeHtml/toast/etc. above). Only
@@ -255,20 +315,27 @@ function openPayslip(emp, from, to) {
     <div class="dtr-print">
       <div class="dtr-actions no-print">
         <button class="btn btn-ghost btn-sm" id="dtr-close">Close</button>
+        <button class="btn btn-ghost btn-sm" id="dtr-download-image">⬇ Image</button>
+        <button class="btn btn-ghost btn-sm" id="dtr-download-pdf">⬇ PDF</button>
         <button class="btn btn-primary btn-sm" id="dtr-print-btn">Print / Save as PDF</button>
       </div>
-
+      <div class="dtr-capture">
       ${payslipSectionHtml(emp, from, to, row)}
 
       <div class="dtr-signatures">
         <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Employee's Signature Over Printed Name</div></div>
         <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Human Resource Department</div></div>
       </div>
+      </div>
     </div>
   `;
   document.body.appendChild(overlay);
+  const captureEl = overlay.querySelector('.dtr-capture');
+  const filenameBase = downloadFilenameFor(emp, 'Payslip', from, to);
   overlay.querySelector('#dtr-close').addEventListener('click', () => overlay.remove());
   overlay.querySelector('#dtr-print-btn').addEventListener('click', () => window.print());
+  overlay.querySelector('#dtr-download-image').addEventListener('click', (ev) => downloadCapture(captureEl, filenameBase, 'image', ev.currentTarget));
+  overlay.querySelector('#dtr-download-pdf').addEventListener('click', (ev) => downloadCapture(captureEl, filenameBase, 'pdf', ev.currentTarget));
 }
 
 // Printable Daily Time Record (day-by-day log) — a separate print from the Payslip
@@ -285,6 +352,8 @@ function openDTR(emp, from, to) {
 
   const workDays = workDaysInRange(from, to);
   const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (workDays > 0 ? emp.rate / workDays : 0);
+  const row = computeRow(emp, from, to);
+  const silDays = silDaysInRange(emp.id, from, to);
 
   const days = [];
   let d = from;
@@ -308,8 +377,11 @@ function openDTR(emp, from, to) {
     <div class="dtr-print">
       <div class="dtr-actions no-print">
         <button class="btn btn-ghost btn-sm" id="dtr-close">Close</button>
+        <button class="btn btn-ghost btn-sm" id="dtr-download-image">⬇ Image</button>
+        <button class="btn btn-ghost btn-sm" id="dtr-download-pdf">⬇ PDF</button>
         <button class="btn btn-primary btn-sm" id="dtr-print-btn">Print / Save as PDF</button>
       </div>
+      <div class="dtr-capture">
       <div class="dtr-header">
         <img src="assets/logo.svg" class="dtr-logo" alt="TxTAIRE" />
         <h2>Daily Time Record</h2>
@@ -350,16 +422,25 @@ function openDTR(emp, from, to) {
         </tr></tfoot>
       </table>
       </div>
+      <div class="dtr-meta" style="margin-top:12px;">
+        <div><strong>SIL (Service Incentive Leave):</strong> ${silDays} day(s)</div>
+        <div><strong>Holiday Pay:</strong> ${fmtMoney(row.holidayPay)}</div>
+      </div>
 
       <div class="dtr-signatures">
         <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Employee's Signature Over Printed Name</div></div>
         <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Human Resource Department</div></div>
       </div>
+      </div>
     </div>
   `;
   document.body.appendChild(overlay);
+  const captureEl = overlay.querySelector('.dtr-capture');
+  const filenameBase = downloadFilenameFor(emp, 'DTR', from, to);
   overlay.querySelector('#dtr-close').addEventListener('click', () => overlay.remove());
   overlay.querySelector('#dtr-print-btn').addEventListener('click', () => window.print());
+  overlay.querySelector('#dtr-download-image').addEventListener('click', (ev) => downloadCapture(captureEl, filenameBase, 'image', ev.currentTarget));
+  overlay.querySelector('#dtr-download-pdf').addEventListener('click', (ev) => downloadCapture(captureEl, filenameBase, 'pdf', ev.currentTarget));
 }
 
 // Matches the office's existing payslip template (Pay Period/Designation/Employee's Name/
@@ -397,6 +478,7 @@ function payslipSectionHtml(emp, from, to, row) {
             <div class="payslip-col-title">EARNINGS</div>
             <table class="payslip-table">
               <tr><td>No. of Days worked</td><td>:</td><td class="num">${row.daysPresent}</td></tr>
+              <tr><td>SIL (Service Incentive Leave)</td><td>:</td><td class="num">${silDaysInRange(emp.id, from, to)} day(s)</td></tr>
               <tr><td>${emp.payType === 'Daily' ? 'Daily Rate' : (emp.payType === 'Per Cutoff' ? 'Rate per Cutoff' : 'Monthly Rate')}</td><td>:</td><td class="num">${fmtMoney(emp.payType === 'Daily' ? emp.rate : row.basePay)}</td></tr>
               <tr><td>Overtime Pay</td><td>:</td><td class="num">${fmtMoney(row.otPay)}</td></tr>
               <tr><td>Night Differential</td><td>:</td><td class="num">${fmtMoney(row.nsdPay)}</td></tr>
