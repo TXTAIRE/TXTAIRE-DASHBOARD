@@ -295,6 +295,23 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+// Safari blocks navigating a tab's own address/location to a data: URL -- an
+// anti-phishing protection in place since ~2018 (it's how "fake login page with a
+// blank-looking address bar" attacks worked) -- so setting safariTab.location.href to
+// one gets silently discarded and the tab just sits at about:blank forever. A data: URL
+// is still allowed as the *source* of embedded content though, so instead the tab's
+// blank document is overwritten with a small HTML page containing an <img>/<embed> whose
+// src is the data: URL -- that's a resource load, not a navigation, so it isn't blocked,
+// and it gives the user Safari's normal long-press "Save Image" / PDF toolbar to save it.
+function showInSafariTab(tab, dataUrl, mimeType, filename) {
+  const body = mimeType === 'application/pdf'
+    ? '<embed src="' + dataUrl + '" type="application/pdf" style="position:fixed;inset:0;width:100%;height:100%;border:0;">'
+    : '<img src="' + dataUrl + '" style="max-width:100%;height:auto;display:block;margin:0 auto;">';
+  tab.document.open();
+  tab.document.write('<!doctype html><html><head><title>' + escapeHtml(filename) + '</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#333;">' + body + '</body></html>');
+  tab.document.close();
+}
+
 // A plain <a download> only ever lands a file in the Downloads folder -- on iOS it's
 // largely ignored (Safari just opens the image), and on Android it doesn't reach the
 // Photos/Gallery app either. The Web Share API's file sharing (iOS 16.4+, Android
@@ -303,8 +320,7 @@ function downloadBlob(blob, filename) {
 // Firefox/Safari on Mac and Windows don't support sharing files and fall back to the
 // normal Downloads-folder save, which is the correct/expected behavior there. On Safari
 // specifically, if share() isn't available or fails, safariTab (opened synchronously by
-// the caller before any of this ran) is filled with a data: URL instead of using a blob
-// link, since neither the `download` attribute nor a blob: URL work reliably there.
+// the caller before any of this ran) is filled in via showInSafariTab above.
 async function shareOrDownload(blob, filename, mimeType, safariTab, getDataUrl) {
   const file = new File([blob], filename, { type: mimeType });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -318,7 +334,7 @@ async function shareOrDownload(blob, filename, mimeType, safariTab, getDataUrl) 
     }
   }
   if (safariTab) {
-    safariTab.location.href = getDataUrl();
+    showInSafariTab(safariTab, getDataUrl(), mimeType, filename);
     toast('Opened in a new tab — press and hold (iPhone) or right-click (Mac) the file to save it.');
   } else if (isSafariBrowser) {
     toast('Please allow pop-ups for this site, then try again.');
