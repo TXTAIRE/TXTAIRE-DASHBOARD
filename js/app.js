@@ -99,13 +99,28 @@ function downloadFilenameFor(emp, label, from, to) {
 // Close/Print/Download toolbar itself, which sits outside .dtr-capture) to a PNG and
 // downloads it directly, or into a same-aspect-ratio single-page PDF. Both share the
 // html2canvas render step; only what happens with the resulting canvas differs.
+// Safari (iOS and Mac alike) has never reliably honored the `download` attribute on an
+// <a> pointing at a blob:/data: URL -- clicking it just opens or ignores the file instead
+// of saving it. Opening the blob in a new tab is the one thing Safari does handle
+// consistently: it shows the image/PDF full-screen with its own Share/Save controls
+// (long-press on iOS, right-click or the toolbar's Share icon on Mac), which is the
+// well-known manual workaround for this WebKit limitation. Every other engine (Chrome,
+// Edge, Firefox) honors `download` normally, so they keep the direct-download path.
+const isSafariBrowser = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  if (isSafariBrowser) {
+    window.open(url, '_blank');
+    toast('Opened in a new tab — press and hold (iPhone) or right-click (Mac) the file to save it.');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } else {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
 }
 
 // A plain <a download> only ever lands a file in the Downloads folder -- on iOS it's
@@ -191,6 +206,13 @@ function openPayslip(emp, from, to) {
     </div>
   `;
   document.body.appendChild(overlay);
+  // Start fetching html2canvas/jsPDF the moment this document is opened, not on button
+  // click -- Safari treats the "user just tapped something" permission window very
+  // strictly, and burning it on a CDN fetch is what made navigator.share() silently fail
+  // there. By click time the library is already cached, leaving only the (fast) render
+  // step before share() is called.
+  loadHtml2Canvas().catch(() => {});
+  loadJsPdf().catch(() => {});
   const captureEl = overlay.querySelector('.dtr-capture');
   const filenameBase = downloadFilenameFor(emp, 'Payslip', from, to);
   overlay.querySelector('#dtr-close').addEventListener('click', () => overlay.remove());
@@ -300,6 +322,13 @@ function openDTR(emp, from, to) {
     </div>
   `;
   document.body.appendChild(overlay);
+  // Start fetching html2canvas/jsPDF the moment this document is opened, not on button
+  // click -- Safari treats the "user just tapped something" permission window very
+  // strictly, and burning it on a CDN fetch is what made navigator.share() silently fail
+  // there. By click time the library is already cached, leaving only the (fast) render
+  // step before share() is called.
+  loadHtml2Canvas().catch(() => {});
+  loadJsPdf().catch(() => {});
   const captureEl = overlay.querySelector('.dtr-capture');
   const filenameBase = downloadFilenameFor(emp, 'DTR', from, to);
   overlay.querySelector('#dtr-close').addEventListener('click', () => overlay.remove());
