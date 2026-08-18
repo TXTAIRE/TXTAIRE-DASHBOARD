@@ -150,53 +150,79 @@ function showInSafariTab(tab, dataUrl, mimeType, filename) {
 // normal Downloads-folder save, which is the correct/expected behavior there. On Safari
 // specifically, if share() isn't available or fails, safariTab (opened synchronously by
 // the caller before any of this ran) is filled in via showInSafariTab above.
-async function shareOrDownload(blob, filename, mimeType, safariTab, getDataUrl) {
+async function shareOrDownload(blob, filename, mimeType, safariTab, getDataUrl, dbg) {
+  dbg('shareOrDownload: mimeType=' + mimeType + ' safariTab=' + !!safariTab);
   const file = new File([blob], filename, { type: mimeType });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+  const canShareResult = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+  dbg('navigator.share exists=' + !!navigator.share + ' canShare(files)=' + canShareResult);
+  if (canShareResult) {
     try {
       await navigator.share({ files: [file] });
+      dbg('navigator.share() succeeded');
       if (safariTab) safariTab.close();
       return;
     } catch (err) {
+      dbg('navigator.share() threw: ' + err.name + ': ' + err.message);
       if (err && err.name === 'AbortError') { if (safariTab) safariTab.close(); return; } // user cancelled the share sheet
       // fall through if sharing itself failed
     }
   }
   if (safariTab) {
+    dbg('filling safariTab via showInSafariTab');
     showInSafariTab(safariTab, getDataUrl(), mimeType, filename);
+    dbg('showInSafariTab returned normally');
     toast('Opened in a new tab — press and hold (iPhone) or right-click (Mac) the file to save it.');
   } else if (isSafariBrowser) {
+    dbg('safariTab is null on Safari -- popup was likely blocked');
     toast('Please allow pop-ups for this site, then try again.');
   } else {
+    dbg('using plain downloadBlob (<a download>)');
     downloadBlob(blob, filename);
   }
 }
 
+// TEMPORARY diagnostic build: alerts a step-by-step log on Safari so the failure can be
+// seen directly on a phone with no dev tools attached. Remove once the real iOS Safari
+// download bug is found and fixed for good.
 async function downloadCapture(captureEl, filenameBase, format, btn) {
   const originalText = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Preparing…';
+  const debugLog = [];
+  const dbg = (msg) => debugLog.push(msg);
+  dbg('downloadCapture start: format=' + format + ' isSafariBrowser=' + isSafariBrowser + ' UA=' + navigator.userAgent);
   const safariTab = isSafariBrowser ? window.open('', '_blank') : null;
+  dbg('window.open result: safariTab=' + (safariTab ? 'opened' : 'null/blocked'));
   try {
+    dbg('loading html2canvas...');
     const html2canvas = await loadHtml2Canvas();
+    dbg('html2canvas loaded=' + !!html2canvas);
     const canvas = await html2canvas(captureEl, { scale: 2, backgroundColor: '#ffffff' });
+    dbg('canvas rendered: ' + canvas.width + 'x' + canvas.height);
     if (format === 'image') {
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-      await shareOrDownload(blob, filenameBase + '.png', 'image/png', safariTab, () => canvas.toDataURL('image/png'));
+      dbg('blob created: size=' + (blob ? blob.size : 'NULL'));
+      await shareOrDownload(blob, filenameBase + '.png', 'image/png', safariTab, () => canvas.toDataURL('image/png'), dbg);
     } else {
+      dbg('loading jsPDF...');
       const JsPDF = await loadJsPdf();
+      dbg('jsPDF loaded=' + !!JsPDF);
       const imgData = canvas.toDataURL('image/jpeg', 0.92);
       const pdf = new JsPDF({ orientation: canvas.width >= canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height] });
       pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
       const pdfBlob = pdf.output('blob');
-      await shareOrDownload(pdfBlob, filenameBase + '.pdf', 'application/pdf', safariTab, () => pdf.output('datauristring'));
+      dbg('pdf blob created: size=' + (pdfBlob ? pdfBlob.size : 'NULL'));
+      await shareOrDownload(pdfBlob, filenameBase + '.pdf', 'application/pdf', safariTab, () => pdf.output('datauristring'), dbg);
     }
+    dbg('downloadCapture finished normally');
   } catch (err) {
+    dbg('CAUGHT ERROR: ' + err.name + ': ' + err.message);
     if (safariTab) safariTab.close();
     toast('Could not generate the download — try again.');
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;
+    if (isSafariBrowser) alert(debugLog.join('\n'));
   }
 }
 
