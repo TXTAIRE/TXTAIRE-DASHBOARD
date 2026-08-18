@@ -162,7 +162,7 @@ function openDTR(emp, from, to) {
               <td>${dow}</td>
               <td>${r ? to12Hour(r.timeIn) : ''}</td>
               <td>${r ? to12Hour(r.timeOut) : ''}</td>
-              <td>${r ? hrs : ''}</td>
+              <td>${r ? Math.round(hrs) : ''}</td>
               <td class="num">${pay.nsdHrs ? pay.nsdHrs.toFixed(2) : ''}</td>
               <td class="num">${pay.otHrs ? pay.otHrs.toFixed(2) : ''}</td>
               <td>${escapeHtml(statusParts.join(' · '))}</td>
@@ -171,7 +171,7 @@ function openDTR(emp, from, to) {
         </tbody>
         <tfoot><tr>
           <td colspan="4" style="text-align:right;font-weight:600;">Total</td>
-          <td style="font-weight:600;">${totalHours}</td>
+          <td style="font-weight:600;">${Math.round(totalHours)}</td>
           <td class="num" style="font-weight:600;">${totalNsdHrs.toFixed(2)}</td>
           <td class="num" style="font-weight:600;">${totalOtHrs.toFixed(2)}</td>
           <td></td>
