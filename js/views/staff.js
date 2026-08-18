@@ -318,7 +318,7 @@ window.Views.staff = (function () {
           </div>
           <div class="field full"><label>Position</label><input name="position" required value="${escapeHtml(h.position)}" /></div>
           <div class="field"><label>Pay type</label>
-            <select name="payType">${['Monthly', 'Daily'].map(p => `<option ${p === h.payType ? 'selected' : ''}>${p}</option>`).join('')}</select>
+            <select name="payType">${['Monthly', 'Per Cutoff', 'Daily'].map(p => `<option ${p === h.payType ? 'selected' : ''}>${p}</option>`).join('')}</select>
           </div>
           <div class="field"><label>Rate (PHP)</label><input type="number" name="rate" min="0" step="0.01" value="${h.rate || ''}" /></div>
           <div class="field full"><label>Notes</label><textarea name="notes" rows="2">${escapeHtml(h.notes || '')}</textarea></div>
@@ -641,7 +641,7 @@ window.Views.staff = (function () {
             </select>
           </div>
           <div class="field"><label>Pay type</label>
-            <select name="payType">${['Monthly', 'Daily'].map(p => `<option ${p === e.payType ? 'selected' : ''}>${p}</option>`).join('')}</select>
+            <select name="payType">${['Monthly', 'Per Cutoff', 'Daily'].map(p => `<option ${p === e.payType ? 'selected' : ''}>${p}</option>`).join('')}</select>
           </div>
           <div class="field"><label>Rate (PHP)</label><input type="number" name="rate" min="0" step="0.01" value="${e.rate}" /></div>
           <div class="field"><label>Cost of Living Allowance (COLA) / day</label><input type="number" name="allowancePerDay" min="0" step="0.01" value="${e.allowancePerDay || 0}" /></div>

@@ -211,7 +211,7 @@ function payslipSectionHtml(emp, from, to, row) {
             <div class="payslip-col-title">EARNINGS</div>
             <table class="payslip-table">
               <tr><td>No. of Days worked</td><td>:</td><td class="num">${row.daysPresent}</td></tr>
-              <tr><td>${emp.payType === 'Daily' ? 'Daily Rate' : 'Monthly Rate'}</td><td>:</td><td class="num">${fmtMoney(emp.payType === 'Daily' ? emp.rate : row.basePay)}</td></tr>
+              <tr><td>${emp.payType === 'Daily' ? 'Daily Rate' : (emp.payType === 'Per Cutoff' ? 'Rate per Cutoff' : 'Monthly Rate')}</td><td>:</td><td class="num">${fmtMoney(emp.payType === 'Daily' ? emp.rate : row.basePay)}</td></tr>
               <tr><td>Overtime Pay</td><td>:</td><td class="num">${fmtMoney(row.otPay)}</td></tr>
               <tr><td>Night Differential</td><td>:</td><td class="num">${fmtMoney(row.nsdPay)}</td></tr>
               <tr><td>Holiday Pay</td><td>:</td><td class="num">${fmtMoney(row.holidayPay)}</td></tr>

@@ -660,7 +660,10 @@ function computeRow(emp, from, to) {
   if (isGrossOverridden) gross = Number(override.gross);
 
   const manualDed = Store.deductionsInRange(from, to).filter(d => d.employeeId === emp.id).reduce((s, d) => s + Number(d.amount), 0);
-  const attendanceDed = emp.payType === 'Monthly' && ordinaryWorkDays > 0 ? (emp.rate / ordinaryWorkDays) * daysAbsent : 0;
+  // Any non-Daily pay type (Monthly, Per Cutoff) pays a flat rate regardless of
+  // attendance, so absences need to be clawed back explicitly here -- Daily-rate
+  // basePay already excludes absent days on its own (rate * daysPresent).
+  const attendanceDed = emp.payType !== 'Daily' && ordinaryWorkDays > 0 ? (emp.rate / ordinaryWorkDays) * daysAbsent : 0;
   let dedTotal = manualDed + attendanceDed + lateUndertimeDed;
   const isDedTotalOverridden = !!(override && override.dedTotal != null);
   if (isDedTotalOverridden) dedTotal = Number(override.dedTotal);

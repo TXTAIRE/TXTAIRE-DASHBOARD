@@ -195,7 +195,7 @@ window.Views.recruitment = (function () {
             </select>
           </div>
           <div class="field"><label>Pay type</label>
-            <select name="payType">${['Monthly', 'Daily'].map(p => `<option>${p}</option>`).join('')}</select>
+            <select name="payType">${['Monthly', 'Per Cutoff', 'Daily'].map(p => `<option>${p}</option>`).join('')}</select>
           </div>
           <div class="field"><label>Rate (PHP)</label><input type="number" name="rate" min="0" step="0.01" required /></div>
           <div class="field full" style="display:flex; align-items:center; gap:8px;">

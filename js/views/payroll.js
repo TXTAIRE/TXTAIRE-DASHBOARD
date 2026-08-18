@@ -749,7 +749,7 @@ window.Views.payroll = (function () {
         if (amountInput.value) return;
         const emp = Store.getEmployee(qs('select[name="employeeId"]', bd).value);
         if (!emp) return;
-        const monthlySalary = emp.payType === 'Monthly' ? Number(emp.rate) : Number(emp.rate) * 22;
+        const monthlySalary = emp.payType !== 'Daily' ? Number(emp.rate) : Number(emp.rate) * 22;
         const kind = qs('select[name="kind"]', bd).value;
         let suggestion = 0;
         if (kind === 'SSS Contribution') suggestion = Store.suggestedSssDeduction(monthlySalary);
