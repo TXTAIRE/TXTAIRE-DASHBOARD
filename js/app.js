@@ -99,6 +99,36 @@ function downloadFilenameFor(emp, label, from, to) {
 // Close/Print/Download toolbar itself, which sits outside .dtr-capture) to a PNG and
 // downloads it directly, or into a same-aspect-ratio single-page PDF. Both share the
 // html2canvas render step; only what happens with the resulting canvas differs.
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+// A plain <a download> only ever lands a file in the Downloads folder -- on iOS it's
+// largely ignored (Safari just opens the image), and on Android it doesn't reach the
+// Photos/Gallery app either. The Web Share API's file sharing (iOS 16.4+, Android
+// Chrome/Samsung Internet) is the only cross-platform way to get the OS's native
+// "Save Image"/"Save to Photos" option, so it's tried first; desktop Chrome/Edge/
+// Firefox/Safari on Mac and Windows don't support sharing files and fall back to the
+// normal Downloads-folder save, which is the correct/expected behavior there.
+async function shareOrDownload(blob, filename, mimeType) {
+  const file = new File([blob], filename, { type: mimeType });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+      return;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return; // user cancelled the share sheet
+      // fall through to a plain download if sharing itself failed
+    }
+  }
+  downloadBlob(blob, filename);
+}
+
 async function downloadCapture(captureEl, filenameBase, format, btn) {
   const originalText = btn.textContent;
   btn.disabled = true;
@@ -107,16 +137,15 @@ async function downloadCapture(captureEl, filenameBase, format, btn) {
     const html2canvas = await loadHtml2Canvas();
     const canvas = await html2canvas(captureEl, { scale: 2, backgroundColor: '#ffffff' });
     if (format === 'image') {
-      const link = document.createElement('a');
-      link.href = canvas.toDataURL('image/png');
-      link.download = filenameBase + '.png';
-      link.click();
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      await shareOrDownload(blob, filenameBase + '.png', 'image/png');
     } else {
       const JsPDF = await loadJsPdf();
       const imgData = canvas.toDataURL('image/jpeg', 0.92);
       const pdf = new JsPDF({ orientation: canvas.width >= canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height] });
       pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
-      pdf.save(filenameBase + '.pdf');
+      const pdfBlob = pdf.output('blob');
+      await shareOrDownload(pdfBlob, filenameBase + '.pdf', 'application/pdf');
     }
   } catch (err) {
     toast('Could not generate the download — try again.');
