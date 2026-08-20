@@ -384,6 +384,22 @@ function exceedsDefaultTimeOut(timeIn, actualTimeOut, defaultTimeOut) {
   return actual > def;
 }
 
+// Hours worked, the same as hoursBetween, except an employee who badges in well ahead of
+// their scheduled shift doesn't get paid for that early arrival -- the effective start
+// clamps to the employee's Default Time In (unless there's no schedule set, in which case
+// there's nothing to clamp against). Within the same grace window used for lateness
+// (ATTENDANCE_GRACE_MINUTES) an early arrival is still treated as on-schedule, same
+// leniency philosophy as the rest of the attendance logic. The raw attendance.timeIn value
+// itself is never touched by this -- only the hours figure derived from it -- so the
+// actual clock-in time still displays correctly everywhere (DTR, attendance records, etc).
+function paidHoursBetween(timeIn, timeOut, emp) {
+  if (!emp || !emp.defaultTimeIn) return hoursBetween(timeIn, timeOut);
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const earliestPaidStart = toMin(emp.defaultTimeIn) - ATTENDANCE_GRACE_MINUTES;
+  const effectiveStart = toMin(timeIn) < earliestPaidStart ? emp.defaultTimeIn : timeIn;
+  return hoursBetween(effectiveStart, timeOut);
+}
+
 // Printable-DTR-only display helper: is this clock time within the grace period of the
 // employee's default? (Plain absolute-value comparison, no midnight-crossing handling --
 // good enough for "am I basically on schedule," unlike exceedsDefaultTimeOut which has to

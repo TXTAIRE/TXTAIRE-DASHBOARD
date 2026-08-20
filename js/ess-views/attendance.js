@@ -399,7 +399,7 @@ window.EssViews.attendance = (function () {
       const preview = qs('#ot-preview', bd);
       function updatePreview() {
         if (!rec.timeIn || !timeOutInput.value) { preview.textContent = ''; return; }
-        const hrs = hoursBetween(rec.timeIn, timeOutInput.value);
+        const hrs = paidHoursBetween(rec.timeIn, timeOutInput.value, emp);
         const ot = Math.max(0, hrs - 8);
         preview.textContent = ot > 0
           ? `Total hours: ${hrs.toFixed(2)} — overtime: ${ot.toFixed(2)} hr`
@@ -411,7 +411,7 @@ window.EssViews.attendance = (function () {
       qs('#ot-request-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const newTimeOut = timeOutInput.value;
-        const newHours = hoursBetween(rec.timeIn, newTimeOut);
+        const newHours = paidHoursBetween(rec.timeIn, newTimeOut, emp);
         if (newHours <= 8) {
           toast('That time doesn\'t add up to any overtime — adjust it or cancel.');
           return;
@@ -475,7 +475,7 @@ window.EssViews.attendance = (function () {
         submitBtn.textContent = 'Saving…';
         await Store.updateAttendance(rec.id, {
           timeIn, timeOut, status,
-          hours: timeOut ? hoursBetween(timeIn, timeOut) : 0,
+          hours: timeOut ? paidHoursBetween(timeIn, timeOut, emp) : 0,
         });
         toast('✔ Attendance updated.');
         closeEssModal();
@@ -806,7 +806,7 @@ window.EssViews.attendance = (function () {
     } else {
       const rec = Store.attendanceForDate(date).find(r => r.employeeId === emp.id);
       if (!rec) { toast('No Time In found for today.'); return; }
-      const hours = hoursBetween(rec.timeIn, timeStr);
+      const hours = paidHoursBetween(rec.timeIn, timeStr, emp);
       const patch = {
         timeOut: timeStr,
         hours,

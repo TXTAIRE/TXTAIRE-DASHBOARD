@@ -150,7 +150,33 @@ function showInSafariTab(tab, dataUrl, mimeType, filename) {
 // normal Downloads-folder save, which is the correct/expected behavior there. On Safari
 // specifically, if share() isn't available or fails, safariTab (opened synchronously by
 // the caller before any of this ran) is filled in via showInSafariTab above.
-async function shareOrDownload(blob, filename, mimeType, safariTab, getDataUrl, dbg) {
+// TEMPORARY diagnostic build: writes a live, persistent on-page log (Safari only) instead
+// of an alert() -- an alert() only shows in the tab that ran the code, but the very first
+// thing downloadCapture does is open a new tab, which iOS Safari immediately switches to,
+// so any alert() sitting on the original (now-background) tab was easy to miss or catch
+// mid-animation. A log written straight into the DOM stays visible across tab switches
+// and updates in real time, so it's still there no matter when the screenshot happens.
+// Remove this whole panel once the actual iOS Safari download bug is found and fixed.
+let debugPanelEl = null;
+function dbg(msg) {
+  if (!isSafariBrowser) return;
+  if (!debugPanelEl) {
+    debugPanelEl = document.createElement('div');
+    debugPanelEl.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.95);color:#0f0;font:12px/1.5 monospace;padding:16px;z-index:999999;overflow:auto;white-space:pre-wrap;';
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Close debug log';
+    closeBtn.style.cssText = 'display:block;margin-bottom:12px;padding:10px 16px;font-size:14px;';
+    closeBtn.addEventListener('click', () => { debugPanelEl.remove(); debugPanelEl = null; });
+    const pre = document.createElement('pre');
+    pre.id = 'debug-log-pre';
+    debugPanelEl.appendChild(closeBtn);
+    debugPanelEl.appendChild(pre);
+    document.body.appendChild(debugPanelEl);
+  }
+  debugPanelEl.querySelector('#debug-log-pre').textContent += msg + '\n';
+}
+
+async function shareOrDownload(blob, filename, mimeType, safariTab, getDataUrl) {
   dbg('shareOrDownload: mimeType=' + mimeType + ' safariTab=' + !!safariTab);
   const file = new File([blob], filename, { type: mimeType });
   const canShareResult = !!(navigator.canShare && navigator.canShare({ files: [file] }));
@@ -181,15 +207,10 @@ async function shareOrDownload(blob, filename, mimeType, safariTab, getDataUrl, 
   }
 }
 
-// TEMPORARY diagnostic build: alerts a step-by-step log on Safari so the failure can be
-// seen directly on a phone with no dev tools attached. Remove once the real iOS Safari
-// download bug is found and fixed for good.
 async function downloadCapture(captureEl, filenameBase, format, btn) {
   const originalText = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Preparing…';
-  const debugLog = [];
-  const dbg = (msg) => debugLog.push(msg);
   dbg('downloadCapture start: format=' + format + ' isSafariBrowser=' + isSafariBrowser + ' UA=' + navigator.userAgent);
   const safariTab = isSafariBrowser ? window.open('', '_blank') : null;
   dbg('window.open result: safariTab=' + (safariTab ? 'opened' : 'null/blocked'));
@@ -202,7 +223,7 @@ async function downloadCapture(captureEl, filenameBase, format, btn) {
     if (format === 'image') {
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
       dbg('blob created: size=' + (blob ? blob.size : 'NULL'));
-      await shareOrDownload(blob, filenameBase + '.png', 'image/png', safariTab, () => canvas.toDataURL('image/png'), dbg);
+      await shareOrDownload(blob, filenameBase + '.png', 'image/png', safariTab, () => canvas.toDataURL('image/png'));
     } else {
       dbg('loading jsPDF...');
       const JsPDF = await loadJsPdf();
@@ -212,7 +233,7 @@ async function downloadCapture(captureEl, filenameBase, format, btn) {
       pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
       const pdfBlob = pdf.output('blob');
       dbg('pdf blob created: size=' + (pdfBlob ? pdfBlob.size : 'NULL'));
-      await shareOrDownload(pdfBlob, filenameBase + '.pdf', 'application/pdf', safariTab, () => pdf.output('datauristring'), dbg);
+      await shareOrDownload(pdfBlob, filenameBase + '.pdf', 'application/pdf', safariTab, () => pdf.output('datauristring'));
     }
     dbg('downloadCapture finished normally');
   } catch (err) {
@@ -222,7 +243,6 @@ async function downloadCapture(captureEl, filenameBase, format, btn) {
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;
-    if (isSafariBrowser) alert(debugLog.join('\n'));
   }
 }
 
