@@ -68,11 +68,7 @@ window.EssViews.attendance = (function () {
         ${rec ? `
         <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(rec.timeIn)} ✅</span></div>
         <div class="ess-row"><span class="label">Time Out</span><span class="value">${rec.timeOut ? to12Hour(rec.timeOut) : '—'}</span></div>
-        ${editable ? `
-        <div class="ess-row"><span class="label">Photos</span><span class="value">
-          <button type="button" class="link-btn" data-manage-photo="in" data-rec-id="${rec.id}">📷 Time In</button>${rec.timeOut ? ` · <button type="button" class="link-btn" data-manage-photo="out" data-rec-id="${rec.id}">📷 Time Out</button>` : ''}
-        </span></div>
-        ` : ''}
+        ${photosRowHtml(rec, editable)}
         <div class="ess-row"><span class="label">Hours</span><span class="value">${rec.hours}</span></div>
         <div class="ess-row"><span class="label">Status</span><span class="value">${escapeHtml(rec.status)}</span></div>
         ${requestRow(rec, rec.nsdStatus, 'Night Shift Diff.', pay.nsdHrs.toFixed(2) + ' hr', 'nsd', nsdRawHrs > 0)}
@@ -216,6 +212,25 @@ window.EssViews.attendance = (function () {
     });
   }
 
+  // Time In/Time Out photo links for one day's card. Always shown when a photo exists --
+  // viewing is never gated to the 24-hour edit window, only replacing/deleting is (that
+  // window is enforced separately, in openPhotoActions/the DB trigger). Within the window,
+  // manage buttons (data-manage-photo) open the full view/replace/delete modal; once it's
+  // closed, plain view-only links (data-view-photo) still open the photo directly --
+  // before this, a past day's photos were only reachable via the separate Photo Gallery.
+  function photosRowHtml(rec, editable) {
+    if (editable) {
+      const inBtn = `<button type="button" class="link-btn" data-manage-photo="in" data-rec-id="${rec.id}">📷 Time In</button>`;
+      const outBtn = rec.timeOut ? ` · <button type="button" class="link-btn" data-manage-photo="out" data-rec-id="${rec.id}">📷 Time Out</button>` : '';
+      return `<div class="ess-row"><span class="label">Photos</span><span class="value">${inBtn}${outBtn}</span></div>`;
+    }
+    if (!rec.timeInPhotoPath && !rec.timeOutPhotoPath) return '';
+    const parts = [];
+    if (rec.timeInPhotoPath) parts.push(`<button type="button" class="link-btn" data-view-photo="${rec.timeInPhotoPath}">📷 Time In</button>`);
+    if (rec.timeOutPhotoPath) parts.push(`<button type="button" class="link-btn" data-view-photo="${rec.timeOutPhotoPath}">📷 Time Out</button>`);
+    return `<div class="ess-row"><span class="label">Photos</span><span class="value">${parts.join(' · ')}</span></div>`;
+  }
+
   // Opens a self-clock-in/out photo. Opens the tab synchronously (on the click itself) so
   // Safari doesn't treat the async signed-URL fetch as a blocked popup.
   function viewPhoto(path) {
@@ -250,11 +265,7 @@ window.EssViews.attendance = (function () {
         ${todayRec ? `
         <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(todayRec.timeIn)} ✅</span></div>
         <div class="ess-row"><span class="label">Time Out</span><span class="value">${todayRec.timeOut ? to12Hour(todayRec.timeOut) + ' ✅' : '—'}</span></div>
-        ${withinEditWindow(todayRec) ? `
-        <div class="ess-row"><span class="label">Photos</span><span class="value">
-          <button type="button" class="link-btn" data-manage-photo="in" data-rec-id="${todayRec.id}">📷 Time In</button>${todayRec.timeOut ? ` · <button type="button" class="link-btn" data-manage-photo="out" data-rec-id="${todayRec.id}">📷 Time Out</button>` : ''}
-        </span></div>
-        ` : ''}
+        ${photosRowHtml(todayRec, withinEditWindow(todayRec))}
         <div class="ess-row"><span class="label">Status</span><span class="value">${escapeHtml(todayRec.status)}</span></div>
         ` : `<div class="ess-sub">No attendance logged yet for today.</div>`}
       </div>
@@ -306,6 +317,7 @@ window.EssViews.attendance = (function () {
       const rec = recId === (todayRec && todayRec.id) ? todayRec : records.find(r => r.id === recId);
       if (rec) openPhotoActions(main, emp, rec, b.dataset.managePhoto);
     }));
+    qsa('[data-view-photo]', main).forEach(b => b.addEventListener('click', () => viewPhoto(b.dataset.viewPhoto)));
     qsa('[data-edit-day]', main).forEach(b => b.addEventListener('click', () => {
       const recId = b.dataset.editDay;
       const rec = recId === (todayRec && todayRec.id) ? todayRec : records.find(r => r.id === recId);

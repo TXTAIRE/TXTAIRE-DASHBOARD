@@ -238,8 +238,14 @@ window.Views.attendance = (function () {
     if (pay && pay.nsdHrs) badges.push('<span class="badge badge-blue" title="Night Shift Differential">NSD</span>');
     if (pay && pay.otHrs) badges.push('<span class="badge badge-orange" title="Overtime">OT</span>');
     if (holiday) badges.push(`<span class="badge ${holiday.type === 'Regular' ? 'badge-blue' : 'badge-yellow'}" title="${escapeHtml(holiday.name)}">HOL</span>`);
-    if (rec && (rec.timeInPhotoPath || rec.timeOutPhotoPath)) {
-      badges.push(`<span class="badge badge-gray" data-view-photo="${rec.timeOutPhotoPath || rec.timeInPhotoPath}" title="Self-clock-in photo proof">📷</span>`);
+    // Two separate badges, not one -- picking just rec.timeOutPhotoPath (falling back to
+    // timeIn only when there's no Time Out photo) made the Time In photo unreachable from
+    // the calendar on any day that had both.
+    if (rec && rec.timeInPhotoPath) {
+      badges.push(`<span class="badge badge-gray" data-view-photo="${rec.timeInPhotoPath}" title="Time In photo proof">📷In</span>`);
+    }
+    if (rec && rec.timeOutPhotoPath) {
+      badges.push(`<span class="badge badge-gray" data-view-photo="${rec.timeOutPhotoPath}" title="Time Out photo proof">📷Out</span>`);
     }
 
     let cls = 'cal-cell';
