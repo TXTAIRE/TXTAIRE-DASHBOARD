@@ -2584,6 +2584,15 @@ alter table "disciplinaryCases" add column if not exists "hearingNotes" text;
 alter table "disciplinaryCases" add column if not exists "secondNoticeDate" date;
 alter table "disciplinaryCases" add column if not exists "secondNoticeDecision" text; -- 'Reinstated' | 'Suspended' | 'Terminated'
 
+-- References a code in js/store.js's DISCIPLINE_OFFENSE_CATALOG (the TXTAIRE OPC Code of
+-- Discipline's offense list) -- lets HR pick a specific catalog offense on the Issue-NTE
+-- form instead of typing free text, and lets Store.offenseOccurrenceCount/
+-- suggestedPenaltyFor look up how many times this employee has been cited for that same
+-- offense in the past 12 months. Nullable: older cases predating this column, and any
+-- case for something not on the catalog, just leave it null -- the existing free-text
+-- "violation" column is unaffected and still holds the human-readable description either way.
+alter table "disciplinaryCases" add column if not exists "offenseCode" text;
+
 -- ---------- 6. Contribution tables (SSS / PhilHealth / Pag-IBIG) ----------
 -- HR-editable reference data used only to PRE-FILL (never silently auto-apply) the
 -- amount field when adding a matching deduction on the existing Payroll tab.

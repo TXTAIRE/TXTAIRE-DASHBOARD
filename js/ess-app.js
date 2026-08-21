@@ -55,7 +55,7 @@ window.addEventListener('beforeinstallprompt', (event) => {
   deferredInstallPrompt = event;
 });
 
-const ESS_ROUTES = ['attendance', 'payroll', 'leave', 'profile', 'notifications', 'settings'];
+const ESS_ROUTES = ['attendance', 'payroll', 'leave', 'discipline', 'profile', 'notifications', 'settings'];
 let essRoute = 'attendance';
 let myEmployee = null;
 

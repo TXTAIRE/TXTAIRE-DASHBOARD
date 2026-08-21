@@ -207,17 +207,40 @@ window.Views.disciplinary = (function () {
     });
   }
 
+  // Ordinal suffix for a suggested-penalty occurrence count (1st, 2nd, 3rd, 4th...).
+  function ordinal(n) {
+    if (n % 10 === 1 && n % 100 !== 11) return n + 'st';
+    if (n % 10 === 2 && n % 100 !== 12) return n + 'nd';
+    if (n % 10 === 3 && n % 100 !== 13) return n + 'rd';
+    return n + 'th';
+  }
+
   function openNteForm(main) {
     openModal(`
       <h2>Issue Notice to Explain</h2>
       <div class="modal-sub">Creates a new disciplinary case with status "Notice Issued".</div>
       <form id="nte-form">
         <div class="modal-grid">
-          <div class="field full"><label>Employee</label><select name="employeeId">${employeeOptions()}</select></div>
-          <div class="field"><label>Date issued</label><input type="date" name="dateIssued" value="${todayISO()}" /></div>
+          <div class="field full"><label>Employee</label><select name="employeeId" id="nte-employee">${employeeOptions()}</select></div>
+          <div class="field"><label>Date issued</label><input type="date" name="dateIssued" id="nte-date-issued" value="${todayISO()}" /></div>
           <div class="field"><label>Response due date</label><input type="date" name="responseDueDate" value="${addDays(todayISO(), 3)}" /></div>
           <div class="field full"><label>Issued by</label><input name="issuedBy" placeholder="e.g. HR Officer name" /></div>
-          <div class="field full"><label>Violation</label><input name="violation" required placeholder="e.g. Habitual Tardiness" /></div>
+          <div class="field full"><label>Category</label>
+            <select id="nte-category">
+              <option value="">Select a category…</option>
+              ${DISCIPLINE_OFFENSE_CATALOG.map(cat => `<option value="${escapeHtml(cat.category)}">${escapeHtml(cat.category)}</option>`).join('')}
+              <option value="__other">Other / not listed in the Code of Discipline</option>
+            </select>
+          </div>
+          <div class="field full" id="nte-offense-wrap">
+            <label>Offense (Code of Discipline)</label>
+            <select name="offenseCode" id="nte-offense"><option value="">Select a category first…</option></select>
+          </div>
+          <div class="field full" id="nte-custom-wrap" style="display:none;">
+            <label>Describe the violation</label>
+            <input name="violationCustom" id="nte-violation-custom" placeholder="e.g. Habitual Tardiness" />
+          </div>
+          <div class="field full" id="nte-suggestion" style="display:none;"></div>
           <div class="field full"><label>Notice details</label><textarea name="noticeText" rows="3" required placeholder="Describe the incident/violation..."></textarea></div>
           <div class="field full" style="padding-top:4px;">
             <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer;">
@@ -232,15 +255,67 @@ window.Views.disciplinary = (function () {
         </div>
       </form>
     `, (bd) => {
+      const categorySelect = qs('#nte-category', bd);
+      const offenseSelect = qs('#nte-offense', bd);
+      const offenseWrap = qs('#nte-offense-wrap', bd);
+      const customWrap = qs('#nte-custom-wrap', bd);
+      const suggestionEl = qs('#nte-suggestion', bd);
+
+      // Suggested penalty is purely informational (Store.suggestedPenaltyFor never writes
+      // anything) -- HR still fills in the actual resolution/second-notice decision by hand
+      // once the case reaches that stage, exactly as before.
+      function updateSuggestion() {
+        const offenseCode = offenseSelect.value;
+        const employeeId = qs('#nte-employee', bd).value;
+        const dateIssued = qs('#nte-date-issued', bd).value;
+        if (!offenseCode || !employeeId) { suggestionEl.style.display = 'none'; return; }
+        const suggestion = Store.suggestedPenaltyFor(employeeId, offenseCode, dateIssued);
+        if (!suggestion) { suggestionEl.style.display = 'none'; return; }
+        suggestionEl.style.display = '';
+        suggestionEl.innerHTML = `<div class="page-sub" style="background:var(--bg-soft,#f4f4f5); padding:8px 10px; border-radius:6px;">This will be their <strong>${ordinal(suggestion.occurrence)}</strong> time for this offense in the past 12 months → Code of Discipline suggested penalty: <strong>${escapeHtml(suggestion.label)}</strong>.</div>`;
+      }
+
+      function updateOffenseOptions() {
+        const cat = categorySelect.value;
+        if (cat === '__other') {
+          offenseWrap.style.display = 'none';
+          customWrap.style.display = '';
+          offenseSelect.innerHTML = '';
+          updateSuggestion();
+          return;
+        }
+        offenseWrap.style.display = '';
+        customWrap.style.display = 'none';
+        const catEntry = DISCIPLINE_OFFENSE_CATALOG.find(c => c.category === cat);
+        offenseSelect.innerHTML = '<option value="">Select an offense…</option>' +
+          (catEntry ? catEntry.offenses.map(o => `<option value="${o.code}">${escapeHtml(o.label)}</option>`).join('') : '');
+        updateSuggestion();
+      }
+
+      categorySelect.addEventListener('change', updateOffenseOptions);
+      offenseSelect.addEventListener('change', updateSuggestion);
+      qs('#nte-employee', bd).addEventListener('change', updateSuggestion);
+      qs('#nte-date-issued', bd).addEventListener('change', updateSuggestion);
+
       qs('#nte-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
+        let violation = '', offenseCode = null;
+        if (categorySelect.value === '__other') {
+          violation = (fd.get('violationCustom') || '').trim();
+        } else {
+          offenseCode = offenseSelect.value || null;
+          const catEntry = DISCIPLINE_OFFENSE_CATALOG.find(c => c.category === categorySelect.value);
+          const offense = catEntry && catEntry.offenses.find(o => o.code === offenseCode);
+          violation = offense ? offense.label : '';
+        }
+        if (!violation) { toast('Select an offense, or choose "Other" and describe the violation.'); return; }
         await Store.addCase({
           employeeId: fd.get('employeeId'),
           dateIssued: fd.get('dateIssued'),
           responseDueDate: fd.get('responseDueDate'),
           issuedBy: fd.get('issuedBy').trim() || 'HR',
-          violation: fd.get('violation').trim(),
+          violation, offenseCode,
           noticeText: fd.get('noticeText').trim(),
           employeeResponse: '', employeeResponseDate: null,
           investigationNotes: '', resolution: '', resolvedDate: null,

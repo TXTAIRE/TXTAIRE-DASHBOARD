@@ -355,18 +355,143 @@ function hoursBetween(timeIn, timeOut) {
 }
 
 // Shared leniency window around an employee's default Time In/Time Out -- a few minutes
-// either side of the schedule is normal, not something to auto-flag. Applies to both ends:
-// arriving up to this many minutes after defaultTimeIn still counts as on-time (not
-// "Late"), and clocking out has to exceed defaultTimeOut by more than this before it's
-// worth auto-filing an Overtime request.
+// either side of the schedule is normal, not something to auto-flag. Used for clocking out
+// past defaultTimeOut (before it's worth auto-filing an Overtime request), the early-
+// clock-in pay clamp, and DTR "on schedule" display rounding. Late ARRIVAL specifically
+// uses TARDINESS_GRACE_MINUTES instead (see below) -- the Code of Discipline's Policy of
+// Punctuality documents a 10-minute grace period there, distinct from this general one.
 const ATTENDANCE_GRACE_MINUTES = 15;
+
+// Code of Discipline, "Policy of Punctuality": a 10-minute grace period after the official
+// time-in, for lateness flagging (marking a day "Late") -- kept separate from
+// ATTENDANCE_GRACE_MINUTES since the document only documents this grace period for arrival
+// lateness, not the other three behaviors that constant governs. Late arrival no longer
+// carries a pay deduction (removed by explicit company decision -- see computeRow).
+const TARDINESS_GRACE_MINUTES = 10;
 
 // Did an employee clock in late? No default Time In set -- never auto-marked late, since
 // there's nothing to compare against (HR can still set status manually either way).
 function isLateArrival(defaultTimeIn, actualTimeIn) {
   if (!defaultTimeIn || !actualTimeIn) return false;
   const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-  return toMin(actualTimeIn) > toMin(defaultTimeIn) + ATTENDANCE_GRACE_MINUTES;
+  return toMin(actualTimeIn) > toMin(defaultTimeIn) + TARDINESS_GRACE_MINUTES;
+}
+
+// TXTAIRE OPC Code of Discipline, Series 1, 2025 Edition -- the full offense catalog, one
+// entry per row of the document's "Schedule of Penalties" tables, grouped exactly as the
+// document groups them. `schedule` is the penalty for the 1st, 2nd, 3rd... occurrence
+// (within a trailing 12-month period, per the document) as a code: 'VW' (Verbal Warning),
+// 'WW' (Written Warning), an integer+'S' (days of Suspension without pay), or 'D'
+// (Dismissal). Where the document splits one offense into loss-amount sub-tiers (e.g.
+// "Minor loss" vs "Major loss"), each sub-tier is its own catalog entry, matching how the
+// document itself tables them. Shared by the admin Disciplinary case form (offense
+// selection + suggested-penalty lookup) and the ESS "Code of Discipline" reference page.
+const DISCIPLINE_OFFENSE_CATALOG = [
+  { category: 'Against Attendance', offenses: [
+    { code: 'simple-absence', label: 'Simple case of Absence (1–2 days unauthorized)', schedule: ['WW', '3S', '5S', 'D'] },
+    { code: 'excessive-absence', label: 'Excessive Absence (3–5 days unauthorized)', schedule: ['5S', 'D'] },
+    { code: 'abandonment', label: 'Abandonment of Work (more than 5 days unauthorized, or clear intent not to return)', schedule: ['D'] },
+  ]},
+  { category: 'On Timekeeping', offenses: [
+    { code: 'falsifying-timecards', label: 'Falsifying time cards or any other timekeeping records', schedule: ['D'] },
+    { code: 'benefiting-falsified-timecards', label: "Knowingly receiving salary or allowances by virtue of falsified time cards, vouchers, receipts or the like", schedule: ['D'] },
+    { code: 'false-reason-absent-late', label: 'Giving false reason for being absent or late', schedule: ['3S', '5S', 'D'] },
+    { code: 'punching-others-timecard', label: "Punching another employee's timecard", schedule: ['D', 'D'] },
+    { code: 'beneficiary-of-punching', label: 'Being the employee for whose benefit another employee’s timecard was punched, if done with your knowledge, consent or acquiescence', schedule: ['D'] },
+    { code: 'repeated-failure-punch', label: 'Repeated failure or refusal to punch time cards (for card-punching employees)', schedule: ['3S', '5S', 'D'] },
+    { code: 'excessive-tardiness', label: 'Excessive Tardiness (late for a total of 260 minutes or more in one month)', schedule: ['WW', 'WW', '3S', '5S', 'D'] },
+  ]},
+  { category: 'Against Health, Security and Safety', offenses: [
+    { code: 'health-medical-noncompliance', label: 'Failure or refusal to comply with the health or medical requirement of the company', schedule: ['WW', '3S', '5S', 'D'] },
+    { code: 'concealing-communicable-disease', label: 'Deliberately concealing a suspected communicable disease or ailment', schedule: ['WW', '3S', '5S', 'D'] },
+    { code: 'disregard-cleanliness', label: 'Willful disregard of directives relative to cleanliness and orderliness (littering, leaving soiled dishes, dirty comfort room)', schedule: ['WW', '3S', '5S', 'D'] },
+    { code: 'lending-id', label: 'Lending an ID to a co-employee or third person not connected with the Company', schedule: ['3S', '10S', '15S', 'D'] },
+    { code: 'unauthorized-weapons', label: 'Unauthorized carrying or possession of firearms, explosive and/or other deadly weapons and/or paraphernalia within Company premises', schedule: ['D'] },
+    { code: 'conviction-crime', label: 'Conviction of a crime', schedule: ['D'] },
+    { code: 'forcing-entry-after-hours', label: 'Forcing entry into the office after office hours', schedule: ['5S', '10S', 'D'] },
+    { code: 'unauthorized-opening', label: "Unauthorized opening of another's office, locker or drawer", schedule: ['5S', '10S', 'D'] },
+    { code: 'disobey-safety', label: "Willful disobedience to safety instructions in connection with the employee's work", schedule: ['30S', 'D'] },
+    { code: 'failure-report-accident', label: 'Failure to immediately report the occurrence of an accident or the presence of an unsafe condition', schedule: ['30S', 'D'] },
+  ]},
+  { category: 'Related to Job Performance', offenses: [
+    { code: 'sabotage', label: 'Sabotage or deliberate acts intended to disrupt operations, whether or not damage was caused', schedule: ['D'] },
+    { code: 'espionage', label: 'Industrial or other forms of espionage — disclosing trade secrets, confidential materials or documents without proper authorization', schedule: ['D'] },
+    { code: 'gross-misconduct-controls', label: 'Gross misconduct arising from blatant disregard of or deviation from established controls, policies and procedure', schedule: ['10S', 'D'] },
+    { code: 'gross-misconduct-bribery', label: "Gross misconduct arising from accepting, directly or indirectly, money, offer, promise and/or gift in consideration of any act pertaining to one's work", schedule: ['D'] },
+    { code: 'insubordination', label: 'Disobedience, insubordination or refusal to obey legitimate instruction', schedule: ['10S', '15S', 'D'] },
+    { code: 'negligence-minor-loss', label: 'Negligence or gross inefficiency resulting in minor/unquantified loss (₱200–₱5,000)', schedule: ['10S', '15S', 'D'] },
+    { code: 'negligence-major-loss', label: 'Negligence or gross inefficiency resulting in major loss (over ₱5,000, up to ₱30,000)', schedule: ['30S', 'D'] },
+    { code: 'unauthorized-broker', label: "Acting as broker or agent, or negotiating on behalf of a unit owner or another person without authority to do so", schedule: ['5S', 'D'] },
+    { code: 'wasting-time', label: 'Wasting time, loafing, loitering, or leaving place of work during working hours without permission from supervisor', schedule: ['WW', '3S', '5S', 'D'] },
+    { code: 'sleeping-on-duty', label: 'Sleeping during working hours or deliberately evading assigned work', schedule: ['WW', '3S', '5S', 'D'] },
+    { code: 'hindering-output', label: 'Willful holding back, slow down, hindering or limiting work output, or inducing/encouraging a fellow employee to do so', schedule: ['5S', '15S', 'D'] },
+    { code: 'uniform-noncompliance', label: 'Failure to wear prescribed work uniform or attire when on duty, except when excused', schedule: ['VW', 'WW', '3S', '5S'] },
+    { code: 'phone-unreachable', label: "Deliberate failure to make their company-provided phone available/reachable (plus ₱500 fine / confiscation of unit)", schedule: ['VW', 'WW'] },
+  ]},
+  { category: 'Against Property', offenses: [
+    { code: 'willful-damage', label: 'Willful damage or destruction of any company property or equipment owned by the company or its clients', schedule: ['D'] },
+    { code: 'unauthorized-use-minor', label: 'Unauthorized use of company property or equipment resulting in minor loss (₱100–₱500)', schedule: ['5S', '15S', 'D'] },
+    { code: 'unauthorized-use-major', label: 'Unauthorized use of company property or equipment resulting in major loss (over ₱500, up to ₱10,000)', schedule: ['15S', 'D'] },
+    { code: 'malversation', label: "Malversation of Company funds, theft of any Company or Client's property or money, including acquisition under fraudulent or false pretenses", schedule: ['D'] },
+    { code: 'attempted-removal-no-loss', label: "Attempt to remove or frustrated removal of Company or Client's property without proper authorization, without loss, damage or injury", schedule: ['15S', '30S', 'D'] },
+    { code: 'attempted-removal-with-loss', label: "Attempt to remove or frustrated removal of Company or Client's property without proper authorization, with loss, damage or injury", schedule: ['D'] },
+    { code: 'carelessness-minor-loss', label: "Carelessness or improper use of company or client's property, materials and/or equipment — minor loss (₱100–₱5,000)", schedule: ['5S', '15S', 'D'] },
+    { code: 'carelessness-major-loss', label: "Carelessness or improper use of company or client's property, materials and/or equipment — major loss (over ₱5,000, up to ₱30,000)", schedule: ['D'] },
+    { code: 'vandalism', label: "Any act of vandalism that damages, deforms or destroys Company or Client's property, or the property of others, inside Company premises", schedule: ['5S', '10S', '15S', 'D'] },
+    { code: 'unauthorized-vehicle-no-damage', label: "Unauthorized use of company or Client's vehicle, without causing damage or injury", schedule: ['15S', '30S', 'D'] },
+    { code: 'unauthorized-vehicle-with-damage', label: "Unauthorized use of company or Client's vehicle, causing damage or injury", schedule: ['D'] },
+    { code: 'reckless-driving-no-damage', label: 'Driving company vehicle in a reckless and imprudent manner, without causing damage or injury', schedule: ['15S', '30S', 'D'] },
+    { code: 'reckless-driving-with-damage', label: 'Driving company vehicle in a reckless and imprudent manner, causing damage or injury', schedule: ['D'] },
+  ]},
+  { category: 'Against Honesty', offenses: [
+    { code: 'theft-pilferage', label: "Theft/pilferage of Company or Client's property, or of personal property of a co-employee or third person, in the company or Client's premises", schedule: ['D'] },
+    { code: 'unauthorized-use-funds', label: "Using Company or Client's funds or property without prior approval from immediate superior or any accountable person", schedule: ['D'] },
+    { code: 'falsification-records', label: "Fictitious transactions, falsification of Company or Client's records and documents", schedule: ['D'] },
+    { code: 'misappropriation', label: "Misappropriation or embezzlement of Company or Client's funds or property", schedule: ['D'] },
+    { code: 'withholding-funds', label: 'Withholding funds due to the company or the Client; kiting or collections, short remittance or non-remittance of collections', schedule: ['D'] },
+    { code: 'non-issuance-invoice', label: 'Non-issuance or mis-issuance of invoices and/or receipts and commercial documents, if required', schedule: ['D'] },
+    { code: 'forgery', label: 'Forgery, misuse or abuse of funds', schedule: ['D'] },
+    { code: 'competing-business', label: 'Engaging privately in business that tends to compete with the company', schedule: ['D'] },
+    { code: 'conspiring', label: 'Conspiring or conniving with, directing or instigating others to commit any of the foregoing', schedule: ['D'] },
+  ]},
+  { category: 'Against Proper Conduct and Behavior', offenses: [
+    { code: 'horseplay-no-loss', label: 'Horseplay or other unruly conduct causing disorder, disruption, annoyance or scandal, without loss, damage or injury', schedule: ['WW', '3S', '5S', 'D'] },
+    { code: 'horseplay-with-loss', label: 'Horseplay or other unruly conduct causing disorder, disruption, annoyance or scandal, with loss, damage or injury', schedule: ['30S', 'D'] },
+    { code: 'drinking-alcohol', label: 'Drinking alcoholic beverage or liquor within Company premises or during working hours', schedule: ['15S', 'D'] },
+    { code: 'prohibited-drugs', label: 'Use or possession of prohibited drugs or other derivatives, including the sale or brokering thereof', schedule: ['D'] },
+    { code: 'fighting-on-premises', label: 'Fighting, provoking or instigating a fight, while on or off duty within Company premises', schedule: ['D'] },
+    { code: 'fighting-work-related', label: 'Fighting, provoking or instigating a fight, while off duty outside Company premises but due to work-related causes', schedule: ['D'] },
+    { code: 'fighting-not-work-related', label: 'Fighting, provoking or instigating a fight, while off duty outside Company premises, not due to work-related causes', schedule: ['15S', 'D'] },
+    { code: 'physical-injury-minor', label: 'Willful or deliberate physical injury to a superior, employee or third person due to work-related causes — minor injury', schedule: ['5S', '15S', 'D'] },
+    { code: 'physical-injury-major', label: 'Willful or deliberate physical injury to a superior, employee or third person due to work-related causes — major injury', schedule: ['30S', 'D'] },
+    { code: 'disrespect-threats', label: 'Acts of disrespect, use of foul language or signs, challenging a fight, or giving threats against a superior, co-employee or third person in the course of business', schedule: ['15S', 'D'] },
+    { code: 'intrigues', label: 'Creating intrigues against another employee which tend to cast dishonor, discredit or contempt upon the latter', schedule: ['15S', 'D'] },
+    { code: 'immoral-conduct', label: 'Immoral conduct or indecent acts; sexual activities within Company premises; sexual harassment (verbal or physical); acts of lasciviousness', schedule: ['D'] },
+    { code: 'obscene-materials', label: 'Posting, distributing or drawing obscene, scandalous or offensive pictures or subversive materials; acts of vandalism; unauthorized removal of bulletin board materials; uploading such materials online in a way that affects Company reputation', schedule: ['15S', 'D'] },
+    { code: 'gambling', label: 'Gambling or engaging in a game of chance, soliciting bets, or lending money to be used for such activity, during working hours or within Company premises', schedule: ['D'] },
+    { code: 'planting-evidence', label: 'Planting evidence against a superior or another employee', schedule: ['D'] },
+    { code: 'physical-injury-any-person', label: 'Intentionally or deliberately inflicting physical injury upon any person during working hours or within company premises', schedule: ['15S', 'D'] },
+    { code: 'gross-discourtesy', label: 'Acts of gross discourtesy to any person, whether made physically or verbally', schedule: ['15S', '30S', 'D'] },
+    { code: 'borrowing-from-clients', label: "Borrowing money, merchandise or goods from Client's visitors or customers", schedule: ['30S', 'D'] },
+    { code: 'soliciting-from-subordinates', label: 'Soliciting or borrowing money, merchandise or goods by management staff (managers/supervisors) from their subordinates for personal or unofficial use', schedule: ['D'] },
+    { code: 'unauthorized-business', label: 'Engaging in any kind of business within the Company premises or during working hours', schedule: ['3S', '10S', 'D'] },
+  ]},
+  { category: 'Neglect of Duty of Supervisors or Managers', offenses: [
+    { code: 'failure-disseminate', label: 'Failure to disseminate to employees under his/her supervision, Company policies, work rules and procedure and other related matters', schedule: ['3S', '5S', '10S', 'D'] },
+    { code: 'failure-prevent-report', label: 'Failure to prevent or report any violation of this Code, work rules and regulation', schedule: ['3S', '5S', '10S', 'D'] },
+  ]},
+];
+
+// Human-readable text for a Code of Discipline penalty code ('D', 'WW', 'VW', or an
+// integer+'S' for days of suspension) -- shared by the Disciplinary case form's suggested-
+// penalty callout and the ESS Code of Discipline reference page.
+function penaltyLabel(code) {
+  if (code === 'D') return 'Dismissal';
+  if (code === 'WW') return 'Written Warning';
+  if (code === 'VW') return 'Verbal Warning';
+  const m = /^(\d+)S$/.exec(code || '');
+  if (m) return m[1] + '-day Suspension';
+  return code || '—';
 }
 
 // Did an employee clock out later than their own scheduled end time (past the grace
@@ -619,7 +744,6 @@ function computeRow(emp, from, to) {
   if (isBasePayOverridden) basePay = Number(override.basePay);
 
   const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (workDays > 0 ? emp.rate / workDays : 0);
-  const hourlyRate = dailyRateEq / 8;
 
   // COLA and Housing Allowance are fixed per cutoff for every employee -- paid in full
   // regardless of attendance, not prorated by days present/absent. (allowancePerDay is
@@ -660,26 +784,18 @@ function computeRow(emp, from, to) {
   // pay (folded into gross below), unlike a bonus which is added after tax.
   const retroPay = override && override.retroPay != null ? Number(override.retroPay) : 0;
 
-  // Flexible-hours employees (fixedHours === false, typically management with no set
-  // schedule) are exempt from the automatic under-8-hours deduction entirely -- everyone
-  // else keeps the standard fixed 8-hour workday.
-  let lateUndertimeDed = 0;
-  if (emp.fixedHours !== false) {
-    presentRecords.forEach(r => {
-      const hrs = Number(r.hours) || 0;
-      lateUndertimeDed += Math.max(0, 8 - hrs) * hourlyRate;
-    });
-  }
+  // Attendance-based deductions (late arrival, undertime/early leave, and absence
+  // claw-back for non-Daily pay types) have been removed by explicit company decision --
+  // employees are no longer docked pay for these. Both fields are kept at 0 (rather than
+  // removed outright) since js/views/payroll.js still reads them for its summary totals.
+  const lateUndertimeDed = 0;
 
   let gross = basePay + colaPay + housingPay + nsdPay + otPay + holidayPay + restDayPay + retroPay;
   const isGrossOverridden = !!(override && override.gross != null);
   if (isGrossOverridden) gross = Number(override.gross);
 
   const manualDed = Store.deductionsInRange(from, to).filter(d => d.employeeId === emp.id).reduce((s, d) => s + Number(d.amount), 0);
-  // Any non-Daily pay type (Monthly, Per Cutoff) pays a flat rate regardless of
-  // attendance, so absences need to be clawed back explicitly here -- Daily-rate
-  // basePay already excludes absent days on its own (rate * daysPresent).
-  const attendanceDed = emp.payType !== 'Daily' && ordinaryWorkDays > 0 ? (emp.rate / ordinaryWorkDays) * daysAbsent : 0;
+  const attendanceDed = 0;
   let dedTotal = manualDed + attendanceDed + lateUndertimeDed;
   const isDedTotalOverridden = !!(override && override.dedTotal != null);
   if (isDedTotalOverridden) dedTotal = Number(override.dedTotal);
@@ -692,13 +808,6 @@ function computeRow(emp, from, to) {
   // Withholding tax is computed only on Daily Wage/Base Pay, OT, NSD, and Holiday Pay --
   // COLA, housing allowance, and retro pay are still part of gross/net pay but are
   // deliberately excluded from the taxable base (company policy, not a BIR requirement).
-  //
-  // It also applies to what was actually earned, not the theoretical full-cutoff amount
-  // before the absence deduction is subtracted -- a Monthly employee's basePay is their
-  // full flat rate regardless of attendance, with absence clawed back separately via
-  // attendanceDed. Taxing the undiminished amount meant a cutoff with zero attendance
-  // logged yet (e.g. before HR has entered it) showed a confusing negative "net": real tax
-  // charged on pay that was then fully deducted right back out.
   const taxableGross = basePay + otPay + nsdPay + holidayPay + restDayPay;
   let tax = withholdingTax(Math.max(0, taxableGross - attendanceDed));
   const isTaxOverridden = !!(override && override.tax != null);
@@ -899,6 +1008,35 @@ const Store = (function () {
   // ---- Disciplinary ----
   function listCases() { return state.disciplinaryCases.slice(); }
   function getCase(id) { return state.disciplinaryCases.find(c => c.id === id); }
+
+  // How many times has this employee already been cited for this exact offense within the
+  // trailing 12 months of asOfDate? Implements the Code of Discipline's "violations within
+  // a 12-month period" schedules, and its Habitual Delinquency note that a clean record for
+  // a full year erases past offenses -- anything issued more than 12 months before asOfDate
+  // simply isn't counted, so it naturally rolls off.
+  function offenseOccurrenceCount(employeeId, offenseCode, asOfDate) {
+    const cutoff = addDays(asOfDate || todayISO(), -365);
+    return state.disciplinaryCases.filter(c =>
+      c.employeeId === employeeId && c.offenseCode === offenseCode && c.dateIssued >= cutoff && c.dateIssued < (asOfDate || todayISO())
+    ).length;
+  }
+
+  // Looks up the Code of Discipline's suggested penalty for an employee's NEXT occurrence
+  // of a given offense (their past-12-month count + 1), clamped to the offense's last
+  // defined tier if they've exceeded the schedule's length. Informational only -- HR still
+  // records the actual resolution/penalty manually; this never auto-applies anything.
+  function suggestedPenaltyFor(employeeId, offenseCode, asOfDate) {
+    let entry = null;
+    for (const cat of DISCIPLINE_OFFENSE_CATALOG) {
+      const found = cat.offenses.find(o => o.code === offenseCode);
+      if (found) { entry = found; break; }
+    }
+    if (!entry) return null;
+    const priorCount = offenseOccurrenceCount(employeeId, offenseCode, asOfDate);
+    const occurrence = priorCount + 1;
+    const code = entry.schedule[Math.min(occurrence, entry.schedule.length) - 1];
+    return { occurrence, code, label: penaltyLabel(code) };
+  }
   async function addCase(nte) {
     nte.id = genId('d');
     nte.status = 'Notice Issued';
@@ -2090,7 +2228,7 @@ const Store = (function () {
     init, onRemoteChange,
     listEmployees, getEmployee, addEmployee, updateEmployee, deleteEmployee,
     listCandidates, getCandidate, addCandidate, moveCandidateStage, decideCandidate, deleteCandidate,
-    listCases, getCase, addCase, updateCase, deleteCase,
+    listCases, getCase, addCase, updateCase, deleteCase, offenseOccurrenceCount, suggestedPenaltyFor,
     listComplaints, getComplaint, addComplaint, updateComplaint, deleteComplaint,
     listAttendance, attendanceForDate, attendanceInRange, addAttendance, updateAttendance, deleteAttendance,
     uploadAttendancePhoto, getSignedPhotoUrl, deleteAttendancePhoto,
