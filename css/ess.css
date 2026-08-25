@@ -47,11 +47,13 @@
 .ess-nav-ic { position: relative; display: inline-block; font-size: 20px; line-height: 0; }
 .ess-nav-ic svg { display: block; opacity: 0.55; transition: opacity 0.15s; }
 .ess-nav-btn.active .ess-nav-ic svg { opacity: 1; }
-.ess-nav-spacer { flex: 1; }
+.ess-nav-spacer { flex: 1; position: relative; }
 
-/* The bar now has 7 equal-width flex slots -- 3 real nav buttons, the spacer the FAB
-   floats above, then 3 more -- so it stays centered regardless of how many buttons sit
-   on each side, as long as the split stays symmetric. */
+/* The FAB is centered on its own spacer slot (not the whole bar) -- it now lives inside
+   .ess-nav-spacer, so it always sits in the actual gap between the two button groups
+   regardless of how many buttons end up on each side. Centering it on the whole bar
+   instead only looked right when the split was exactly even (it broke the first time a
+   7th nav button made the groups uneven -- 4 left, 3 right). */
 
 .ess-fab {
   position: absolute; left: 50%; top: -26px; transform: translateX(-50%);
