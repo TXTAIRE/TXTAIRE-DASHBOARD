@@ -940,7 +940,21 @@ window.Views.finance = (function () {
       </div>
     `;
     document.body.appendChild(overlay);
-    overlay.querySelector('#voucher-close').addEventListener('click', () => overlay.remove());
+
+    // CSS's named-page technique (@page voucher {...} + page: voucher) isn't reliably
+    // honored by browsers for print -- swapping the single global @page rule to landscape
+    // only while this overlay is open works everywhere, and gets removed on close so the
+    // DTR (still portrait) isn't affected afterward.
+    const pageStyle = document.createElement('style');
+    pageStyle.id = 'voucher-print-page-style';
+    pageStyle.textContent = '@media print { @page { size: A4 landscape; margin: 10mm; } }';
+    document.head.appendChild(pageStyle);
+
+    function closeVoucherPrintView() {
+      overlay.remove();
+      pageStyle.remove();
+    }
+    overlay.querySelector('#voucher-close').addEventListener('click', closeVoucherPrintView);
     overlay.querySelector('#voucher-print-btn').addEventListener('click', () => window.print());
   }
 

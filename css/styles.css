@@ -746,9 +746,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 @media print {
   @page { size: A4 portrait; margin: 10mm; }
-  /* Named page so only the voucher print goes landscape ("crosswise") -- the DTR above
-     stays on the default portrait page defined by the unnamed @page rule. */
-  @page voucher { size: A4 landscape; margin: 10mm; }
+  /* Vouchers print landscape via a <style> tag js/views/finance.js injects/removes while
+     that overlay is open (overriding this rule) -- CSS's named-page technique for scoping
+     @page per-element isn't reliably honored by browsers, so this dynamic swap is used
+     instead. */
   html, body { height: auto; }
   /* display:none (not visibility:hidden) so the hidden dashboard behind the DTR/voucher
      view is fully removed from layout — visibility:hidden keeps its height reserved, which
@@ -759,7 +760,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
     box-shadow: none; max-width: 100%; width: 100%; margin: 0; border-radius: 0;
     padding: 0; font-size: 10px;
   }
-  .voucher-print { box-shadow: none; max-width: 100%; width: 100%; margin: 0; border-radius: 0; padding: 0; page: voucher; }
+  .voucher-print { box-shadow: none; max-width: 100%; width: 100%; margin: 0; border-radius: 0; padding: 0; }
   .voucher-page { page-break-after: always; margin-bottom: 0; }
   .voucher-page:last-child { page-break-after: auto; }
   .no-print { display: none !important; }
