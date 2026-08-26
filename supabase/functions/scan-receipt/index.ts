@@ -1,13 +1,13 @@
-// Employee-portal-only: reads a receipt photo and extracts expense fields via Anthropic's
-// vision API, for js/ess-views/expenses.js's "Add Expense" flow.
+// Employee-portal-only: reads a receipt photo and extracts expense fields via Google's
+// Gemini vision API, for js/ess-views/expenses.js's "Add Expense" flow.
 //
 // Called directly from the ESS portal by an already-signed-in employee -- same
 // browser-invoked, session-token pattern as this project's admin-reset-employee-password
 // and admin-create-employee-account functions: the caller's own Supabase access token is
 // sent as "Authorization: Bearer ...", verified here via sb.auth.getUser(token), then
 // checked against the employees table's canEncodeExpenses flag before anything runs. This
-// has to be a server-side function because it needs the ANTHROPIC_API_KEY secret, which
-// must never reach client-side code.
+// has to be a server-side function because it needs the GEMINI_API_KEY secret, which must
+// never reach client-side code.
 //
 // Deliberately written without any template-literal (backtick) strings -- pasting those
 // into the Supabase Dashboard's browser-based function editor has been seen to silently
@@ -19,8 +19,8 @@
 // request with "Invalid credentials" before this code ever runs. Also: Settings tab ->
 // "Verify JWT with legacy secret" -> turn OFF -> Save changes (this function verifies the
 // caller's identity itself, in code, below -- same as this project's other functions).
-// Also add a new secret: Settings -> Edge Functions -> Secrets -> ANTHROPIC_API_KEY
-// (get this from your own Anthropic Console account -- https://console.anthropic.com/).
+// Also add a new secret: Settings -> Edge Functions -> Secrets -> GEMINI_API_KEY (get this
+// free, no credit card required, from Google AI Studio -- https://ai.google.dev/).
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -44,8 +44,9 @@ function jsonResponse(body, status) {
   });
 }
 
-// Anthropic sometimes wraps JSON in a markdown code fence even when told not to --
-// strip that defensively before parsing, rather than failing the whole scan over it.
+// Gemini is told to respond with responseMimeType "application/json", which normally
+// means clean JSON with no fence -- but strip one defensively anyway rather than fail
+// the whole scan if it ever wraps the reply in markdown.
 function extractJson(text) {
   var trimmed = (text || '').trim();
   var fenceMatch = /```(?:json)?\s*([\s\S]*?)\s*```/.exec(trimmed);
@@ -71,9 +72,9 @@ Deno.serve(async (req) => {
   var supabaseUrl = Deno.env.get('SUPABASE_URL');
   var serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   var anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-  var anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
-  if (!supabaseUrl || !serviceRoleKey || !anonKey || !anthropicApiKey) {
-    return jsonResponse({ error: 'Missing required secrets (check SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY/SUPABASE_ANON_KEY/ANTHROPIC_API_KEY)' }, 500);
+  var geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  if (!supabaseUrl || !serviceRoleKey || !anonKey || !geminiApiKey) {
+    return jsonResponse({ error: 'Missing required secrets (check SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY/SUPABASE_ANON_KEY/GEMINI_API_KEY)' }, 500);
   }
 
   var authHeader = req.headers.get('Authorization') || '';
@@ -112,8 +113,8 @@ Deno.serve(async (req) => {
   var arrayBuffer = await blob.arrayBuffer();
   var base64Data = arrayBufferToBase64(arrayBuffer);
 
-  var instructions = 'This is a photo of a receipt or invoice. Read it and return ONLY a JSON object ' +
-    '(no markdown, no code fence, no explanation) with exactly these keys: ' +
+  var instructions = 'This is a photo of a receipt or invoice. Read it and return a JSON object with ' +
+    'exactly these keys: ' +
     '"date" (the transaction date in YYYY-MM-DD format), ' +
     '"invoiceNumber" (the service/sales invoice or receipt number), ' +
     '"vendor" (the business/vendor name), ' +
@@ -123,39 +124,39 @@ Deno.serve(async (req) => {
     '"amount" (the total amount paid, as a plain number with no currency symbol or commas). ' +
     'If a field is not legible or not present on the receipt, use an empty string for text fields or 0 for amount -- never guess or invent a value.';
 
-  var anthropicRes;
+  var geminiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + geminiApiKey;
+
+  var geminiRes;
   try {
-    anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
+    geminiRes = await fetch(geminiUrl, {
       method: 'POST',
-      headers: {
-        'x-api-key': anthropicApiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-5',
-        max_tokens: 500,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
-            { type: 'text', text: instructions },
+        contents: [{
+          parts: [
+            { text: instructions },
+            { inline_data: { mime_type: mediaType, data: base64Data } },
           ],
         }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+        },
       }),
     });
   } catch (err) {
     return jsonResponse({ error: 'Could not reach the receipt-scanning service' }, 502);
   }
 
-  if (!anthropicRes.ok) {
-    var errText = await anthropicRes.text();
-    console.error('Anthropic API error:', anthropicRes.status, errText);
+  if (!geminiRes.ok) {
+    var errText = await geminiRes.text();
+    console.error('Gemini API error:', geminiRes.status, errText);
     return jsonResponse({ error: 'The receipt-scanning service returned an error' }, 502);
   }
 
-  var anthropicJson = await anthropicRes.json();
-  var rawText = anthropicJson && anthropicJson.content && anthropicJson.content[0] && anthropicJson.content[0].text;
+  var geminiJson = await geminiRes.json();
+  var rawText = geminiJson && geminiJson.candidates && geminiJson.candidates[0] &&
+    geminiJson.candidates[0].content && geminiJson.candidates[0].content.parts &&
+    geminiJson.candidates[0].content.parts[0] && geminiJson.candidates[0].content.parts[0].text;
 
   var fields;
   try {

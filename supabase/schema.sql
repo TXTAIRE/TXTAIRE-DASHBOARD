@@ -2898,3 +2898,45 @@ create policy "expense encoders upload receipts" on storage.objects
 -- One-time: grant this to Jennifer Cosme (Admin Assistant). Re-run for any other
 -- employee later by changing the id (see the employees table for their id).
 -- update employees set "canEncodeExpenses" = true where id = 'e_cosme';
+
+-- =================================================================
+-- Let expense-encoder employees view, edit, and delete their OWN submitted expenses
+-- (upgrading from insert-only above) -- js/ess-views/expenses.js now shows a "My
+-- Submitted Expenses" history list with Edit/Delete. Google Sheets stays in sync
+-- automatically either way, since editing/deleting still goes through the existing
+-- Store.updateExpense()/deleteExpense(), which already call syncExpenseToSheetsBackup
+-- on every mutation -- no changes needed there.
+--
+-- Scoped by the new submittedByEmployeeId column (not the old free-text enteredBy name,
+-- which isn't a stable identifier) so an encoder only ever sees/edits/deletes rows they
+-- personally submitted -- never the admin's own manually-entered expenses (those have
+-- submittedByEmployeeId = null) or another encoder's submissions.
+-- =================================================================
+
+alter table expenses add column if not exists "submittedByEmployeeId" text references employees(id) on delete set null;
+
+drop policy if exists "expense encoders insert expenses" on expenses;
+drop policy if exists "expense encoders manage own expenses" on expenses;
+create policy "expense encoders manage own expenses" on expenses
+  for all to authenticated
+  using (exists (
+    select 1 from employees where "authUserId" = auth.uid() and "canEncodeExpenses" = true
+      and id = expenses."submittedByEmployeeId"
+  ))
+  with check (exists (
+    select 1 from employees where "authUserId" = auth.uid() and "canEncodeExpenses" = true
+  ));
+
+drop policy if exists "expense encoders upload receipts" on storage.objects;
+drop policy if exists "expense encoders manage own receipts" on storage.objects;
+create policy "expense encoders manage own receipts" on storage.objects
+  for all to authenticated
+  using (
+    bucket_id = 'receipts' and exists (
+      select 1 from expenses e join employees emp on emp.id = e."submittedByEmployeeId"
+      where e."receiptPath" = storage.objects.name and emp."authUserId" = auth.uid() and emp."canEncodeExpenses" = true
+    )
+  )
+  with check (
+    bucket_id = 'receipts' and exists (select 1 from employees where "authUserId" = auth.uid() and "canEncodeExpenses" = true)
+  );
