@@ -118,7 +118,8 @@ Deno.serve(async (req) => {
     '"date" (the transaction date in YYYY-MM-DD format), ' +
     '"invoiceNumber" (the service/sales invoice or receipt number), ' +
     '"vendor" (the business/vendor name), ' +
-    '"tinNumber" (the vendor\'s TIN, formatted like 000-000-000-00000 if shown), ' +
+    '"tinNumber" (the vendor\'s TIN -- on Philippine receipts this is usually printed as ' +
+    '"VATREGTIN", "VAT REG TIN", or just "TIN", formatted like 000-000-000-00000 if shown), ' +
     '"location" (the vendor\'s city/municipality and region, e.g. "QUEZON CITY, NCR"), ' +
     '"category" (a short 1-3 word description of what was purchased, e.g. "MATERIALS", "FUEL", "OFFICE SUPPLIES"), ' +
     '"amount" (the total amount paid, as a plain number with no currency symbol or commas). ' +
