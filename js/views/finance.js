@@ -918,9 +918,11 @@ window.Views.finance = (function () {
   function openVoucherPrintView(vouchersIn) {
     // Printed vouchers always read oldest-to-newest (a ledger/chronological convention,
     // same as the Expense Report), independent of whatever order the on-screen table is
-    // currently sorted in. Each voucher gets its own landscape page, printed TWICE side by
-    // side (office copy + payee copy) -- matches the company's real paper form, which
-    // duplicates one voucher per sheet rather than fitting several different ones on it.
+    // currently sorted in. Each voucher gets its own portrait page, printed TWICE stacked
+    // one above the other (office copy + payee copy) -- matches the company's real paper
+    // form, which duplicates one voucher per sheet rather than fitting several different
+    // ones on it. Portrait matches the default @page rule already in place for the DTR,
+    // so no per-view page-size override is needed here.
     const vouchers = vouchersIn.slice().sort((a, b) => a.date.localeCompare(b.date));
     const pages = vouchers.length ? vouchers.map(v => [v, v]) : [[null, null]];
 
@@ -940,21 +942,7 @@ window.Views.finance = (function () {
       </div>
     `;
     document.body.appendChild(overlay);
-
-    // CSS's named-page technique (@page voucher {...} + page: voucher) isn't reliably
-    // honored by browsers for print -- swapping the single global @page rule to landscape
-    // only while this overlay is open works everywhere, and gets removed on close so the
-    // DTR (still portrait) isn't affected afterward.
-    const pageStyle = document.createElement('style');
-    pageStyle.id = 'voucher-print-page-style';
-    pageStyle.textContent = '@media print { @page { size: A4 landscape; margin: 10mm; } }';
-    document.head.appendChild(pageStyle);
-
-    function closeVoucherPrintView() {
-      overlay.remove();
-      pageStyle.remove();
-    }
-    overlay.querySelector('#voucher-close').addEventListener('click', closeVoucherPrintView);
+    overlay.querySelector('#voucher-close').addEventListener('click', () => overlay.remove());
     overlay.querySelector('#voucher-print-btn').addEventListener('click', () => window.print());
   }
 

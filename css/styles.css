@@ -682,18 +682,18 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .payslip-ack { font-style: italic; font-size: 11.5px; margin-top: 20px; line-height: 1.5; }
 
 /* ---------- Payment Voucher print view -- matches the company's real paper form: each
-   voucher printed TWICE (office copy + payee copy) side by side on one landscape A4
-   sheet, same overlay/print pattern as the DTR above. ---------- */
+   voucher printed TWICE (office copy + payee copy) stacked one above the other on one
+   portrait A4 sheet, same overlay/print pattern as the DTR above. ---------- */
 .voucher-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 150;
   overflow-y: auto; padding: 30px 16px;
 }
 .voucher-print {
-  background: #ffffff; color: #0a0a0a; max-width: 1150px; margin: 0 auto;
+  background: #ffffff; color: #0a0a0a; max-width: 750px; margin: 0 auto;
   border-radius: 10px; padding: 24px; box-shadow: 0 8px 30px rgba(0,0,0,0.25);
 }
 .voucher-actions { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 16px; }
-.voucher-page { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-bottom: 10mm; }
+.voucher-page { display: flex; flex-direction: column; gap: 8mm; margin-bottom: 10mm; }
 .voucher-card { border: 1.5px solid #333; padding: 10px 12px; font-size: 10.5px; display: flex; flex-direction: column; }
 .voucher-card.empty { border: none; }
 .voucher-header { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 6px; }
@@ -741,15 +741,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
   .voucher-overlay { padding: 14px 6px; }
   .voucher-print { padding: 14px; border-radius: 8px; }
-  .voucher-page { grid-template-columns: 1fr; grid-template-rows: none; gap: 14px; }
+  .voucher-page { gap: 14px; }
 }
 
 @media print {
   @page { size: A4 portrait; margin: 10mm; }
-  /* Vouchers print landscape via a <style> tag js/views/finance.js injects/removes while
-     that overlay is open (overriding this rule) -- CSS's named-page technique for scoping
-     @page per-element isn't reliably honored by browsers, so this dynamic swap is used
-     instead. */
   html, body { height: auto; }
   /* display:none (not visibility:hidden) so the hidden dashboard behind the DTR/voucher
      view is fully removed from layout — visibility:hidden keeps its height reserved, which
