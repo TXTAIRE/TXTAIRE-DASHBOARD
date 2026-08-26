@@ -2940,3 +2940,38 @@ create policy "expense encoders manage own receipts" on storage.objects
   with check (
     bucket_id = 'receipts' and exists (select 1 from employees where "authUserId" = auth.uid() and "canEncodeExpenses" = true)
   );
+
+-- =================================================================
+-- Vendor Directory -- a small admin-maintained lookup of fixed-per-vendor details (TIN,
+-- location) so a repeat vendor (e.g. one specific 7-Eleven branch) auto-fills those two
+-- fields the same way on every scan, instead of depending on OCR reading the same fine
+-- print correctly from scratch each time -- only the amount (and date/invoice number)
+-- actually varies per receipt. js/ess-views/expenses.js looks up the scanned vendor name
+-- here first, then falls back to the employee's own past submissions for that vendor if
+-- no directory entry exists yet, then finally to whatever the scan itself read.
+-- Readable by any expense-encoder employee; maintained by HR/admin directly via SQL
+-- (insert more rows the same way as the seed row below) -- no dedicated UI yet.
+-- =================================================================
+
+create table if not exists "vendorDirectory" (
+  id text primary key,
+  "vendorName" text not null,
+  "tinNumber" text,
+  location text,
+  created_at timestamptz not null default now()
+);
+
+alter table "vendorDirectory" enable row level security;
+
+drop policy if exists "admin full access" on "vendorDirectory";
+create policy "admin full access" on "vendorDirectory"
+  for all to authenticated using (is_admin()) with check (is_admin());
+
+drop policy if exists "expense encoders read vendor directory" on "vendorDirectory";
+create policy "expense encoders read vendor directory" on "vendorDirectory"
+  for select to authenticated
+  using (exists (select 1 from employees where "authUserId" = auth.uid() and "canEncodeExpenses" = true));
+
+insert into "vendorDirectory" (id, "vendorName", "tinNumber", location) values
+  ('vendor_7eleven_malamig_binan', '7-ELEVEN', '000-390-189-03553', 'MALAMIG, BIÑAN, LAGUNA')
+on conflict (id) do update set "tinNumber" = excluded."tinNumber", location = excluded.location;

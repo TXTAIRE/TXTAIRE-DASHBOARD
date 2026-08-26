@@ -9,8 +9,51 @@
 // only, scoped server-side via RLS on expenses.submittedByEmployeeId -- see
 // supabase/schema.sql) with Edit/Delete, going through the same Store.updateExpense()/
 // deleteExpense() the admin Finance tab uses, so Google Sheets sync fires the same way.
+//
+// A repeat vendor's TIN and location don't change between visits -- only the amount does
+// -- so instead of trusting OCR to re-read the same fine print correctly every single
+// time, a scanned vendor name is checked against two sources (in order) before falling
+// back to whatever the scan itself read: (1) the admin-maintained "vendorDirectory" table
+// (supabase/schema.sql), and (2) this employee's own past submissions for that vendor.
 window.EssViews.expenses = (function () {
   const ENTITY_OPTIONS = ['TXTAIRE OPC', 'TXTAIRE REF', 'AVISO'];
+
+  let vendorDirectory = null;
+  async function loadVendorDirectory() {
+    if (vendorDirectory) return vendorDirectory;
+    const { data, error } = await sb.from('vendorDirectory').select('*');
+    vendorDirectory = error ? [] : (data || []);
+    return vendorDirectory;
+  }
+
+  function normalizeVendor(v) {
+    // Any run of non-alphanumeric characters (hyphens, dots, extra spaces) becomes a single
+    // space, so "7-ELEVEN" and "7 ELEVEN" -- same vendor, different punctuation -- match.
+    return (v || '').toString().toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+  }
+
+  // Applies known TIN/location for a vendor onto freshly-scanned fields, in place --
+  // directory match wins over the employee's own history, and either only fills in a
+  // field the scan left blank/wrong, never overrides a field the directory doesn't have.
+  function applyKnownVendorDetails(fields) {
+    const norm = normalizeVendor(fields.vendor);
+    if (!norm) return;
+
+    const dirMatch = (vendorDirectory || []).find(v => normalizeVendor(v.vendorName) === norm);
+    if (dirMatch) {
+      if (dirMatch.tinNumber) fields.tinNumber = dirMatch.tinNumber;
+      if (dirMatch.location) fields.location = dirMatch.location;
+      return;
+    }
+
+    const ownMatch = Store.listExpenses()
+      .filter(r => normalizeVendor(r.vendor) === norm)
+      .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))) [0];
+    if (ownMatch) {
+      if (!fields.tinNumber && ownMatch.tinNumber) fields.tinNumber = ownMatch.tinNumber;
+      if (!fields.location && ownMatch.location) fields.location = ownMatch.location;
+    }
+  }
 
   function emptyFields() {
     return { date: todayISO(), invoiceNumber: '', vendor: '', tinNumber: '', location: '', category: '', amount: '', entity: ENTITY_OPTIONS[0] };
@@ -117,6 +160,13 @@ window.EssViews.expenses = (function () {
       }
     } catch (err) {
       statusEl.textContent = 'Could not reach the scanning service — please fill in the fields manually below.';
+    }
+
+    if (fields.vendor) {
+      try {
+        await loadVendorDirectory();
+        applyKnownVendorDetails(fields);
+      } catch (err) { /* best-effort -- the scanned/blank values still work fine without this */ }
     }
 
     renderReviewForm(main, emp, fields, receiptPath);
