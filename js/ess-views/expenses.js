@@ -130,10 +130,12 @@ window.EssViews.expenses = (function () {
   }
 
   // Phone camera photos are often 3-8MB -- resizing before sending anywhere cuts both the
-  // upload time and how long the vision model takes to process it. Returns a data: URL
-  // (easy to both slice into base64 for the scan request and turn back into a Blob for
-  // storage) rather than a Blob directly.
-  function resizeImageToDataUrl(file, maxDim, quality) {
+  // upload time and how long the vision model takes to process it. Uses canvas.toBlob
+  // (not canvas.toDataURL + fetch(dataUrl)) since converting a data: URL back to a Blob
+  // via fetch() ran into trouble under this app's Content-Security-Policy on some mobile
+  // browsers -- canvas.toBlob and FileReader are both purely local, no network step, so
+  // CSP's connect-src can't affect either one.
+  function resizeImageToBlob(file, maxDim, quality) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onerror = () => reject(reader.error);
@@ -151,11 +153,22 @@ window.EssViews.expenses = (function () {
           canvas.width = width;
           canvas.height = height;
           canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', quality));
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob); else reject(new Error('Could not process image'));
+          }, 'image/jpeg', quality);
         };
         img.src = reader.result;
       };
       reader.readAsDataURL(file);
+    });
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(reader.result.slice(reader.result.indexOf(',') + 1));
+      reader.readAsDataURL(blob);
     });
   }
 
@@ -164,30 +177,29 @@ window.EssViews.expenses = (function () {
     qs('#expense-review-wrap', main).innerHTML = '';
     statusEl.textContent = 'Preparing photo…';
 
-    let dataUrl;
+    let resizedBlob;
     try {
-      dataUrl = await resizeImageToDataUrl(file, 1600, 0.82);
+      resizedBlob = await resizeImageToBlob(file, 1600, 0.82);
     } catch (err) {
       statusEl.textContent = 'Could not read that photo — try again.';
       return;
     }
-    const base64Data = dataUrl.slice(dataUrl.indexOf(',') + 1);
 
     statusEl.textContent = 'Scanning receipt…';
 
     // Upload (for the permanent record) and the Gemini scan run at the same time -- the
     // scan doesn't need the photo to already be in storage, so waiting for the upload
     // first would add its time on top of the scan's instead of overlapping them.
-    const uploadPromise = fetch(dataUrl)
-      .then(r => r.blob())
-      .then(blob => Store.uploadReceiptPhoto(blob, 'receipt.jpg'));
+    const uploadPromise = Store.uploadReceiptPhoto(resizedBlob, 'receipt.jpg');
 
-    const scanPromise = sb.auth.getSession().then(({ data: { session } }) =>
-      fetch('https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/scan-receipt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
-        body: JSON.stringify({ imageBase64: base64Data, mimeType: 'image/jpeg' }),
-      }).then(res => res.json().then(json => ({ ok: res.ok, json })))
+    const scanPromise = blobToBase64(resizedBlob).then((base64Data) =>
+      sb.auth.getSession().then(({ data: { session } }) =>
+        fetch('https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/scan-receipt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+          body: JSON.stringify({ imageBase64: base64Data, mimeType: 'image/jpeg' }),
+        }).then(res => res.json().then(json => ({ ok: res.ok, json })))
+      )
     );
 
     const [uploadResult, scanResult] = await Promise.allSettled([uploadPromise, scanPromise]);
