@@ -2975,3 +2975,23 @@ create policy "expense encoders read vendor directory" on "vendorDirectory"
 insert into "vendorDirectory" (id, "vendorName", "tinNumber", location) values
   ('vendor_7eleven_malamig_binan', '7-ELEVEN', '000-390-189-03553', 'MALAMIG, BIÑAN, LAGUNA')
 on conflict (id) do update set "tinNumber" = excluded."tinNumber", location = excluded.location;
+
+-- =================================================================
+-- Let expense-encoder employees read the two "appSettings" rows the Google Sheets backup
+-- needs (js/store.js syncExpenseToSheetsBackup, called automatically from
+-- Store.addExpense/updateExpense/deleteExpense) -- appSettings is admin-only by default,
+-- so without this, an encoder's session silently gets zero rows back for that table, the
+-- sync code can't find the webhook URL, and it quietly no-ops: the expense still saves to
+-- Supabase fine, it just never reaches the Google Sheet. Scoped to just these two specific
+-- rows (not admin access to the whole table) -- not a new exposure either way, since the
+-- webhook secret is already sent in plaintext in every sync POST body her own browser
+-- makes once this works, visible in her own DevTools regardless.
+-- =================================================================
+
+drop policy if exists "expense encoders read sheets webhook setting" on "appSettings";
+create policy "expense encoders read sheets webhook setting" on "appSettings"
+  for select to authenticated
+  using (
+    key in ('expenseSheetWebhookUrl', 'expenseSheetWebhookSecret')
+    and exists (select 1 from employees where "authUserId" = auth.uid() and "canEncodeExpenses" = true)
+  );
