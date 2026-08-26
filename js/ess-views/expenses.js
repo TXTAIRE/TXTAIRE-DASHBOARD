@@ -172,6 +172,35 @@ window.EssViews.expenses = (function () {
     });
   }
 
+  async function scanReceiptOnce(base64Data, mimeType) {
+    const { data: { session } } = await sb.auth.getSession();
+    const res = await fetch('https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/scan-receipt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify({ imageBase64: base64Data, mimeType }),
+    });
+    const json = await res.json();
+    return { ok: res.ok, json };
+  }
+
+  // Retries as separate, fresh function calls (not a loop inside one call) -- Gemini's
+  // free tier occasionally returns a transient "busy" error (see scan-receipt/index.ts),
+  // and each fresh call gets its own execution-time budget instead of stacking delays
+  // inside a single one, which previously got the function killed by the platform itself.
+  async function scanReceiptWithRetry(base64Data, mimeType, statusEl) {
+    const maxAttempts = 3;
+    let result;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      result = await scanReceiptOnce(base64Data, mimeType);
+      if (result.ok || !result.json || !result.json.retryable || attempt === maxAttempts) {
+        return result;
+      }
+      statusEl.textContent = 'Scanning service is busy — retrying (' + (attempt + 1) + '/' + maxAttempts + ')…';
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+    return result;
+  }
+
   async function handleReceiptFile(main, emp, file) {
     const statusEl = qs('#expense-status', main);
     qs('#expense-review-wrap', main).innerHTML = '';
@@ -193,13 +222,7 @@ window.EssViews.expenses = (function () {
     const uploadPromise = Store.uploadReceiptPhoto(resizedBlob, 'receipt.jpg');
 
     const scanPromise = blobToBase64(resizedBlob).then((base64Data) =>
-      sb.auth.getSession().then(({ data: { session } }) =>
-        fetch('https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/scan-receipt', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
-          body: JSON.stringify({ imageBase64: base64Data, mimeType: 'image/jpeg' }),
-        }).then(res => res.json().then(json => ({ ok: res.ok, json })))
-      )
+      scanReceiptWithRetry(base64Data, 'image/jpeg', statusEl)
     );
 
     const [uploadResult, scanResult] = await Promise.allSettled([uploadPromise, scanPromise]);
