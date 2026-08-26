@@ -1,6 +1,10 @@
 // Employee-portal-only: reads a receipt photo and extracts expense fields via Google's
 // Gemini vision API, for js/ess-views/expenses.js's "Add Expense" flow.
 //
+// Takes the photo directly as base64 in the request body (not a storage path to download)
+// -- the client uploads to the "receipts" bucket separately, in parallel with this call,
+// rather than sequentially before it, so the two don't add their latencies together.
+//
 // Called directly from the ESS portal by an already-signed-in employee -- same
 // browser-invoked, session-token pattern as this project's admin-reset-employee-password
 // and admin-create-employee-account functions: the caller's own Supabase access token is
@@ -54,16 +58,6 @@ function extractJson(text) {
   return JSON.parse(trimmed);
 }
 
-function arrayBufferToBase64(buffer) {
-  var bytes = new Uint8Array(buffer);
-  var binary = '';
-  var chunkSize = 0x8000;
-  for (var i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -99,19 +93,11 @@ Deno.serve(async (req) => {
 
   var body = {};
   try { body = await req.json(); } catch (err) { body = {}; }
-  var receiptPath = body.receiptPath;
-  if (!receiptPath) {
-    return jsonResponse({ error: 'A receiptPath is required' }, 400);
+  var base64Data = body.imageBase64;
+  var mediaType = body.mimeType || 'image/jpeg';
+  if (!base64Data) {
+    return jsonResponse({ error: 'Image data is required' }, 400);
   }
-
-  var downloadResult = await adminClient.storage.from('receipts').download(receiptPath);
-  if (downloadResult.error || !downloadResult.data) {
-    return jsonResponse({ error: 'Could not read the uploaded receipt' }, 404);
-  }
-  var blob = downloadResult.data;
-  var mediaType = blob.type || 'image/jpeg';
-  var arrayBuffer = await blob.arrayBuffer();
-  var base64Data = arrayBufferToBase64(arrayBuffer);
 
   var instructions = 'This is a photo of a receipt or invoice. Read it and return a JSON object with ' +
     'exactly these keys: ' +

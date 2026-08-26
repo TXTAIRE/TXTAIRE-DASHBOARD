@@ -129,37 +129,83 @@ window.EssViews.expenses = (function () {
     }));
   }
 
+  // Phone camera photos are often 3-8MB -- resizing before sending anywhere cuts both the
+  // upload time and how long the vision model takes to process it. Returns a data: URL
+  // (easy to both slice into base64 for the scan request and turn back into a Blob for
+  // storage) rather than a Blob directly.
+  function resizeImageToDataUrl(file, maxDim, quality) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          let width = img.naturalWidth;
+          let height = img.naturalHeight;
+          if (width > maxDim || height > maxDim) {
+            if (width >= height) { height = Math.round(height * (maxDim / width)); width = maxDim; }
+            else { width = Math.round(width * (maxDim / height)); height = maxDim; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   async function handleReceiptFile(main, emp, file) {
     const statusEl = qs('#expense-status', main);
     qs('#expense-review-wrap', main).innerHTML = '';
-    statusEl.textContent = 'Uploading photo…';
+    statusEl.textContent = 'Preparing photo…';
 
-    let receiptPath = null;
+    let dataUrl;
     try {
-      receiptPath = await Store.uploadReceiptPhoto(file, file.name);
+      dataUrl = await resizeImageToDataUrl(file, 1600, 0.82);
     } catch (err) {
+      statusEl.textContent = 'Could not read that photo — try again.';
+      return;
+    }
+    const base64Data = dataUrl.slice(dataUrl.indexOf(',') + 1);
+
+    statusEl.textContent = 'Scanning receipt…';
+
+    // Upload (for the permanent record) and the Gemini scan run at the same time -- the
+    // scan doesn't need the photo to already be in storage, so waiting for the upload
+    // first would add its time on top of the scan's instead of overlapping them.
+    const uploadPromise = fetch(dataUrl)
+      .then(r => r.blob())
+      .then(blob => Store.uploadReceiptPhoto(blob, 'receipt.jpg'));
+
+    const scanPromise = sb.auth.getSession().then(({ data: { session } }) =>
+      fetch('https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/scan-receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+        body: JSON.stringify({ imageBase64: base64Data, mimeType: 'image/jpeg' }),
+      }).then(res => res.json().then(json => ({ ok: res.ok, json })))
+    );
+
+    const [uploadResult, scanResult] = await Promise.allSettled([uploadPromise, scanPromise]);
+
+    if (uploadResult.status !== 'fulfilled') {
       statusEl.textContent = 'Could not upload the photo — try again.';
       return;
     }
+    const receiptPath = uploadResult.value;
 
-    statusEl.textContent = 'Scanning receipt…';
     let fields = emptyFields();
-    try {
-      const { data: { session } } = await sb.auth.getSession();
-      const res = await fetch('https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/scan-receipt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
-        body: JSON.stringify({ receiptPath }),
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        fields = Object.assign(emptyFields(), json.fields, { date: json.fields.date || emptyFields().date });
-        statusEl.textContent = '✔ Receipt scanned — please check the details below before saving.';
-      } else {
-        statusEl.textContent = (json.error || 'Could not read that receipt') + ' — please fill in the fields manually below.';
-      }
-    } catch (err) {
-      statusEl.textContent = 'Could not reach the scanning service — please fill in the fields manually below.';
+    if (scanResult.status === 'fulfilled' && scanResult.value.ok && scanResult.value.json.success) {
+      const scanned = scanResult.value.json.fields;
+      fields = Object.assign(emptyFields(), scanned, { date: scanned.date || emptyFields().date });
+      statusEl.textContent = '✔ Receipt scanned — please check the details below before saving.';
+    } else {
+      const errMsg = scanResult.status === 'fulfilled' ? (scanResult.value.json.error || 'Could not read that receipt') : 'Could not reach the scanning service';
+      statusEl.textContent = errMsg + ' — please fill in the fields manually below.';
     }
 
     if (fields.vendor) {
