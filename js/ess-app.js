@@ -55,7 +55,7 @@ window.addEventListener('beforeinstallprompt', (event) => {
   deferredInstallPrompt = event;
 });
 
-const ESS_ROUTES = ['attendance', 'payroll', 'leave', 'discipline', 'profile', 'notifications', 'settings'];
+const ESS_ROUTES = ['attendance', 'payroll', 'leave', 'discipline', 'profile', 'notifications', 'settings', 'expenses'];
 let essRoute = 'attendance';
 let myEmployee = null;
 
@@ -816,6 +816,10 @@ async function startEss(session) {
   qs('#ess-login').classList.add('hidden');
   qs('#ess-app').classList.remove('hidden');
   qs('#ess-logout').addEventListener('click', () => sb.auth.signOut());
+  // The "Add Expense" (receipt-scanning) nav tab is opt-in per employee (canEncodeExpenses,
+  // set by HR directly in Supabase) -- hidden in the markup by default, only shown here for
+  // whoever's actually been granted it. Everyone else's nav bar is completely unaffected.
+  if (myEmployee.canEncodeExpenses) qs('#ess-nav-expenses').style.display = '';
   qsa('.ess-nav-btn').forEach(b => b.addEventListener('click', () => { essRoute = b.dataset.route; renderEssRoute(); }));
   qs('#ess-fab-clock').addEventListener('click', () => {
     if (essRoute !== 'attendance') { essRoute = 'attendance'; renderEssRoute(); }

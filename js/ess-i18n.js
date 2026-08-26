@@ -8,17 +8,21 @@ const ESS_I18N = {
     nav_attendance: 'My Attendance', nav_payroll: 'My Payroll', nav_leave: 'My Leave',
     nav_profile: 'My Profile', nav_notifications: 'Notifications', nav_settings: 'Settings',
     nav_discipline: 'Code of Discipline',
+    nav_expenses: 'Add Expense',
     title_attendance: "Today's Attendance", title_payroll: 'My Payroll', title_leave: 'My Leave Requests',
     title_profile: 'My Profile', title_notifications: 'Notifications', title_settings: 'Settings',
     title_discipline: 'Code of Discipline',
+    title_expenses: 'Add Expense',
   },
   fil: {
     nav_attendance: 'Aking Pagdalo', nav_payroll: 'Aking Sahod', nav_leave: 'Aking Leave',
     nav_profile: 'Aking Profile', nav_notifications: 'Mga Abiso', nav_settings: 'Mga Setting',
     nav_discipline: 'Code of Discipline',
+    nav_expenses: 'Mag-file ng Gastos',
     title_attendance: 'Pagdalo Ngayong Araw', title_payroll: 'Aking Sahod', title_leave: 'Aking mga Kahilingan sa Leave',
     title_profile: 'Aking Profile', title_notifications: 'Mga Abiso', title_settings: 'Mga Setting',
     title_discipline: 'Code of Discipline',
+    title_expenses: 'Mag-file ng Gastos',
   },
 };
 

@@ -2870,3 +2870,31 @@ create policy "employee reads announcements" on announcements
 alter publication supabase_realtime add table announcements;
 
 alter table employees add column if not exists "reportsTo" text references employees(id) on delete set null;
+
+-- =================================================================
+-- AI receipt scanning for expense encoding (Employee Portal)
+-- =================================================================
+-- Lets specific employees (flagged below, not hardcoded to any one person) submit an
+-- expense from the ESS portal by photographing/uploading a receipt -- js/ess-views/
+-- expenses.js sends the photo to the scan-receipt Edge Function (Anthropic vision API),
+-- shows the extracted fields for review, then saves via the existing Store.addExpense(),
+-- which already syncs to the admin's Google Sheet (js/store.js syncExpenseToSheetsBackup)
+-- with no changes needed there. Deliberately INSERT-only on both the expenses table and
+-- the receipts bucket -- she can submit, but reading/editing/deleting stays admin-only,
+-- a normal segregation-of-duties boundary for financial records.
+
+alter table employees add column if not exists "canEncodeExpenses" boolean not null default false;
+
+drop policy if exists "expense encoders insert expenses" on expenses;
+create policy "expense encoders insert expenses" on expenses
+  for insert to authenticated
+  with check (exists (select 1 from employees where "authUserId" = auth.uid() and "canEncodeExpenses" = true));
+
+drop policy if exists "expense encoders upload receipts" on storage.objects;
+create policy "expense encoders upload receipts" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'receipts' and exists (select 1 from employees where "authUserId" = auth.uid() and "canEncodeExpenses" = true));
+
+-- One-time: grant this to Jennifer Cosme (Admin Assistant). Re-run for any other
+-- employee later by changing the id (see the employees table for their id).
+-- update employees set "canEncodeExpenses" = true where id = 'e_cosme';
