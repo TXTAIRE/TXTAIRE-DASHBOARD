@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.jsdelivr.net; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://nominatim.openstreetmap.org https://script.google.com https://script.googleusercontent.com; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';" />
+<title>TXTAIRE ADMIN PORTAL</title>
+<meta name="theme-color" content="#4f8dff" />
+<link rel="icon" href="assets/icon-192.png" />
+<link rel="stylesheet" href="css/styles.css" />
+<link rel="stylesheet" href="css/ess.css" />
+</head>
+<body>
+<!-- Present only so js/supabase-config.js's IS_ESS_PORTAL check (looks for #ess-login)
+     also resolves true here -- gives this page the same auth storage key as ess.html, so
+     Jennifer's My Portal session carries over without a second login. Never shown/used. -->
+<div id="ess-login" class="hidden"></div>
+<div id="ess-app">
+  <header class="ess-header">
+    <img src="assets/logo.svg" alt="TxTAIRE" class="ess-logo" />
+    <div style="display:flex; gap:14px; align-items:center;">
+      <a href="ess.html" class="link-btn" style="text-decoration:none;">My Portal</a>
+      <button id="admin-logout" class="link-btn">Sign out</button>
+    </div>
+  </header>
+  <main id="admin-main" class="ess-main" style="padding-bottom:24px;">
+    <div class="ess-sub">Checking access…</div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.9/dist/umd/supabase.js"
+  integrity="sha384-6foGJ1oz/y3anEo0BXRtTgBK1GvpnR0GbJZb0ijG+nBAJ4rYT+VqlD/9e3CSiFIA"
+  crossorigin="anonymous"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/store.js"></script>
+<script src="js/ess-i18n.js"></script>
+<script src="js/admin-portal.js"></script>
+<script src="js/ess-views/expenses.js"></script>
+</body>
+</html>
