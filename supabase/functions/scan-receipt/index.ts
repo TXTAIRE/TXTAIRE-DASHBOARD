@@ -112,32 +112,46 @@ Deno.serve(async (req) => {
     'If a field is not legible or not present on the receipt, use an empty string for text fields or 0 for amount -- never guess or invent a value.';
 
   var geminiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + geminiApiKey;
+  var geminiBody = JSON.stringify({
+    contents: [{
+      parts: [
+        { text: instructions },
+        { inline_data: { mime_type: mediaType, data: base64Data } },
+      ],
+    }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+    },
+  });
 
-  var geminiRes;
-  try {
-    geminiRes = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: instructions },
-            { inline_data: { mime_type: mediaType, data: base64Data } },
-          ],
-        }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-        },
-      }),
-    });
-  } catch (err) {
-    return jsonResponse({ error: 'Could not reach the receipt-scanning service' }, 502);
-  }
+  // The free tier occasionally returns 503 "model is currently experiencing high demand"
+  // -- a temporary capacity issue on Google's side, not a real failure -- so a couple of
+  // quick retries clears most of them instead of failing (or, without a retry, leaving the
+  // employee staring at an error) on what's often just a few seconds of bad luck.
+  var geminiRes = null;
+  var lastErrText = '';
+  var maxAttempts = 3;
+  for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      geminiRes = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: geminiBody,
+      });
+    } catch (err) {
+      return jsonResponse({ error: 'Could not reach the receipt-scanning service' }, 502);
+    }
 
-  if (!geminiRes.ok) {
-    var errText = await geminiRes.text();
-    console.error('Gemini API error:', geminiRes.status, errText);
-    return jsonResponse({ error: 'The receipt-scanning service returned an error' }, 502);
+    if (geminiRes.ok) break;
+
+    lastErrText = await geminiRes.text();
+    console.error('Gemini API error (attempt ' + attempt + '/' + maxAttempts + '):', geminiRes.status, lastErrText);
+
+    var isRetryable = geminiRes.status === 503 || geminiRes.status === 429;
+    if (!isRetryable || attempt === maxAttempts) {
+      return jsonResponse({ error: 'The receipt-scanning service is busy right now -- please try again in a moment' }, 502);
+    }
+    await new Promise(function (resolve) { setTimeout(resolve, attempt * 1000); });
   }
 
   var geminiJson = await geminiRes.json();
