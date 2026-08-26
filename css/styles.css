@@ -681,37 +681,46 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 }
 .payslip-ack { font-style: italic; font-size: 11.5px; margin-top: 20px; line-height: 1.5; }
 
-/* ---------- Payment Voucher print view -- 4 vouchers per A4 sheet (2x2 grid), same
-   overlay/print pattern as the DTR above so they share the exact same print behavior. ---------- */
+/* ---------- Payment Voucher print view -- matches the company's real paper form: each
+   voucher printed TWICE (office copy + payee copy) side by side on one landscape A4
+   sheet, same overlay/print pattern as the DTR above. ---------- */
 .voucher-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 150;
   overflow-y: auto; padding: 30px 16px;
 }
 .voucher-print {
-  background: #ffffff; color: #0a0a0a; max-width: 900px; margin: 0 auto;
+  background: #ffffff; color: #0a0a0a; max-width: 1150px; margin: 0 auto;
   border-radius: 10px; padding: 24px; box-shadow: 0 8px 30px rgba(0,0,0,0.25);
 }
 .voucher-actions { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 16px; }
-.voucher-page {
-  display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
-  gap: 6mm; margin-bottom: 10mm;
-}
-.voucher-card { border: 1.5px solid #333; padding: 10px 12px; font-size: 11px; display: flex; flex-direction: column; }
+.voucher-page { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-bottom: 10mm; }
+.voucher-card { border: 1.5px solid #333; padding: 10px 12px; font-size: 10.5px; display: flex; flex-direction: column; }
 .voucher-card.empty { border: none; }
 .voucher-header { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 6px; }
 .voucher-logo { height: 20px; width: auto; }
 .voucher-title { text-align: center; font-weight: 700; font-size: 14px; margin: 0; }
-.voucher-refno { font-size: 10.5px; margin-bottom: 6px; }
 .voucher-row { display: flex; border-top: 1px solid #333; }
 .voucher-row > div { flex: 1; padding: 4px 6px; }
 .voucher-row > div + div { border-left: 1px solid #333; }
-.voucher-full { border-top: 1px solid #333; padding: 4px 6px; }
-.voucher-method-header { text-align: center; font-weight: 700; font-size: 10.5px; border-top: 1px solid #333; padding: 3px 0; }
 .voucher-label { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 0.03em; }
 .voucher-value { font-weight: 600; }
-.voucher-footer { display: flex; border-top: 1px solid #333; margin-top: auto; }
-.voucher-footer > div { flex: 1; padding: 14px 6px 4px 6px; text-align: center; font-size: 9.5px; }
+.voucher-subtext { font-size: 9px; color: #555; white-space: pre-line; margin-top: 2px; }
+
+.voucher-particulars-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 10px; }
+.voucher-particulars-table th, .voucher-particulars-table td { border: 1px solid #333; padding: 3px 6px; text-align: left; }
+.voucher-particulars-table th:last-child, .voucher-particulars-table td:last-child { text-align: right; width: 90px; }
+.voucher-particulars-table tfoot td { font-weight: 700; }
+
+.voucher-distribution { border-top: 1px solid #333; padding: 4px 6px; font-size: 10px; margin-top: 6px; }
+.voucher-accounts { display: flex; gap: 6px; margin-top: 6px; }
+.voucher-account-table { flex: 1; border-collapse: collapse; font-size: 8.5px; }
+.voucher-account-table th, .voucher-account-table td { border: 1px solid #333; padding: 2px 4px; text-align: left; }
+
+.voucher-footer { display: flex; border-top: 1px solid #333; margin-top: auto; padding-top: 10px; }
+.voucher-footer > div { flex: 1; padding: 0 6px 4px 6px; text-align: center; font-size: 9px; }
 .voucher-footer > div + div { border-left: 1px solid #333; }
+.voucher-sig-blank { border-bottom: 1px solid #333; height: 24px; margin: 0 4px 4px 4px; }
+.voucher-sig-title { font-size: 8.5px; color: #555; }
 
 /* On-screen phone view (not print, which forces its own A4 layout below) -- tighter
    padding/type and a single-column meta grid so the DTR fits a narrow viewport without
@@ -737,6 +746,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 @media print {
   @page { size: A4 portrait; margin: 10mm; }
+  /* Named page so only the voucher print goes landscape ("crosswise") -- the DTR above
+     stays on the default portrait page defined by the unnamed @page rule. */
+  @page voucher { size: A4 landscape; margin: 10mm; }
   html, body { height: auto; }
   /* display:none (not visibility:hidden) so the hidden dashboard behind the DTR/voucher
      view is fully removed from layout — visibility:hidden keeps its height reserved, which
@@ -747,7 +759,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
     box-shadow: none; max-width: 100%; width: 100%; margin: 0; border-radius: 0;
     padding: 0; font-size: 10px;
   }
-  .voucher-print { box-shadow: none; max-width: 100%; width: 100%; margin: 0; border-radius: 0; padding: 0; }
+  .voucher-print { box-shadow: none; max-width: 100%; width: 100%; margin: 0; border-radius: 0; padding: 0; page: voucher; }
   .voucher-page { page-break-after: always; margin-bottom: 0; }
   .voucher-page:last-child { page-break-after: auto; }
   .no-print { display: none !important; }

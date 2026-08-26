@@ -608,6 +608,53 @@ window.Views.finance = (function () {
 
   const PAYMENT_METHODS = ['Cash', 'Check'];
 
+  function voucherSignatoryDefaultsCard(main) {
+    const cName = Store.getAppSetting('voucherCertifiedCorrectByDefault', '');
+    const aName = Store.getAppSetting('voucherApprovedByDefault', '');
+    return `
+      <div class="panel" style="margin-bottom:8px; padding:10px 14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <span>✍️ Default Signatories:</span>
+        <span class="dim" style="font-size:12px;">${cName ? escapeHtml(cName) : '(not set)'} — Certified Correct By &middot; ${aName ? escapeHtml(aName) : '(not set)'} — Approved By</span>
+        <button type="button" class="link-btn" id="btn-voucher-signatory-settings">Manage</button>
+      </div>
+    `;
+  }
+
+  function openVoucherSignatoryDefaultsModal(main) {
+    const cName = Store.getAppSetting('voucherCertifiedCorrectByDefault', '');
+    const cTitle = Store.getAppSetting('voucherCertifiedCorrectByTitleDefault', '');
+    const aName = Store.getAppSetting('voucherApprovedByDefault', '');
+    const aTitle = Store.getAppSetting('voucherApprovedByTitleDefault', '');
+    openModal(`
+      <h2>✍️ Default Voucher Signatories</h2>
+      <div class="modal-sub" style="margin-bottom:10px;">Pre-fills every NEW payment voucher's Certified Correct By / Approved By fields — still editable per voucher afterward, and doesn't change any voucher already saved.</div>
+      <form id="voucher-signatory-form">
+        <div class="modal-grid">
+          <div class="field"><label>Certified Correct By — Name</label><input name="cName" value="${escapeHtml(cName)}" /></div>
+          <div class="field"><label>Certified Correct By — Title</label><input name="cTitle" value="${escapeHtml(cTitle)}" /></div>
+          <div class="field"><label>Approved By — Name</label><input name="aName" value="${escapeHtml(aName)}" /></div>
+          <div class="field"><label>Approved By — Title</label><input name="aTitle" value="${escapeHtml(aTitle)}" /></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#voucher-signatory-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        await Store.setAppSetting('voucherCertifiedCorrectByDefault', fd.get('cName').trim());
+        await Store.setAppSetting('voucherCertifiedCorrectByTitleDefault', fd.get('cTitle').trim());
+        await Store.setAppSetting('voucherApprovedByDefault', fd.get('aName').trim());
+        await Store.setAppSetting('voucherApprovedByTitleDefault', fd.get('aTitle').trim());
+        toast('✔ Default signatories saved.');
+        closeModal();
+        renderView(main);
+      });
+    });
+  }
+
   function renderVouchersTab(body, main) {
     const from = voucherMonth + '-01';
     const to = voucherMonth + '-31';
@@ -616,9 +663,10 @@ window.Views.finance = (function () {
     const monthLabel = new Date(voucherMonth + '-01T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
     body.innerHTML = `
+      ${voucherSignatoryDefaultsCard(main)}
       <div class="filters">
         <div class="field"><label>Month</label><input type="month" id="voucher-month-input" value="${voucherMonth}" /></div>
-        <button class="btn btn-ghost btn-sm" id="btn-print-vouchers" style="align-self:flex-end;" ${rows.length ? '' : 'disabled'}>🖨 Print Vouchers (4-up)</button>
+        <button class="btn btn-ghost btn-sm" id="btn-print-vouchers" style="align-self:flex-end;" ${rows.length ? '' : 'disabled'}>🖨 Print Vouchers (2 copies/page)</button>
       </div>
 
       <div class="kpi-row">
@@ -629,7 +677,7 @@ window.Views.finance = (function () {
       <div class="panel">
         ${rows.length ? `
         <table>
-          <thead><tr><th>Ref No</th><th>Date</th><th class="num">Amount</th><th>Method</th><th>To</th><th>Being</th><th>Approved By</th><th>Paid By</th><th>Entered By</th><th></th></tr></thead>
+          <thead><tr><th>No.</th><th>Date</th><th class="num">Amount</th><th>Method</th><th>Payee</th><th>Certified Correct By</th><th>Approved By</th><th>Entered By</th><th></th></tr></thead>
           <tbody>
             ${rows.map(r => `
               <tr>
@@ -638,9 +686,8 @@ window.Views.finance = (function () {
                 <td class="num">${fmtMoney(r.amount)}</td>
                 <td class="dim">${escapeHtml(r.paymentMethod)}${r.paymentMethod === 'Check' && r.checkNumber ? ' #' + escapeHtml(r.checkNumber) : ''}</td>
                 <td class="dim">${escapeHtml(r.payTo)}</td>
-                <td class="dim" style="max-width:200px;">${escapeHtml(r.being || '—')}</td>
+                <td class="dim">${escapeHtml(r.certifiedCorrectBy || '—')}</td>
                 <td class="dim">${escapeHtml(r.approvedBy || '—')}</td>
-                <td class="dim">${escapeHtml(r.paidBy || '—')}</td>
                 <td class="dim">${escapeHtml(r.enteredBy || '—')}</td>
                 <td style="white-space:nowrap;">
                   <button class="link-btn" data-print-voucher="${r.id}">Print</button>
@@ -655,6 +702,8 @@ window.Views.finance = (function () {
     `;
 
     qs('#voucher-month-input', body).addEventListener('change', (ev) => { voucherMonth = ev.target.value; renderVouchersTab(body, main); });
+    const backupBtn = qs('#btn-voucher-signatory-settings', body);
+    if (backupBtn) backupBtn.addEventListener('click', () => openVoucherSignatoryDefaultsModal(main));
     const printAllBtn = qs('#btn-print-vouchers', body);
     if (printAllBtn && !printAllBtn.disabled) printAllBtn.addEventListener('click', () => openVoucherPrintView(rows));
     qsa('[data-print-voucher]', body).forEach(b => b.addEventListener('click', () => {
@@ -677,24 +726,43 @@ window.Views.finance = (function () {
 
   function openVoucherForm(main, editing) {
     const v = editing || {
-      date: todayISO(), amount: '', paymentMethod: 'Cash', checkNumber: '',
-      payTo: '', being: '', approvedBy: '', paidBy: '',
+      date: todayISO(), paymentMethod: 'Cash', checkNumber: '', bankName: '',
+      payTo: '', payeeAccountInfo: '',
+      certifiedCorrectBy: Store.getAppSetting('voucherCertifiedCorrectByDefault', ''),
+      certifiedCorrectByTitle: Store.getAppSetting('voucherCertifiedCorrectByTitleDefault', ''),
+      approvedBy: Store.getAppSetting('voucherApprovedByDefault', ''),
+      approvedByTitle: Store.getAppSetting('voucherApprovedByTitleDefault', ''),
     };
+    // Working copy of the itemized particulars -- always at least one row so the editor
+    // never renders empty. Amount may be blank on a row that's purely an annotation (e.g.
+    // "REQUESTED BY: JRB"), matching the real paper form's particulars column.
+    let particulars = (Array.isArray(v.particulars) && v.particulars.length)
+      ? v.particulars.map(p => ({ text: p.text || '', amount: p.amount === '' || p.amount == null ? '' : p.amount }))
+      : [{ text: '', amount: '' }];
+
     openModal(`
       <h2>${editing ? 'Edit Payment Voucher' : 'Add Payment Voucher'}</h2>
-      ${editing ? `<div class="modal-sub">Ref No: <strong>${escapeHtml(editing.refNo)}</strong></div>` : '<div class="modal-sub">A Ref No. is assigned automatically when saved.</div>'}
+      ${editing ? `<div class="modal-sub">No.: <strong>${escapeHtml(editing.refNo)}</strong></div>` : '<div class="modal-sub">A voucher No. is assigned automatically when saved.</div>'}
       <form id="voucher-form">
         <div class="modal-grid">
           <div class="field"><label>Date</label><input type="date" name="date" value="${v.date}" required /></div>
-          <div class="field"><label>Amount (PHP)</label><input type="number" name="amount" min="0" step="0.01" value="${v.amount}" required /></div>
           <div class="field"><label>Method of Payment</label>
             <select name="paymentMethod">${PAYMENT_METHODS.map(m => `<option ${m === v.paymentMethod ? 'selected' : ''}>${m}</option>`).join('')}</select>
           </div>
+          <div class="field"><label>Bank <span class="dim" style="font-weight:400;">(if Check)</span></label><input name="bankName" value="${escapeHtml(v.bankName || '')}" /></div>
           <div class="field"><label>Check # <span class="dim" style="font-weight:400;">(if Check)</span></label><input name="checkNumber" value="${escapeHtml(v.checkNumber || '')}" /></div>
-          <div class="field full"><label>To (Payee Name)</label><input name="payTo" value="${escapeHtml(v.payTo)}" required /></div>
-          <div class="field full"><label>Being <span class="dim" style="font-weight:400;">(purpose/description)</span></label><textarea name="being" rows="2">${escapeHtml(v.being || '')}</textarea></div>
-          <div class="field"><label>Approved By</label><input name="approvedBy" value="${escapeHtml(v.approvedBy || '')}" /></div>
-          <div class="field"><label>Paid By</label><input name="paidBy" value="${escapeHtml(v.paidBy || '')}" /></div>
+          <div class="field full"><label>Payee</label><input name="payTo" value="${escapeHtml(v.payTo)}" required /></div>
+          <div class="field full"><label>Payee Payment Details <span class="dim" style="font-weight:400;">(optional — bank/GCash account, printed under the payee name)</span></label><textarea name="payeeAccountInfo" rows="2">${escapeHtml(v.payeeAccountInfo || '')}</textarea></div>
+          <div class="field full">
+            <label>Particulars</label>
+            <div id="voucher-particulars-rows"></div>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-add-particular" style="align-self:flex-start; margin-top:6px;">+ Add line</button>
+            <div class="dim" style="margin-top:6px;">Total Amount: <strong id="voucher-particulars-total">${fmtMoney(0)}</strong></div>
+          </div>
+          <div class="field"><label>Certified Correct By — Name</label><input name="certifiedCorrectBy" value="${escapeHtml(v.certifiedCorrectBy || '')}" /></div>
+          <div class="field"><label>Certified Correct By — Title</label><input name="certifiedCorrectByTitle" value="${escapeHtml(v.certifiedCorrectByTitle || '')}" /></div>
+          <div class="field"><label>Approved By — Name</label><input name="approvedBy" value="${escapeHtml(v.approvedBy || '')}" /></div>
+          <div class="field"><label>Approved By — Title</label><input name="approvedByTitle" value="${escapeHtml(v.approvedByTitle || '')}" /></div>
         </div>
         <div class="modal-actions">
           ${editing ? '<button type="button" class="btn btn-danger" id="btn-del-voucher">Delete</button>' : ''}
@@ -703,6 +771,39 @@ window.Views.finance = (function () {
         </div>
       </form>
     `, (bd) => {
+      function particularsTotal() {
+        return particulars.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      }
+      function renderParticularRows() {
+        const wrap = qs('#voucher-particulars-rows', bd);
+        wrap.innerHTML = particulars.map((p, i) => `
+          <div style="display:flex; gap:8px; margin-bottom:6px;">
+            <input type="text" placeholder="Particular / description" value="${escapeHtml(p.text)}" data-particular-text="${i}" style="flex:1;" />
+            <input type="number" min="0" step="0.01" placeholder="Amount" value="${p.amount === '' ? '' : p.amount}" data-particular-amount="${i}" style="width:110px;" />
+            <button type="button" class="link-btn" data-remove-particular="${i}" style="color:var(--red);">✕</button>
+          </div>
+        `).join('');
+        qsa('[data-particular-text]', wrap).forEach(el => el.addEventListener('input', () => {
+          particulars[Number(el.dataset.particularText)].text = el.value;
+        }));
+        qsa('[data-particular-amount]', wrap).forEach(el => el.addEventListener('input', () => {
+          particulars[Number(el.dataset.particularAmount)].amount = el.value === '' ? '' : Number(el.value);
+          qs('#voucher-particulars-total', bd).textContent = fmtMoney(particularsTotal());
+        }));
+        qsa('[data-remove-particular]', wrap).forEach(el => el.addEventListener('click', () => {
+          particulars.splice(Number(el.dataset.removeParticular), 1);
+          if (!particulars.length) particulars.push({ text: '', amount: '' });
+          renderParticularRows();
+          qs('#voucher-particulars-total', bd).textContent = fmtMoney(particularsTotal());
+        }));
+      }
+      renderParticularRows();
+      qs('#voucher-particulars-total', bd).textContent = fmtMoney(particularsTotal());
+      qs('#btn-add-particular', bd).addEventListener('click', () => {
+        particulars.push({ text: '', amount: '' });
+        renderParticularRows();
+      });
+
       qs('#voucher-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const fd = new FormData(ev.target);
@@ -710,17 +811,24 @@ window.Views.finance = (function () {
         submitBtn.disabled = true;
         submitBtn.textContent = 'Saving…';
         try {
-          const amount = Number(fd.get('amount')) || 0;
+          const cleanParticulars = particulars
+            .filter(p => p.text.trim() || p.amount !== '')
+            .map(p => ({ text: p.text.trim(), amount: p.amount === '' ? '' : Number(p.amount) }));
+          const amount = particularsTotal();
           const patch = {
             date: fd.get('date'),
             amount,
             paymentMethod: fd.get('paymentMethod'),
+            bankName: fd.get('bankName').trim(),
             checkNumber: fd.get('checkNumber').trim(),
             payTo: fd.get('payTo').trim(),
+            payeeAccountInfo: fd.get('payeeAccountInfo').trim(),
+            particulars: cleanParticulars,
             sumOfWords: amountToWords(amount),
-            being: fd.get('being').trim(),
+            certifiedCorrectBy: fd.get('certifiedCorrectBy').trim(),
+            certifiedCorrectByTitle: fd.get('certifiedCorrectByTitle').trim(),
             approvedBy: fd.get('approvedBy').trim(),
-            paidBy: fd.get('paidBy').trim(),
+            approvedByTitle: fd.get('approvedByTitle').trim(),
           };
           if (editing) {
             await Store.updatePaymentVoucher(editing.id, patch);
@@ -748,38 +856,60 @@ window.Views.finance = (function () {
     });
   }
 
-  // One printable card per voucher, matching the office's paper Payment Voucher template
-  // (Ref No/Amount/Date, Method of Payment, To, The Sum of, Being/Payee, Approved By/Paid
-  // By/Signature) -- 4 per A4 sheet (2x2) so several can be printed and cut apart in one
-  // go, same overlay/print pattern as the DTR (js/app.js openDTR).
+  // One printable card per voucher, matching the company's real paper Payment Voucher
+  // form (Payee + payment details, No./Date, itemized Particulars/Amount, Distribution of
+  // Account, Bank/Check No., and the four signature roles) -- printed TWICE per landscape
+  // A4 sheet (office copy + payee copy), same as the paper form, not two different
+  // vouchers side by side. Same overlay/print pattern as the DTR (js/app.js openDTR).
   function voucherCardHtml(v) {
     if (!v) return '<div class="voucher-card empty"></div>';
+    const particulars = Array.isArray(v.particulars) ? v.particulars : [];
+    const total = particulars.length ? particulars.reduce((s, p) => s + (Number(p.amount) || 0), 0) : Number(v.amount) || 0;
+    const blankAccountTable = `
+      <table class="voucher-account-table">
+        <thead><tr><th>Account Title</th><th>Debit</th><th>Credit</th></tr></thead>
+        <tbody><tr><td>&nbsp;</td><td></td><td></td></tr></tbody>
+        <tfoot><tr><td>Total</td><td>—</td><td>—</td></tr></tfoot>
+      </table>
+    `;
     return `
       <div class="voucher-card">
         <div class="voucher-header">
           <img src="assets/logo.svg" class="voucher-logo" alt="TxTAIRE" />
           <div class="voucher-title">Payment Voucher</div>
         </div>
-        <div class="voucher-refno">Ref No: <strong>${escapeHtml(v.refNo)}</strong></div>
         <div class="voucher-row">
-          <div><span class="voucher-label">Amount</span><br/><span class="voucher-value">${fmtMoney(v.amount)}</span></div>
-          <div><span class="voucher-label">Date</span><br/><span class="voucher-value">${fmtDate(v.date)}</span></div>
+          <div>
+            <span class="voucher-label">Payee</span><br/><span class="voucher-value">${escapeHtml(v.payTo)}</span>
+            ${v.payeeAccountInfo ? `<div class="voucher-subtext">${escapeHtml(v.payeeAccountInfo).replace(/\n/g, '<br/>')}</div>` : ''}
+          </div>
+          <div>
+            <span class="voucher-label">No.</span><br/><span class="voucher-value">${escapeHtml(v.refNo)}</span><br/>
+            <span class="voucher-label">Date</span><br/><span class="voucher-value">${fmtDate(v.date)}</span>
+          </div>
         </div>
-        <div class="voucher-method-header">Method of Payment</div>
-        <div class="voucher-row">
-          <div><span class="voucher-label">Cash</span><br/>${v.paymentMethod === 'Cash' ? '✔' : ''}</div>
-          <div><span class="voucher-label">Check #</span><br/>${v.paymentMethod === 'Check' ? escapeHtml(v.checkNumber || '') : ''}</div>
+        <table class="voucher-particulars-table">
+          <thead><tr><th>Particulars</th><th>Amount</th></tr></thead>
+          <tbody>
+            ${(particulars.length ? particulars : [{ text: '', amount: '' }]).map(p => `
+              <tr><td>${escapeHtml(p.text)}</td><td class="num">${p.amount === '' || p.amount == null ? '' : fmtMoney(Number(p.amount))}</td></tr>
+            `).join('')}
+          </tbody>
+          <tfoot><tr><td>TOTAL AMOUNT</td><td class="num">${fmtMoney(total)}</td></tr></tfoot>
+        </table>
+        <div class="voucher-distribution">
+          <span class="voucher-label">Distribution of Account — Pesos:</span> ${escapeHtml(v.sumOfWords || amountToWords(total))}
         </div>
-        <div class="voucher-full"><span class="voucher-label">To</span><br/><span class="voucher-value">${escapeHtml(v.payTo)}</span></div>
-        <div class="voucher-full"><span class="voucher-label">The Sum of</span><br/>${escapeHtml(v.sumOfWords || amountToWords(v.amount))}</div>
+        <div class="voucher-accounts">${blankAccountTable}${blankAccountTable}</div>
         <div class="voucher-row">
-          <div><span class="voucher-label">Being</span><br/>${escapeHtml(v.being || '—')}</div>
-          <div><span class="voucher-label">Payee</span><br/>${escapeHtml(v.payTo)}</div>
+          <div><span class="voucher-label">Bank</span><br/>${escapeHtml(v.bankName || '')}</div>
+          <div><span class="voucher-label">Check No.</span><br/>${escapeHtml(v.paymentMethod === 'Check' ? (v.checkNumber || '') : '')}</div>
         </div>
         <div class="voucher-footer">
-          <div><span class="voucher-label">Approved By</span><br/>${escapeHtml(v.approvedBy || '')}</div>
-          <div><span class="voucher-label">Paid By</span><br/>${escapeHtml(v.paidBy || '')}</div>
-          <div><span class="voucher-label">Signature</span></div>
+          <div><div class="voucher-sig-blank"></div><span class="voucher-label">Received Payment by</span></div>
+          <div><div class="voucher-sig-blank"></div><span class="voucher-label">Prepared by</span><br/><span class="voucher-sig-title">Accounting Officer</span></div>
+          <div><div class="voucher-sig-blank"></div><span class="voucher-label">Certified Correct by</span><br/><span class="voucher-value">${escapeHtml(v.certifiedCorrectBy || '')}</span><br/><span class="voucher-sig-title">${escapeHtml(v.certifiedCorrectByTitle || '')}</span></div>
+          <div><div class="voucher-sig-blank"></div><span class="voucher-label">Approved by</span><br/><span class="voucher-value">${escapeHtml(v.approvedBy || '')}</span><br/><span class="voucher-sig-title">${escapeHtml(v.approvedByTitle || '')}</span></div>
         </div>
       </div>
     `;
@@ -788,11 +918,11 @@ window.Views.finance = (function () {
   function openVoucherPrintView(vouchersIn) {
     // Printed vouchers always read oldest-to-newest (a ledger/chronological convention,
     // same as the Expense Report), independent of whatever order the on-screen table is
-    // currently sorted in.
+    // currently sorted in. Each voucher gets its own landscape page, printed TWICE side by
+    // side (office copy + payee copy) -- matches the company's real paper form, which
+    // duplicates one voucher per sheet rather than fitting several different ones on it.
     const vouchers = vouchersIn.slice().sort((a, b) => a.date.localeCompare(b.date));
-    const pages = [];
-    for (let i = 0; i < vouchers.length; i += 4) pages.push(vouchers.slice(i, i + 4));
-    if (!pages.length) pages.push([]);
+    const pages = vouchers.length ? vouchers.map(v => [v, v]) : [[null, null]];
 
     const overlay = document.createElement('div');
     overlay.className = 'voucher-overlay';
@@ -804,7 +934,7 @@ window.Views.finance = (function () {
         </div>
         ${pages.map(page => `
           <div class="voucher-page">
-            ${[0, 1, 2, 3].map(i => voucherCardHtml(page[i])).join('')}
+            ${page.map(v => voucherCardHtml(v)).join('')}
           </div>
         `).join('')}
       </div>

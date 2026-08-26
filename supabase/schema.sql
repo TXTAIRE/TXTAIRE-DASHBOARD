@@ -2995,3 +2995,28 @@ create policy "expense encoders read sheets webhook setting" on "appSettings"
     key in ('expenseSheetWebhookUrl', 'expenseSheetWebhookSecret')
     and exists (select 1 from employees where "authUserId" = auth.uid() and "canEncodeExpenses" = true)
   );
+
+-- =================================================================
+-- Redesign Payment Voucher to match the company's real paper form (crosswise/landscape,
+-- 2 identical copies per page) -- adds the fields the paper form actually has that the
+-- original simple voucher didn't: itemized particulars, payee payment-channel details,
+-- bank name, and separate Certified-Correct-By / Approved-By name+title pairs. Additive
+-- only -- the old "being" and "paidBy" columns stay in place (existing rows untouched),
+-- just unused by the redesigned form/print going forward.
+-- =================================================================
+
+alter table "paymentVouchers" add column if not exists "payeeAccountInfo" text default '';
+alter table "paymentVouchers" add column if not exists particulars jsonb default '[]'::jsonb;
+alter table "paymentVouchers" add column if not exists "bankName" text default '';
+alter table "paymentVouchers" add column if not exists "certifiedCorrectBy" text default '';
+alter table "paymentVouchers" add column if not exists "certifiedCorrectByTitle" text default '';
+alter table "paymentVouchers" add column if not exists "approvedByTitle" text default '';
+
+-- One-time: seed the two default signatories shown on every new voucher (still editable
+-- per voucher afterward). Re-run with new values any time these officers change.
+insert into "appSettings" (key, value) values
+  ('voucherCertifiedCorrectByDefault', '"Joel M. Aviso"'),
+  ('voucherCertifiedCorrectByTitleDefault', '"President"'),
+  ('voucherApprovedByDefault', '"John Rodolfo Bultron"'),
+  ('voucherApprovedByTitleDefault', '"VP – Shared Services"')
+on conflict (key) do update set value = excluded.value;

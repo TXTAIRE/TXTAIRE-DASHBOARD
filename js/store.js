@@ -1882,15 +1882,19 @@ const Store = (function () {
   function listPaymentVouchers() { return state.paymentVouchers.slice(); }
   function getPaymentVoucher(id) { return state.paymentVouchers.find(v => v.id === id); }
   function paymentVouchersInRange(from, to) { return state.paymentVouchers.filter(v => v.date >= from && v.date <= to); }
-  // Ref No is sequential (PV0001, PV0002, ...) based on how many vouchers exist so far --
-  // simple and predictable for a paper trail, not meant to survive deletions leaving gaps
-  // (same tradeoff any simple sequential paper form numbering has).
-  function nextVoucherRefNo() {
-    return 'PV' + String(state.paymentVouchers.length + 1).padStart(4, '0');
+  // Ref No matches the company's paper form: <year>-B<3-digit sequence within that year>,
+  // e.g. "2026-B075" -- sequential per year based on how many vouchers already carry that
+  // year's prefix, not meant to survive deletions leaving gaps (same tradeoff any simple
+  // sequential paper form numbering has). Year comes from the voucher's own date, not
+  // "today", so a voucher dated for a different year numbers correctly either way.
+  function nextVoucherRefNo(dateStr) {
+    const year = (dateStr || todayISO()).slice(0, 4);
+    const countThisYear = state.paymentVouchers.filter(v => (v.refNo || '').startsWith(year + '-B')).length;
+    return year + '-B' + String(countThisYear + 1).padStart(3, '0');
   }
   async function addPaymentVoucher(v) {
     v.id = genId('pv');
-    v.refNo = nextVoucherRefNo();
+    v.refNo = nextVoucherRefNo(v.date);
     return insertRow('paymentVouchers', v);
   }
   async function updatePaymentVoucher(id, patch) {
