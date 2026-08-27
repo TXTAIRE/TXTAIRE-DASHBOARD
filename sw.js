@@ -1,7 +1,7 @@
 // App-shell cache for the TxTAIRE admin dashboard and ESS portal, so both are installable
 // and open instantly offline. Only same-origin static files are cached — Supabase/CDN/
 // geolocation requests are always left to the network untouched, so data is never stale.
-const CACHE_NAME = 'txtaire-shell-v149';
+const CACHE_NAME = 'txtaire-shell-v150';
 
 const PRECACHE_URLS = [
   'index.html',
@@ -37,6 +37,7 @@ const PRECACHE_URLS = [
   'js/views/announcements.js',
   'js/offline-queue.js',
   'js/ess-i18n.js',
+  'js/ess-tutorial.js',
   'js/ess-app.js',
   'js/ess-views/attendance.js',
   'js/ess-views/payroll.js',

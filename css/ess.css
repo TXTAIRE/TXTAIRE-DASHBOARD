@@ -96,3 +96,35 @@
   #ess-app { max-width: 100%; }
   .ess-nav { max-width: 100%; }
 }
+
+/* Onboarding tour (js/ess-tutorial.js) -- the spotlight is a plain oversized box-shadow
+   trick (a ring around the target plus a huge shadow that dims everything else), not SVG
+   masking, kept intentionally simple for a one-time first-login walkthrough. */
+.ess-tour-backdrop { position: fixed; inset: 0; z-index: 10000; }
+.ess-tour-spotlight {
+  position: fixed; z-index: 10001; pointer-events: none; border-radius: 14px;
+  box-shadow: 0 0 0 4px var(--accent), 0 0 0 9999px rgba(0, 0, 0, 0.62);
+  transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease, opacity 0.15s ease;
+}
+.ess-tour-tooltip {
+  position: fixed; z-index: 10002; max-width: 300px;
+  background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: 14px;
+  box-shadow: var(--shadow-card); padding: 16px;
+  transition: top 0.25s ease, left 0.25s ease;
+}
+.ess-tour-tooltip.center {
+  top: 50%; left: 50%; right: auto; transform: translate(-50%, -50%);
+  width: calc(100vw - 48px); max-width: 320px; text-align: center;
+}
+.ess-tour-arrow {
+  position: absolute; width: 14px; height: 14px; background: var(--bg-card);
+  border: 1px solid var(--border-soft); transform: rotate(45deg);
+}
+.ess-tour-arrow.point-down { bottom: -8px; border-top: none; border-left: none; }
+.ess-tour-arrow.point-up { top: -8px; border-bottom: none; border-right: none; }
+.ess-tour-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+.ess-tour-body { font-size: 13px; color: var(--text-dim); line-height: 1.5; margin-bottom: 14px; }
+.ess-tour-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ess-tour-tooltip.center .ess-tour-footer { justify-content: center; flex-direction: column-reverse; gap: 12px; }
+.ess-tour-step-count { font-size: 11.5px; color: var(--text-faint); }
+.ess-tour-actions { display: flex; gap: 8px; }

@@ -148,6 +148,12 @@ window.EssViews.settings = (function () {
         </div>
       </div>
 
+      <div class="ess-section-title">❔ Help</div>
+      <div class="ess-card">
+        <div class="ess-sub" style="margin-bottom:8px;">New here, or just want a refresher on where everything is?</div>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-replay-tour" style="width:100%; justify-content:center;">Replay Portal Tour</button>
+      </div>
+
       <div class="ess-section-title">🔔 Notifications</div>
       <div class="ess-card" id="ess-push-card"></div>
 
@@ -187,6 +193,7 @@ window.EssViews.settings = (function () {
       setEssLang(b.dataset.lang);
       render(main, emp);
     }));
+    qs('#btn-replay-tour', main).addEventListener('click', () => startEssTutorial());
     qs('#btn-report-incident', main).addEventListener('click', () => openIncidentForm(emp));
     qs('#btn-file-concern', main).addEventListener('click', () => openConcernForm(emp));
 

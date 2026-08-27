@@ -850,11 +850,14 @@ async function startEss(session) {
   // Wrapped defensively -- a setTimeout callback that throws fails completely silently
   // (no visible error, nothing in the console the user could report), which would look
   // exactly like "nothing happens." try/catch here turns that into a visible signal.
-  // Shows at most one of the two prompts per login -- the install prompt when there's
-  // still an install step to do (the iOS prerequisite for push), otherwise the push-enable
-  // prompt, so employees are never stacked with two modals back to back.
+  // Shows at most one of these per login -- the onboarding tour takes priority on a
+  // brand-new device (orient first, ask for anything else after), then the install prompt
+  // when there's still an install step to do (the iOS prerequisite for push), otherwise
+  // the push-enable prompt -- so employees are never stacked with two modals back to back.
   setTimeout(() => {
-    if (shouldShowInstallPrompt()) {
+    if (shouldShowEssTutorial()) {
+      try { startEssTutorial(); } catch (err) { toast('Tour error: ' + (err && err.message ? err.message : err)); }
+    } else if (shouldShowInstallPrompt()) {
       try { maybeShowInstallPrompt(); } catch (err) { toast('Install prompt error: ' + (err && err.message ? err.message : err)); }
     } else {
       maybeShowPushPrompt().catch((err) => toast('Notification prompt error: ' + (err && err.message ? err.message : err)));
