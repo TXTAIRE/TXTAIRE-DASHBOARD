@@ -918,13 +918,17 @@ window.Views.finance = (function () {
   function openVoucherPrintView(vouchersIn) {
     // Printed vouchers always read oldest-to-newest (a ledger/chronological convention,
     // same as the Expense Report), independent of whatever order the on-screen table is
-    // currently sorted in. Each voucher gets its own portrait page, printed TWICE stacked
-    // one above the other (office copy + payee copy) -- matches the company's real paper
-    // form, which duplicates one voucher per sheet rather than fitting several different
-    // ones on it. Portrait matches the default @page rule already in place for the DTR,
-    // so no per-view page-size override is needed here.
+    // currently sorted in. Two DIFFERENT vouchers stacked per portrait page (not the same
+    // voucher twice) -- fits two consecutive vouchers per sheet. Portrait matches the
+    // default @page rule already in place for the DTR, so no per-view page-size override
+    // is needed here.
     const vouchers = vouchersIn.slice().sort((a, b) => a.date.localeCompare(b.date));
-    const pages = vouchers.length ? vouchers.map(v => [v, v]) : [[null, null]];
+    const pages = [];
+    if (vouchers.length) {
+      for (let i = 0; i < vouchers.length; i += 2) pages.push([vouchers[i], vouchers[i + 1] || null]);
+    } else {
+      pages.push([null, null]);
+    }
 
     const overlay = document.createElement('div');
     overlay.className = 'voucher-overlay';
