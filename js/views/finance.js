@@ -907,7 +907,7 @@ window.Views.finance = (function () {
         </div>
         <div class="voucher-footer">
           <div><div class="voucher-sig-blank"></div><span class="voucher-label">Received Payment by</span></div>
-          <div><div class="voucher-sig-blank"></div><span class="voucher-label">Prepared by</span><br/><span class="voucher-sig-title">Accounting Officer</span></div>
+          <div><div class="voucher-sig-blank"></div><span class="voucher-label">Prepared by</span></div>
           <div><div class="voucher-sig-blank"></div><span class="voucher-label">Certified Correct by</span><br/><span class="voucher-value">${escapeHtml(v.certifiedCorrectBy || '')}</span><br/><span class="voucher-sig-title">${escapeHtml(v.certifiedCorrectByTitle || '')}</span></div>
           <div><div class="voucher-sig-blank"></div><span class="voucher-label">Approved by</span><br/><span class="voucher-value">${escapeHtml(v.approvedBy || '')}</span><br/><span class="voucher-sig-title">${escapeHtml(v.approvedByTitle || '')}</span></div>
         </div>

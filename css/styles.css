@@ -757,7 +757,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
     padding: 0; font-size: 10px;
   }
   .voucher-print { box-shadow: none; max-width: 100%; width: 100%; margin: 0; border-radius: 0; padding: 0; }
-  .voucher-page { page-break-after: always; margin-bottom: 0; }
+  /* A short voucher (few particulars lines) doesn't fill a full A4 page -- min-height plus
+     justify-content: center keeps the leftover space split evenly above/below instead of
+     all dumped at the bottom with the two copies pinned to the top. 277mm = 297mm page
+     height minus the @page rule's 10mm top+bottom margins. */
+  .voucher-page { page-break-after: always; margin-bottom: 0; min-height: 277mm; justify-content: center; }
   .voucher-page:last-child { page-break-after: auto; }
   .no-print { display: none !important; }
 
