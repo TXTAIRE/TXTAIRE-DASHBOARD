@@ -228,7 +228,7 @@ window.Views.disciplinary = (function () {
           <div class="field full"><label>Category</label>
             <select id="nte-category">
               <option value="">Select a category…</option>
-              ${DISCIPLINE_OFFENSE_CATALOG.map(cat => `<option value="${escapeHtml(cat.category)}">${escapeHtml(cat.category)}</option>`).join('')}
+              ${Store.disciplineCatalog().map(cat => `<option value="${escapeHtml(cat.category)}">${escapeHtml(cat.category)}</option>`).join('')}
               <option value="__other">Other / not listed in the Code of Discipline</option>
             </select>
           </div>
@@ -286,7 +286,7 @@ window.Views.disciplinary = (function () {
         }
         offenseWrap.style.display = '';
         customWrap.style.display = 'none';
-        const catEntry = DISCIPLINE_OFFENSE_CATALOG.find(c => c.category === cat);
+        const catEntry = Store.disciplineCatalog().find(c => c.category === cat);
         offenseSelect.innerHTML = '<option value="">Select an offense…</option>' +
           (catEntry ? catEntry.offenses.map(o => `<option value="${o.code}">${escapeHtml(o.label)}</option>`).join('') : '');
         updateSuggestion();
@@ -305,7 +305,7 @@ window.Views.disciplinary = (function () {
           violation = (fd.get('violationCustom') || '').trim();
         } else {
           offenseCode = offenseSelect.value || null;
-          const catEntry = DISCIPLINE_OFFENSE_CATALOG.find(c => c.category === categorySelect.value);
+          const catEntry = Store.disciplineCatalog().find(c => c.category === categorySelect.value);
           const offense = catEntry && catEntry.offenses.find(o => o.code === offenseCode);
           violation = offense ? offense.label : '';
         }

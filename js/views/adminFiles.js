@@ -28,6 +28,9 @@ window.Views.adminFiles = (function () {
   // "Select" is chosen from a folder's right-click menu. Automatically turns back off
   // once nothing is selected, so a stray click doesn't leave checkboxes stuck on.
   let folderSelectMode = false;
+  // Icon size for the "All Folders" grid -- a per-device display preference (localStorage,
+  // not synced across admins/devices like everything else here, since it's purely cosmetic).
+  let folderViewSize = localStorage.getItem('adminFilesViewSize') === 'medium' ? 'medium' : 'large';
 
   // ---- Watch a local folder for new scans (File System Access API, Chrome/Edge only) ----
   // Lets IJ Scan Utility (or any scanner software) save straight into a fixed folder on
@@ -512,6 +515,10 @@ window.Views.adminFiles = (function () {
           <div class="page-sub">Company document library, organized by folder. Open a folder to upload a file or scan one straight from this device, or upload a whole exported folder below and it'll sort itself into the matching folders. Right-click a folder for quick actions.</div>
         </div>
         <div style="display:flex; gap:8px;">
+          <div class="seg" id="seg-folder-view-size" title="Icon size">
+            <button type="button" data-view-size="large" class="${folderViewSize === 'large' ? 'active' : ''}">Large</button>
+            <button type="button" data-view-size="medium" class="${folderViewSize === 'medium' ? 'active' : ''}">Medium</button>
+          </div>
           <button class="btn btn-ghost" id="btn-new-folder">+ New Folder</button>
           <button class="btn btn-ghost" id="btn-upload-folder-autosort">📁 Upload Folder (auto-sort)</button>
         </div>
@@ -524,7 +531,7 @@ window.Views.adminFiles = (function () {
         <button type="button" class="link-btn" id="btn-clear-folder-selection">Clear</button>
       </div>` : ''}
       <div class="page-sub" style="margin-bottom:8px;">Or drag a folder from your computer here — if it has subfolders named after these categories (e.g. "HR", "Billing Invoice"), each file sorts into the matching one automatically; anything else goes to Other.</div>
-      <div class="file-folder-grid" id="folder-grid-dropzone">
+      <div class="file-folder-grid${folderViewSize === 'medium' ? ' view-medium' : ''}" id="folder-grid-dropzone">
         ${folders.map(f => {
           const count = all.filter(x => (x.category || 'Other') === f).length;
           const isOther = f.toLowerCase() === 'other';
@@ -603,6 +610,11 @@ window.Views.adminFiles = (function () {
       });
     });
 
+    qsa('#seg-folder-view-size button', main).forEach(b => b.addEventListener('click', () => {
+      folderViewSize = b.dataset.viewSize;
+      try { localStorage.setItem('adminFilesViewSize', folderViewSize); } catch (err) { /* best-effort */ }
+      renderFolderGrid(main);
+    }));
     qs('#btn-upload-folder-autosort', main).addEventListener('click', () => openUploadFolderAutoSortModal(main));
     wireWatchBanner(main);
     const gridDropzone = qs('#folder-grid-dropzone', main);

@@ -78,12 +78,13 @@ window.Views.leaveRequests = (function () {
       <div class="panel">
         <div class="page-sub" style="padding:10px 14px 0;">Day allotments used for the balance shown to employees when submitting a leave request. Statutory types (SIL, Maternity, Paternity, Solo Parent, VAWC) reflect the legal minimum -- editable here only if company policy is more generous.</div>
         <table>
-          <thead><tr><th>Leave Type</th><th>Days/Year</th><th>Min. Service (months)</th><th>Restriction</th><th></th></tr></thead>
+          <thead><tr><th>Leave Type</th><th>Days/Year</th><th>Paid?</th><th>Min. Service (months)</th><th>Restriction</th><th></th></tr></thead>
           <tbody>
             ${policies.map(p => `
               <tr>
                 <td class="name">${escapeHtml(p.leaveType)} ${p.statutory ? '<span class="badge badge-blue" style="margin-left:6px;">Statutory</span>' : ''}</td>
                 <td><input type="number" step="0.5" min="0" data-days-for="${p.leaveType}" value="${p.daysPerYear}" style="width:80px;" /></td>
+                <td><input type="checkbox" data-paid-for="${p.leaveType}" ${p.paid ? 'checked' : ''} title="Shown to employees as a Paid Leave / Unpaid Leave badge" /></td>
                 <td class="dim">${p.minServiceMonths || 0}</td>
                 <td class="dim">${[p.genderRestriction, p.requiresSoloParentStatus ? 'Solo Parent status' : ''].filter(Boolean).join(', ') || '—'}</td>
                 <td><button class="link-btn" data-save-policy="${p.leaveType}">Save</button></td>
@@ -95,8 +96,9 @@ window.Views.leaveRequests = (function () {
     `;
     qsa('[data-save-policy]', body).forEach(btn => btn.addEventListener('click', async () => {
       const leaveType = btn.dataset.savePolicy;
-      const input = qs(`[data-days-for="${leaveType}"]`, body);
-      await Store.updateLeaveTypePolicy(leaveType, { daysPerYear: Number(input.value) || 0 });
+      const daysInput = qs(`[data-days-for="${leaveType}"]`, body);
+      const paidInput = qs(`[data-paid-for="${leaveType}"]`, body);
+      await Store.updateLeaveTypePolicy(leaveType, { daysPerYear: Number(daysInput.value) || 0, paid: paidInput.checked });
       toast(`✔ ${leaveType} updated.`);
       renderPoliciesTab(body, main);
     }));

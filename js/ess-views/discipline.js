@@ -115,7 +115,7 @@ window.EssViews.discipline = (function () {
       </div>
 
       <div class="ess-section-title">${tx.offensesTitle}</div>
-      ${DISCIPLINE_OFFENSE_CATALOG.map(cat => categorySectionHtml(cat, lang)).join('')}
+      ${Store.disciplineCatalog().map(cat => categorySectionHtml(cat, lang)).join('')}
     `;
 
     qsa('#seg-discipline-lang button', main).forEach(b => b.addEventListener('click', () => {

@@ -330,6 +330,13 @@ html, body {
 .file-folder-icon { font-size: 34px; line-height: 1; margin-bottom: 8px; }
 .file-folder-name { font-size: 13px; font-weight: 600; word-break: break-word; }
 .file-folder-count { font-size: 11.5px; color: var(--text-faint); margin-top: 4px; }
+/* Medium icon view -- a more compact alternative to the default (large) grid above, same
+   cards/behavior, just smaller and denser so more folders fit on screen at once. */
+.file-folder-grid.view-medium { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.file-folder-grid.view-medium .file-folder-open { padding: 10px 8px; }
+.file-folder-grid.view-medium .file-folder-icon { font-size: 22px; margin-bottom: 4px; }
+.file-folder-grid.view-medium .file-folder-name { font-size: 11.5px; }
+.file-folder-grid.view-medium .file-folder-count { font-size: 10px; }
 
 /* ---------- Table ---------- */
 table { width: 100%; border-collapse: collapse; }

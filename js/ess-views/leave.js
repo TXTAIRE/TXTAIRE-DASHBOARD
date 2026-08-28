@@ -22,15 +22,22 @@ window.EssViews.leave = (function () {
 
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0;">${t('title_leave')}</div>
+      <div class="ess-card" style="margin-bottom:10px; border-color:var(--accent);">
+        <div class="ess-row" style="gap:8px;"><span>⏰</span><span class="ess-sub" style="margin:0;">Leave requests must be filed at least <strong>1 week</strong> in advance whenever possible.</span></div>
+      </div>
       ${relevantPolicies.map(p => {
         const bal = Store.leaveBalance(emp, p.leaveType, year);
         const eligibility = Store.leaveEligibility(emp, p.leaveType, todayISO());
+        const paidBadge = p.paid
+          ? '<span class="badge badge-green" style="font-size:10px;">💰 Paid Leave</span>'
+          : '<span class="badge badge-gray" style="font-size:10px;">Unpaid Leave</span>';
         return `
         <div class="ess-card" style="margin-bottom:10px;">
-          <div class="ess-row"><span class="label">${escapeHtml(p.leaveType)}${p.statutory ? ' <span class="badge badge-blue" style="font-size:10px;">Statutory</span>' : ''} — ${year}</span><span class="value" style="font-weight:700;">${eligibility.eligible ? `${bal.remaining} of ${bal.entitled} days left` : 'Not yet eligible'}</span></div>
+          <div class="ess-row"><span class="label">${escapeHtml(p.leaveType)}${p.statutory ? ' <span class="badge badge-blue" style="font-size:10px;">Statutory</span>' : ''} ${paidBadge} — ${year}</span><span class="value" style="font-weight:700;">${eligibility.eligible ? `${bal.remaining} of ${bal.entitled} days left` : 'Not yet eligible'}</span></div>
           <div class="ess-sub" style="margin-top:4px;">${eligibility.eligible
             ? (p.notes ? escapeHtml(p.notes) : 'Includes Pending requests, not just Approved.')
             : escapeHtml(eligibility.reason)}</div>
+          ${p.leaveType === 'SIL' ? '<div class="ess-sub" style="margin-top:4px; font-style:italic;">📌 Earned Leave — equivalent to 1 day paid SIL every 4.8 payroll cutoffs.</div>' : ''}
         </div>`;
       }).join('')}
       <button class="btn btn-primary btn-sm" id="btn-new-leave" style="width:100%; justify-content:center; margin-bottom:14px;">+ New Leave Request</button>
@@ -65,7 +72,7 @@ window.EssViews.leave = (function () {
   // trigger-enforced RLS policy resets status back to Pending server-side) -- shown here
   // so the employee isn't surprised when a decided request reverts after they change it.
   function openLeaveForm(main, emp, existing) {
-    const r = existing || { leaveType: 'Vacation', startDate: todayISO(), endDate: todayISO(), reason: '' };
+    const r = existing || { leaveType: 'Vacation/Sick Leave', startDate: todayISO(), endDate: todayISO(), reason: '' };
     openEssModal(`
       <h2>${existing ? 'Edit Leave Request' : 'New Leave Request'}</h2>
       ${existing && existing.status !== 'Pending' ? `<div class="modal-sub">Editing this will send it back to HR for review.</div>` : ''}

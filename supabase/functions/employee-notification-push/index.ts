@@ -34,6 +34,7 @@ var TITLES = {
   coe_issued: 'Certificate of Employment Issued',
   safety_incident_resolved: 'Safety Incident Resolved',
   relations_case_updated: 'Employee Relations Case Update',
+  announcement: '📢 New Announcement',
 };
 
 Deno.serve(async (req) => {

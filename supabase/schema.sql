@@ -3020,3 +3020,91 @@ insert into "appSettings" (key, value) values
   ('voucherApprovedByDefault', '"John Rodolfo Bultron"'),
   ('voucherApprovedByTitleDefault', '"VP – Shared Services"')
 on conflict (key) do update set value = excluded.value;
+
+-- =================================================================
+-- Merge Vacation + Sick into one combined "Vacation/Sick Leave" type (one 5-day/year
+-- pool instead of 5+5=10 separately), and mark every non-statutory, company-policy leave
+-- type as unpaid -- SIL and the other statutory types (Maternity/Paternity/Solo Parent/
+-- VAWC) stay paid, matching the Labor Code minimums they already reflect. Renames the
+-- policy row in place (its primary key) rather than delete+insert, and re-labels any
+-- existing leaveRequests rows so historical Vacation/Sick requests still resolve against
+-- the merged policy going forward instead of silently losing their policy info.
+-- =================================================================
+
+update "leaveRequests" set "leaveType" = 'Vacation/Sick Leave' where "leaveType" in ('Vacation', 'Sick');
+
+update "leaveTypePolicies" set
+  "leaveType" = 'Vacation/Sick Leave',
+  "daysPerYear" = 5,
+  paid = false,
+  notes = 'Company policy -- combined pool for Vacation and Sick Leave, unpaid.'
+  where "leaveType" = 'Vacation';
+delete from "leaveTypePolicies" where "leaveType" = 'Sick';
+
+update "leaveTypePolicies" set paid = false where "leaveType" in ('Emergency', 'Other');
+
+-- =================================================================
+-- Push notifications for Announcements -- re-defines notify_employee_push() (same
+-- trigger, already installed) to also push for the new 'announcement' notification type
+-- (js/store.js addAnnouncement fans one 'notifications' row per employee out already;
+-- this is what actually makes those also ring/push, not just sit in the bell). Full
+-- replacement, not additive SQL -- must include every type from the original list too.
+-- Requires re-deploying the employee-notification-push Edge Function with its updated
+-- TITLES entry for 'announcement' (supabase/functions/employee-notification-push/index.ts).
+-- =================================================================
+
+create or replace function notify_employee_push() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if NEW.type not in (
+    'leave_approved', 'correction_approved', 'nsd_approved', 'ot_approved', 'holiday_approved', 'payroll_released', 'nte_issued',
+    'thirteenth_month_released', 'final_pay_released', 'coe_issued', 'safety_incident_resolved', 'relations_case_updated',
+    'announcement'
+  ) then
+    return NEW;
+  end if;
+  perform net.http_post(
+    url := 'https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/employee-notification-push',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', '5f24f19fdf651e99db5d397158bda6a8a4c48f59c06df3cc'),
+    body := jsonb_build_object('employeeId', NEW."employeeId", 'type', NEW.type, 'message', NEW.message)
+  );
+  return NEW;
+end;
+$$;
+
+-- =================================================================
+-- Code of Discipline -- move the offense catalog from a hardcoded JS constant
+-- (DISCIPLINE_OFFENSE_CATALOG, js/store.js) into a real HR-editable table, so both the
+-- English and Filipino text can be edited from the admin dashboard and the change shows
+-- up on the ESS "Code of Discipline" page immediately (same realtime pattern as every
+-- other table here). Only the table + policies are created by this migration -- no data
+-- rows. The existing catalog stays in the JS file as a fallback (used automatically
+-- whenever this table is empty, so nothing breaks before the one-time import) and as the
+-- source of that one-time import, run once from the new admin editor page rather than
+-- pasted here as SQL -- transcribing ~50 rows of rich text (peso signs, em dashes, curly
+-- quotes) into a single SQL paste is exactly the kind of large block that's silently
+-- truncated by the Supabase SQL Editor before.
+-- =================================================================
+
+create table if not exists "disciplineOffenses" (
+  id text primary key,
+  code text not null unique,
+  category text not null,
+  "categoryFil" text not null default '',
+  label text not null,
+  "labelFil" text not null default '',
+  schedule jsonb not null default '[]'::jsonb,  -- ordered penalty codes: 'VW' | 'WW' | '<N>S' | 'D', one per occurrence
+  "sortOrder" numeric(10,2) not null default 0, -- preserves the original document's category/offense ordering
+  created_at timestamptz not null default now()
+);
+
+alter table "disciplineOffenses" enable row level security;
+
+drop policy if exists "admin full access" on "disciplineOffenses";
+create policy "admin full access" on "disciplineOffenses"
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "employee reads discipline offenses" on "disciplineOffenses";
+create policy "employee reads discipline offenses" on "disciplineOffenses"
+  for select to authenticated using (true);
+
+alter publication supabase_realtime add table "disciplineOffenses";

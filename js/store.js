@@ -883,6 +883,7 @@ const Store = (function () {
     employeeRelationsCases: 'employeeRelationsCases',
     adminCodiMembers: 'adminCodiMembers',
     announcements: 'announcements',
+    disciplineOffenses: 'disciplineOffenses',
   };
 
   const state = {
@@ -898,7 +899,7 @@ const Store = (function () {
     thirteenthMonthPay: [], leaveTypePolicies: [], offboarding: [],
     sssContributionBrackets: [], contributionRates: [], regionalMinimumWage: [],
     safetyIncidents: [], employeeRelationsCases: [], adminCodiMembers: [],
-    announcements: [],
+    announcements: [], disciplineOffenses: [],
   };
 
   let remoteChangeCallback = null;
@@ -1039,13 +1040,70 @@ const Store = (function () {
     ).length;
   }
 
+  // ---- Code of Discipline (HR-editable, supabase/schema.sql "disciplineOffenses") ----
+  // Flat DB rows regrouped back into the same { category, categoryFil, offenses: [...] }
+  // shape DISCIPLINE_OFFENSE_CATALOG always had, so the 3 places that read the catalog
+  // (js/views/disciplinary.js, js/ess-views/discipline.js, suggestedPenaltyFor below)
+  // never had to change their own grouping/lookup logic -- only where the data comes
+  // from. Falls back to the original hardcoded catalog whenever the table is still empty
+  // (before the one-time import below has ever been run), so nothing breaks or shows a
+  // blank Code of Discipline page in the meantime.
+  function disciplineCatalog() {
+    if (!state.disciplineOffenses.length) return DISCIPLINE_OFFENSE_CATALOG;
+    const rows = state.disciplineOffenses.slice().sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder));
+    const byCategory = [];
+    const index = {};
+    rows.forEach((r) => {
+      if (!(r.category in index)) {
+        index[r.category] = { category: r.category, categoryFil: r.categoryFil || '', offenses: [] };
+        byCategory.push(index[r.category]);
+      }
+      index[r.category].offenses.push({ code: r.code, label: r.label, labelFil: r.labelFil || '', schedule: r.schedule || [] });
+    });
+    return byCategory;
+  }
+  function listDisciplineOffenses() { return state.disciplineOffenses.slice().sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder)); }
+  function getDisciplineOffense(id) { return state.disciplineOffenses.find(o => o.id === id); }
+  async function addDisciplineOffense(o) {
+    o.id = genId('doff');
+    return insertRow('disciplineOffenses', o);
+  }
+  async function updateDisciplineOffense(id, patch) {
+    await updateRow('disciplineOffenses', id, patch);
+  }
+  async function deleteDisciplineOffense(id) {
+    await deleteRow('disciplineOffenses', id);
+  }
+  // One-time: flattens the original hardcoded DISCIPLINE_OFFENSE_CATALOG into rows and
+  // bulk-inserts them, preserving category/offense order via sortOrder. Run once from the
+  // new admin Code of Discipline editor (only offered there while the table is still
+  // empty) -- safe to call again later since it always inserts fresh ids, but doing so
+  // would duplicate every offense, so the UI only exposes this while listDisciplineOffenses()
+  // is empty.
+  async function importDefaultDisciplineCatalog() {
+    const rows = [];
+    DISCIPLINE_OFFENSE_CATALOG.forEach((cat, catIdx) => {
+      cat.offenses.forEach((o, offIdx) => {
+        rows.push({
+          id: genId('doff'), code: o.code, category: cat.category, categoryFil: cat.categoryFil || '',
+          label: o.label, labelFil: o.labelFil || '', schedule: o.schedule || [],
+          sortOrder: catIdx * 100 + offIdx,
+        });
+      });
+    });
+    const { error } = await sb.from(TABLES.disciplineOffenses).insert(rows.map(sanitize));
+    if (error) { toast('Import failed: ' + error.message); throw error; }
+    await refetch('disciplineOffenses');
+    logAudit('disciplineOffenses.import', TABLES.disciplineOffenses, null, { count: rows.length });
+  }
+
   // Looks up the Code of Discipline's suggested penalty for an employee's NEXT occurrence
   // of a given offense (their past-12-month count + 1), clamped to the offense's last
   // defined tier if they've exceeded the schedule's length. Informational only -- HR still
   // records the actual resolution/penalty manually; this never auto-applies anything.
   function suggestedPenaltyFor(employeeId, offenseCode, asOfDate) {
     let entry = null;
-    for (const cat of DISCIPLINE_OFFENSE_CATALOG) {
+    for (const cat of disciplineCatalog()) {
       const found = cat.offenses.find(o => o.code === offenseCode);
       if (found) { entry = found; break; }
     }
@@ -1187,7 +1245,20 @@ const Store = (function () {
   function getAnnouncement(id) { return state.announcements.find(a => a.id === id); }
   async function addAnnouncement(a) {
     a.id = genId('ann');
-    return insertRow('announcements', a);
+    const row = await insertRow('announcements', a);
+    // Company-wide bulletin -- fans out one notification per employee with portal access
+    // so it reaches everyone's bell AND push (with sound) the same way an individual
+    // approval already does, reusing the exact same pipeline (notify_employee_push,
+    // supabase/schema.sql) rather than building a separate broadcast mechanism. Best-
+    // effort per employee -- one failure never blocks the rest, or the announcement
+    // itself, which has already posted by this point regardless.
+    const targets = state.employees.filter(e => e.authUserId);
+    await Promise.all(targets.map(e => createNotification({
+      employeeId: e.id, type: 'announcement',
+      message: a.title + (a.body ? ' — ' + a.body.slice(0, 120) : ''),
+      relatedTable: 'announcements', relatedId: a.id,
+    }).catch(() => {})));
+    return row;
   }
   async function updateAnnouncement(id, patch) {
     await updateRow('announcements', id, patch);
@@ -2298,5 +2369,7 @@ const Store = (function () {
     computeRetirementPay, yearsOfServiceAsOf,
     listOffboarding, getOffboarding, activeOffboardingForEmployee, startOffboarding, updateClearanceItem, computeFinalPay, saveFinalPaySnapshot, releaseFinalPay, issueCOE,
     listAnnouncements, getAnnouncement, addAnnouncement, updateAnnouncement, deleteAnnouncement,
+    disciplineCatalog, listDisciplineOffenses, getDisciplineOffense, addDisciplineOffense,
+    updateDisciplineOffense, deleteDisciplineOffense, importDefaultDisciplineCatalog,
   };
 })();

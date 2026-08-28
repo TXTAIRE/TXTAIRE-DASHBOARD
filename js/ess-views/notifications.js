@@ -5,7 +5,7 @@ window.EssViews.notifications = (function () {
     ot_approved: '✅', ot_rejected: '❌', nsd_approved: '✅', nsd_rejected: '❌',
     holiday_approved: '✅', holiday_rejected: '❌', leave_approved: '✅', leave_rejected: '❌',
     correction_approved: '✅', correction_rejected: '❌', payroll_released: '💰',
-    nte_issued: '📋',
+    nte_issued: '📋', announcement: '📢',
   };
 
   function relativeTime(iso) {
