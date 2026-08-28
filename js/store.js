@@ -1803,10 +1803,16 @@ const Store = (function () {
     }
   }
 
-  // ---- Expenses & Receipts (Admin/Finance, admin-only) ----
+  // ---- Expenses & Receipts (Admin/Finance, admin-only; expense-encoder employees are
+  // narrower -- see supabase/schema.sql "expense encoders manage own expenses") ----
   function listExpenses() { return state.expenses.slice(); }
   function getExpense(id) { return state.expenses.find(e => e.id === id); }
   function expensesInRange(from, to) { return state.expenses.filter(e => e.date >= from && e.date <= to); }
+  // Forces a fresh SELECT of just this table, reusing the same private refetch() the
+  // realtime subscription already calls on its own -- for the Admin Portal's visible
+  // "Refresh" control (js/ess-views/expenses.js), which unlike the main dashboard/My
+  // Portal doesn't otherwise re-render on remote changes at all.
+  async function refetchExpenses() { await refetch('expenses'); }
   async function addExpense(e) {
     e.id = genId('exp');
     const row = await insertRow('expenses', e);
@@ -2270,7 +2276,7 @@ const Store = (function () {
     createNotification, listNotificationsForEmployee, unreadNotificationCount, markNotificationRead, markAllNotificationsRead, deleteNotification,
     getPayrollRelease, releasePayroll, unreleasePayroll, updatePayrollRelease,
     getAppSetting, setAppSetting,
-    listExpenses, getExpense, expensesInRange, addExpense, updateExpense, deleteExpense,
+    listExpenses, getExpense, expensesInRange, addExpense, updateExpense, deleteExpense, refetchExpenses,
     uploadReceiptPhoto, getSignedReceiptUrl, deleteReceiptPhoto,
     listBills, getBill, addBill, updateBill, deleteBill, payBill,
     listPaymentVouchers, getPaymentVoucher, paymentVouchersInRange, addPaymentVoucher, updatePaymentVoucher, deletePaymentVoucher,

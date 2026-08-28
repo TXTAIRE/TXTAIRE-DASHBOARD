@@ -17,6 +17,16 @@
 // (supabase/schema.sql), and (2) this employee's own past submissions for that vendor.
 window.EssViews.expenses = (function () {
   const ENTITY_OPTIONS = ['TXTAIRE OPC', 'TXTAIRE REF', 'AVISO'];
+  // admin-portal.html is a standalone satellite page (js/admin-portal.js) -- unlike the
+  // main dashboard/My Portal, it never wires Store.onRemoteChange, so nothing here
+  // re-renders on its own when a receipt/expense changes elsewhere (another encoder's
+  // submission, an admin edit, etc.). A silent background auto-refresh would be easy to
+  // miss entirely on a page someone's actively scanning receipts on, so this is
+  // deliberately a visible control instead: a "last updated" timestamp plus a manual
+  // Refresh button, backed by a real network refetch (not just a re-paint of whatever's
+  // already cached) so clicking it actually means something.
+  const HISTORY_AUTO_REFRESH_MS = 30000;
+  let historyRefreshTimer = null;
 
   let vendorDirectory = null;
   async function loadVendorDirectory() {
@@ -69,7 +79,13 @@ window.EssViews.expenses = (function () {
       </div>
       <div id="expense-status" class="ess-sub" style="margin-top:8px;"></div>
       <div id="expense-review-wrap"></div>
-      <div class="ess-section-title">My Submitted Expenses</div>
+      <div class="ess-section-title" style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <span>My Submitted Expenses</span>
+        <span style="display:flex; align-items:center; gap:8px; font-weight:400;">
+          <span id="expense-history-updated" class="ess-sub" style="font-size:11px;"></span>
+          <button type="button" class="link-btn" id="btn-refresh-history">🔄 Refresh</button>
+        </span>
+      </div>
       <div id="expense-history-wrap"></div>
     `;
 
@@ -78,7 +94,30 @@ window.EssViews.expenses = (function () {
       if (file) handleReceiptFile(main, emp, file);
     });
 
+    qs('#btn-refresh-history', main).addEventListener('click', () => refreshHistory(main, emp, true));
+
+    // Re-renders every 30s so a change made elsewhere (another encoder's submission, an
+    // admin edit/delete) shows up without anyone having to think to click Refresh -- still
+    // visible, not silent, since the "Updated ..." timestamp moves and the list itself
+    // visibly redraws. Only one interval ever runs at a time: render() is only called once
+    // per page load (js/admin-portal.js's bootAdminPortal), so there's nothing to leak.
+    if (historyRefreshTimer) clearInterval(historyRefreshTimer);
+    historyRefreshTimer = setInterval(() => refreshHistory(main, emp, true), HISTORY_AUTO_REFRESH_MS);
+
+    refreshHistory(main, emp, false);
+  }
+
+  // fromNetwork: true does a real refetch (manual click, or the 30s timer) so "Refresh"
+  // actually means something over the network, not just a re-paint of whatever's already
+  // cached; false (the initial render) skips it since Store.init() just loaded everything
+  // fresh moments ago.
+  async function refreshHistory(main, emp, fromNetwork) {
+    if (fromNetwork) {
+      try { await Store.refetchExpenses(); } catch (err) { /* keep showing whatever's already cached */ }
+    }
     renderHistory(main, emp);
+    const updatedEl = qs('#expense-history-updated', main);
+    if (updatedEl) updatedEl.textContent = 'Updated ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
   }
 
   function renderHistory(main, emp) {
