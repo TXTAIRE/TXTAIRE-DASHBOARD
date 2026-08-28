@@ -4,8 +4,11 @@
   min-height: 100vh; display: flex; align-items: center; justify-content: center;
   background: var(--bg-elevated); padding: 20px;
 }
+.ess-login-wrap {
+  width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 16px;
+}
 .ess-login-card {
-  width: 100%; max-width: 380px; background: var(--bg-card);
+  width: 100%; background: var(--bg-card);
   border: 1px solid var(--border-soft); border-radius: 14px; box-shadow: var(--shadow-card);
   padding: 32px 28px 28px 28px; text-align: center;
 }

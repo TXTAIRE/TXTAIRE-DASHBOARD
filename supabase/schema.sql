@@ -3108,3 +3108,13 @@ create policy "employee reads discipline offenses" on "disciplineOffenses"
   for select to authenticated using (true);
 
 alter publication supabase_realtime add table "disciplineOffenses";
+
+-- Lets a PINNED announcement show on the ESS login screen itself (js/ess-app.js
+-- fetchPublicPinnedAnnouncements), before an employee even signs in -- the anon key has
+-- no session there, so the existing "employee reads announcements" policy (scoped to
+-- authenticated) doesn't apply. Non-pinned announcements and every other table stay
+-- exactly as restricted as before; this only ever exposes title/body/created_at of
+-- announcements HR has explicitly pinned.
+drop policy if exists "public reads pinned announcements" on announcements;
+create policy "public reads pinned announcements" on announcements
+  for select to anon using (pinned = true);

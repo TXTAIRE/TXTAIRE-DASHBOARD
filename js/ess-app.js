@@ -177,28 +177,69 @@ function playEssNotificationTone(debug) {
   }
 }
 
+// Lets a pinned announcement reach employees who aren't logged in at all yet (e.g. a
+// shift reminder or office closure someone needs to see before they even sign in) --
+// relies on a dedicated "public reads pinned announcements" RLS policy (supabase/
+// schema.sql) since the login screen only ever has the anon key, no session. Only
+// pinned announcements are exposed this way; the full history still requires signing in.
+async function fetchPublicPinnedAnnouncements() {
+  try {
+    const { data, error } = await sb.from('announcements')
+      .select('title, body, created_at')
+      .eq('pinned', true)
+      .order('created_at', { ascending: false })
+      .limit(3);
+    if (error) return [];
+    return data || [];
+  } catch (err) {
+    return [];
+  }
+}
+
+async function renderLoginAnnouncements() {
+  const box = qs('#ess-login-announcements');
+  if (!box) return;
+  const items = await fetchPublicPinnedAnnouncements();
+  if (!items.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `
+    <div class="ess-card" style="text-align:left; width:100%;">
+      <div class="ess-card-label">📣 Company Announcements</div>
+      ${items.map(a => `
+        <div style="padding:8px 0; border-bottom:1px solid var(--border-soft);">
+          <div style="font-weight:600; font-size:13px; margin-bottom:3px;">${escapeHtml(a.title)}</div>
+          <div class="ess-sub" style="white-space:pre-wrap;">${escapeHtml(a.body)}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  qs('.ess-card > div:last-child', box).style.borderBottom = 'none';
+}
+
 function showEssLogin(errorMessage) {
   qs('#ess-app').classList.add('hidden');
   const screen = qs('#ess-login');
   screen.classList.remove('hidden');
   screen.innerHTML = `
-    <div class="ess-login-card">
-      <img src="assets/logo.svg" alt="TxTAIRE" class="ess-login-logo" />
-      <h1>TXTAIRE MY PORTAL</h1>
-      <div class="page-sub" style="margin-bottom:18px;">Sign in with your Employee ID</div>
-      ${errorMessage ? `<div class="auth-error">${escapeHtml(errorMessage)}</div>` : ''}
-      <form id="ess-login-form">
-        <div class="field full" style="margin-bottom:12px;">
-          <label>Employee ID</label>
-          <input name="employeeCode" required autocomplete="username" placeholder="e.g. TXT001" />
-        </div>
-        <div class="field full" style="margin-bottom:18px;">
-          <label>Password</label>
-          <input type="password" name="password" required autocomplete="current-password" />
-        </div>
-        <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Sign in</button>
-      </form>
-      <div class="page-sub" style="margin-top:18px; font-size:12px;">Don't have a login? Ask HR to set one up for you.</div>
+    <div class="ess-login-wrap">
+      <div class="ess-login-card">
+        <img src="assets/logo.svg" alt="TxTAIRE" class="ess-login-logo" />
+        <h1>TXTAIRE MY PORTAL</h1>
+        <div class="page-sub" style="margin-bottom:18px;">Sign in with your Employee ID</div>
+        ${errorMessage ? `<div class="auth-error">${escapeHtml(errorMessage)}</div>` : ''}
+        <form id="ess-login-form">
+          <div class="field full" style="margin-bottom:12px;">
+            <label>Employee ID</label>
+            <input name="employeeCode" required autocomplete="username" placeholder="e.g. TXT001" />
+          </div>
+          <div class="field full" style="margin-bottom:18px;">
+            <label>Password</label>
+            <input type="password" name="password" required autocomplete="current-password" />
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Sign in</button>
+        </form>
+        <div class="page-sub" style="margin-top:18px; font-size:12px;">Don't have a login? Ask HR to set one up for you.</div>
+      </div>
+      <div id="ess-login-announcements"></div>
     </div>
   `;
   qs('#ess-login-form').addEventListener('submit', async (ev) => {
@@ -213,6 +254,7 @@ function showEssLogin(errorMessage) {
     });
     if (error) showEssLogin('Incorrect Employee ID or password.');
   });
+  renderLoginAnnouncements();
 }
 
 function setActiveEssNav(route) {
@@ -226,7 +268,48 @@ function renderEssRoute() {
   applyEssNavLang();
   const view = window.EssViews[essRoute];
   if (view && view.render) view.render(main, myEmployee);
+  // Landing tab only (My Attendance is the first thing an employee sees after signing
+  // in) -- runs after the view's own render since every view's render() replaces
+  // main.innerHTML wholesale, so this has to prepend rather than render first.
+  if (essRoute === 'attendance') renderHomeAnnouncementBanner(main);
   updateEssBellBadge();
+}
+
+const ANNOUNCEMENT_DISMISS_KEY = 'essDismissedAnnouncements';
+function dismissedAnnouncementIds() {
+  try { return JSON.parse(localStorage.getItem(ANNOUNCEMENT_DISMISS_KEY) || '[]'); } catch (err) { return []; }
+}
+function dismissAnnouncement(id) {
+  try {
+    const ids = dismissedAnnouncementIds();
+    if (!ids.includes(id)) ids.push(id);
+    localStorage.setItem(ANNOUNCEMENT_DISMISS_KEY, JSON.stringify(ids.slice(-50)));
+  } catch (err) { /* ignore */ }
+}
+
+// Surfaces pinned announcements right on the portal home tab, not just as a truncated
+// ping in Notifications -- an employee who never opens the bell still sees them. Each
+// can be dismissed individually (remembered per-device via localStorage); dismissing
+// only hides it here, it's still readable in full under Notifications afterwards.
+function renderHomeAnnouncementBanner(main) {
+  const dismissed = dismissedAnnouncementIds();
+  const items = Store.listAnnouncements().filter(a => a.pinned && !dismissed.includes(a.id));
+  if (!items.length) return;
+  const html = items.map(a => `
+    <div class="ess-card" data-announcement-id="${escapeHtml(a.id)}" style="text-align:left;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+        <div class="ess-card-label" style="margin-bottom:6px;">📣 ${escapeHtml(a.title)}</div>
+        <button type="button" class="link-btn" data-dismiss-announcement="${escapeHtml(a.id)}" title="Dismiss" style="flex-shrink:0;">&times;</button>
+      </div>
+      <div class="ess-sub" style="white-space:pre-wrap;">${escapeHtml(a.body)}</div>
+    </div>
+  `).join('');
+  main.insertAdjacentHTML('afterbegin', html);
+  qsa('[data-dismiss-announcement]', main).forEach(btn => btn.addEventListener('click', () => {
+    dismissAnnouncement(btn.dataset.dismissAnnouncement);
+    const card = btn.closest('[data-announcement-id]');
+    if (card) card.remove();
+  }));
 }
 
 function updateEssBellBadge() {
