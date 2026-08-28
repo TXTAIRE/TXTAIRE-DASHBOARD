@@ -1269,6 +1269,15 @@ const Store = (function () {
     return getAnnouncement(id);
   }
   async function deleteAnnouncement(id) {
+    // Also removes every employee's fanned-out "new announcement" notification for this
+    // one (see addAnnouncement's Promise.all fan-out above) -- otherwise a deleted
+    // announcement would keep sitting in employees' Notifications list, and its pinned
+    // home/login banner would keep showing content HR just deleted. Best-effort: a
+    // failure here never blocks the announcement itself from being deleted below.
+    try {
+      await sb.from(TABLES.notifications).delete().eq('relatedTable', 'announcements').eq('relatedId', id);
+      await refetch('notifications');
+    } catch (err) { /* best-effort cleanup */ }
     await deleteRow('announcements', id);
   }
 
