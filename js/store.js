@@ -657,8 +657,12 @@ function computeDayPay(dailyRateEq, rec, holiday, emp) {
 
   // otHours lets HR override the derived "effective hours - 8" figure (e.g. to exclude a
   // break, or cap it) — null/undefined falls back to the original derived calculation.
+  // Company policy: OT is only paid in whole completed hours -- a day with 2.53 excess
+  // hours (2 hrs 32 min) pays for 2 hrs only, the trailing partial hour is dropped, not
+  // rounded. Floored last, so this applies whether the figure came from the derived
+  // calculation or an HR-entered override.
   const otHrs = (rec && rec.otStatus === 'Approved')
-    ? (rec.otHours != null ? Number(rec.otHours) : Math.max(0, effHrs - 8))
+    ? Math.floor(rec.otHours != null ? Number(rec.otHours) : Math.max(0, effHrs - 8))
     : 0;
   const otMultiplier = premiumType ? (premiumType === 'Regular' ? 2.6 : 1.69) : 1.25;
   const otPay = otHrs * hourlyRate * otMultiplier;
