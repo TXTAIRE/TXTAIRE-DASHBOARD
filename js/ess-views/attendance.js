@@ -789,7 +789,7 @@ window.EssViews.attendance = (function () {
   // timeStr/date are always captured at the moment the employee presses Confirm — never
   // recomputed here — so a clock-in/out queued offline still records the real time it
   // happened, not whenever the connection happens to come back and this finally runs.
-  async function saveClockEvent(emp, kind, photoPath, timeStr, date, locationText) {
+  async function saveClockEvent(emp, kind, photoPath, timeStr, date, locationText, otConfirmed) {
     const location = combineLocationText(locationText) || null;
     if (kind === 'in') {
       // The UI only ever offers Time In when there's no record yet for today (see
@@ -827,17 +827,51 @@ window.EssViews.attendance = (function () {
       };
       // Clocking out more than the grace period past this employee's own scheduled end time
       // (js/store.js ATTENDANCE_GRACE_MINUTES/exceedsDefaultTimeOut -- or, if they have no
-      // schedule set, past a flat 8-hour shift) automatically files the OT request for HR
-      // instead of making the employee remember to click Request separately. Still just a
-      // request: js/store.js computeDayPay never counts OT toward pay until HR reviews and
-      // sets otStatus to 'Approved' (Attendance -> Requests) -- same as the reminder that
-      // travel time past the designated timeout doesn't count as OT unless HR approves it.
+      // schedule set, past a flat 8-hour shift) asks the employee right at capture time
+      // (see the "Overtime?" confirmation wired around the Confirm Time Out button below)
+      // whether this was actually overtime, instead of assuming it always was. Yes files
+      // the OT request for HR the same as before; No records the time out normally with no
+      // request at all. otConfirmed is only ever explicitly false when the employee was
+      // actually asked and said No -- undefined (never asked: kind was 'in', or this
+      // particular clock-out didn't exceed the threshold) still falls back to filing the
+      // request, the original safe default. Still just a request either way: js/store.js
+      // computeDayPay never counts OT toward pay until HR reviews and sets otStatus to
+      // 'Approved' (Attendance -> Requests).
       const exceededSchedule = emp.defaultTimeOut
         ? exceedsDefaultTimeOut(rec.timeIn, timeStr, emp.defaultTimeOut)
         : hours > 8;
-      if (exceededSchedule) patch.otStatus = 'Requested';
+      if (exceededSchedule && otConfirmed !== false) patch.otStatus = 'Requested';
       await Store.updateAttendance(rec.id, patch);
     }
+  }
+
+  // Asks "is this overtime?" as a fresh Yes/No modal, resolving true/false/undefined
+  // (undefined covers every way of leaving without a clear answer -- the × button or
+  // tapping the backdrop -- and is treated the same as "didn't say no" by saveClockEvent's
+  // otConfirmed !== false check, i.e. it still falls back to filing the OT request).
+  // Three separate paths all settle the same promise exactly once (the `settled` guard),
+  // including a backdrop-mousedown listener layered on top of openEssModal's own built-in
+  // backdrop-closes-modal behavior -- without that, dismissing by tapping outside the
+  // modal box would leave this promise (and the whole Confirm Time Out flow awaiting it)
+  // hanging forever.
+  function confirmOvertime() {
+    return new Promise((resolve) => {
+      let settled = false;
+      const settle = (val) => { if (!settled) { settled = true; resolve(val); } };
+      const bd = openEssModal(`
+        <h2>Overtime?</h2>
+        <div class="modal-sub">You're clocking out past 8 hours today. Is this authorized overtime?</div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="btn-ot-no">No</button>
+          <button type="button" class="btn btn-primary" id="btn-ot-yes">Yes</button>
+        </div>
+      `, (modalBd) => {
+        qs('#btn-ot-yes', modalBd).addEventListener('click', () => { closeEssModal(); settle(true); });
+        qs('#btn-ot-no', modalBd).addEventListener('click', () => { closeEssModal(); settle(false); });
+        qs('[data-close-modal]', modalBd).addEventListener('click', () => settle(undefined));
+      });
+      bd.addEventListener('mousedown', (e) => { if (e.target === bd) settle(undefined); });
+    });
   }
 
   function isLikelyNetworkError(e) {
@@ -848,11 +882,16 @@ window.EssViews.attendance = (function () {
   // Supabase. Nothing here touches the network — safe to call with no connection at all.
   // locationText travels along too (already resolved before this is called), so a synced-
   // later record still gets the location captured at the actual moment of clock-in/out.
-  async function queueOffline(emp, kind, blob, timeStr, date, locationText) {
+  async function queueOffline(emp, kind, blob, timeStr, date, locationText, otConfirmed) {
     await OfflineQueue.add({
       localId: genId('offatt'),
       employeeId: emp.id, kind, timeStr, date, photoBlob: blob,
       locationText: locationText || null,
+      // Whatever the employee answered to "Is this overtime?" at capture time (or undefined
+      // if it never came up) -- carried along so trySyncQueue's later replay of
+      // saveClockEvent respects the same answer instead of re-deciding once connectivity
+      // comes back, by which point the employee is long gone.
+      otConfirmed: otConfirmed === undefined ? null : otConfirmed,
       createdAt: Date.now(),
     });
   }
@@ -878,7 +917,7 @@ window.EssViews.attendance = (function () {
     for (const item of pending) {
       try {
         const path = await Store.uploadAttendancePhoto(emp.id, item.photoBlob, item.kind);
-        await saveClockEvent(emp, item.kind, path, item.timeStr, item.date, item.locationText);
+        await saveClockEvent(emp, item.kind, path, item.timeStr, item.date, item.locationText, item.otConfirmed === null ? undefined : item.otConfirmed);
         await OfflineQueue.remove(item.localId);
         syncedAny = true;
       } catch (e) {
@@ -945,19 +984,43 @@ window.EssViews.attendance = (function () {
         showPreview(bdEl, canvas, main, emp, kind, stream, locationText);
       });
     });
-    qs('#btn-confirm', bdEl).addEventListener('click', () => {
+    qs('#btn-confirm', bdEl).addEventListener('click', async () => {
+      // Locked immediately so a rapid double-click/tap can't fire this twice while the
+      // (possibly multi-step, see below) confirm flow is still running.
       const confirmBtn = qs('#btn-confirm', bdEl);
       confirmBtn.disabled = true;
       confirmBtn.textContent = 'Saving…';
+
       // Captured now, at the moment of confirming — never recomputed later, so a clock-in/
       // out that ends up queued offline still records the real time it actually happened.
       const now = new Date();
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       const date = todayISO();
 
+      // Ask "is this overtime?" first, right while the employee's still here -- only for a
+      // Time Out that would actually exceed 8 hours/their own schedule. This replaces the
+      // camera-preview modal with a fresh Yes/No one (the camera stream itself, a separate
+      // MediaStream, keeps running untouched underneath either way), so confirmBtn above
+      // becomes a stale/detached reference once this runs -- askedOvertime tracks that, so
+      // the error-recovery path below knows not to try reusing it.
+      let otConfirmed;
+      let askedOvertime = false;
+      if (kind === 'out') {
+        const rec = Store.attendanceForDate(date).find(r => r.employeeId === emp.id);
+        if (rec && rec.timeIn) {
+          const wouldExceed = emp.defaultTimeOut
+            ? exceedsDefaultTimeOut(rec.timeIn, timeStr, emp.defaultTimeOut)
+            : paidHoursBetween(rec.timeIn, timeStr, emp) > 8;
+          if (wouldExceed) {
+            askedOvertime = true;
+            otConfirmed = await confirmOvertime();
+          }
+        }
+      }
+
       canvas.toBlob(async (blob) => {
         if (!navigator.onLine) {
-          await queueOffline(emp, kind, blob, timeStr, date, locationText);
+          await queueOffline(emp, kind, blob, timeStr, date, locationText, otConfirmed);
           stopStream(stream);
           closeEssModal();
           toast('📴 No connection — queued offline. Will sync automatically once you\'re back online.');
@@ -966,21 +1029,30 @@ window.EssViews.attendance = (function () {
         }
         try {
           const path = await Store.uploadAttendancePhoto(emp.id, blob, kind);
-          await saveClockEvent(emp, kind, path, timeStr, date, locationText);
+          await saveClockEvent(emp, kind, path, timeStr, date, locationText, otConfirmed);
           stopStream(stream);
           closeEssModal();
           toast(kind === 'in' ? '✔ Time In recorded' : '✔ Time Out recorded');
           render(main, emp);
         } catch (e) {
           if (isLikelyNetworkError(e)) {
-            await queueOffline(emp, kind, blob, timeStr, date, locationText);
+            await queueOffline(emp, kind, blob, timeStr, date, locationText, otConfirmed);
             stopStream(stream);
             closeEssModal();
             toast('📴 Connection lost — queued offline. Will sync automatically once you\'re back online.');
             render(main, emp);
-          } else {
+          } else if (!askedOvertime) {
+            // The original camera-preview modal (and this exact button) is still on
+            // screen -- safe to just unlock it for a retry.
             confirmBtn.disabled = false;
             confirmBtn.textContent = `Confirm ${kind === 'in' ? 'Time In' : 'Time Out'}`;
+          } else {
+            // The overtime question replaced that modal already -- nothing left to
+            // re-enable, so just close out and let them start the whole capture over.
+            stopStream(stream);
+            closeEssModal();
+            toast('Could not save — try again.');
+            render(main, emp);
           }
         }
       }, 'image/jpeg', 0.85);
