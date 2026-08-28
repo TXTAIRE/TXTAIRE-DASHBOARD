@@ -4,9 +4,19 @@
 // so any edit made here (English or Filipino) shows up on My Portal immediately, the
 // same realtime way every other admin edit in this app does.
 window.Views.codeOfDiscipline = (function () {
+  // Persists across re-renders on this page (add/edit/delete all call render(main) again)
+  // so checking a few rows then, say, editing an unrelated one doesn't lose the selection.
+  // Cleared after a successful bulk delete, and any id that no longer exists is dropped
+  // when rendering so a stale checkmark can't linger past its row being removed.
+  let selectedIds = new Set();
+
   function render(main) {
     const offenses = Store.listDisciplineOffenses();
     const isEmpty = offenses.length === 0;
+    const offenseIds = new Set(offenses.map(o => o.id));
+    selectedIds.forEach(id => { if (!offenseIds.has(id)) selectedIds.delete(id); });
+    const selectedCount = selectedIds.size;
+    const allSelected = !isEmpty && selectedCount === offenses.length;
 
     main.innerHTML = `
       <div class="crumb">HR</div>
@@ -15,7 +25,10 @@ window.Views.codeOfDiscipline = (function () {
           <h1 class="page-title">Code of Discipline</h1>
           <div class="page-sub">The offense catalog used on the Employee Discipline (NTE) form and shown to employees on My Portal, in English and Filipino. Changes here appear on My Portal right away.</div>
         </div>
-        ${!isEmpty ? '<button class="btn btn-primary" id="btn-add-offense">+ Add Offense</button>' : ''}
+        <div style="display:flex; gap:8px;">
+          ${selectedCount > 0 ? `<button class="btn btn-danger" id="btn-delete-selected">🗑 Delete Selected (${selectedCount})</button>` : ''}
+          ${!isEmpty ? '<button class="btn btn-primary" id="btn-add-offense">+ Add Offense</button>' : ''}
+        </div>
       </div>
       ${isEmpty ? `
       <div class="panel" style="padding:20px;">
@@ -25,10 +38,14 @@ window.Views.codeOfDiscipline = (function () {
       ` : `
       <div class="panel">
         <table>
-          <thead><tr><th>Category</th><th>Offense (English)</th><th>Offense (Filipino)</th><th>Schedule</th><th></th></tr></thead>
+          <thead><tr>
+            <th style="width:32px;"><input type="checkbox" id="chk-select-all" ${allSelected ? 'checked' : ''} aria-label="Select all offenses" /></th>
+            <th>Category</th><th>Offense (English)</th><th>Offense (Filipino)</th><th>Schedule</th><th></th>
+          </tr></thead>
           <tbody>
             ${offenses.map(o => `
               <tr>
+                <td><input type="checkbox" class="chk-offense" data-id="${o.id}" ${selectedIds.has(o.id) ? 'checked' : ''} aria-label="Select ${escapeHtml(o.label)}" /></td>
                 <td class="dim">${escapeHtml(o.category)}</td>
                 <td class="name" style="max-width:320px;">${escapeHtml(o.label)}</td>
                 <td class="dim" style="max-width:320px;">${escapeHtml(o.labelFil || '—')}</td>
@@ -70,9 +87,40 @@ window.Views.codeOfDiscipline = (function () {
       if (!o) return;
       if (!confirm(`Delete "${o.label}"? This cannot be undone.`)) return;
       await Store.deleteDisciplineOffense(o.id);
+      selectedIds.delete(o.id);
       toast('✔ Offense deleted.');
       render(main);
     }));
+
+    const selectAll = qs('#chk-select-all', main);
+    if (selectAll) selectAll.addEventListener('change', () => {
+      if (selectAll.checked) offenses.forEach(o => selectedIds.add(o.id));
+      else selectedIds.clear();
+      render(main);
+    });
+    qsa('.chk-offense', main).forEach(cb => cb.addEventListener('change', () => {
+      if (cb.checked) selectedIds.add(cb.dataset.id);
+      else selectedIds.delete(cb.dataset.id);
+      render(main);
+    }));
+    const deleteSelectedBtn = qs('#btn-delete-selected', main);
+    if (deleteSelectedBtn) deleteSelectedBtn.addEventListener('click', async () => {
+      const ids = [...selectedIds];
+      if (!ids.length) return;
+      if (!confirm(`Delete ${ids.length} selected offense${ids.length > 1 ? 's' : ''}? This cannot be undone.`)) return;
+      deleteSelectedBtn.disabled = true;
+      deleteSelectedBtn.textContent = 'Deleting…';
+      try {
+        await Promise.all(ids.map(id => Store.deleteDisciplineOffense(id)));
+        toast(`✔ ${ids.length} offense${ids.length > 1 ? 's' : ''} deleted.`);
+        selectedIds.clear();
+        render(main);
+      } catch (err) {
+        toast('Could not delete all selected offenses — please try again.');
+        deleteSelectedBtn.disabled = false;
+        deleteSelectedBtn.textContent = `🗑 Delete Selected (${ids.length})`;
+      }
+    });
   }
 
   function openOffenseForm(main, existing) {
