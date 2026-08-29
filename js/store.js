@@ -377,118 +377,215 @@ function isLateArrival(defaultTimeIn, actualTimeIn) {
   return toMin(actualTimeIn) > toMin(defaultTimeIn) + TARDINESS_GRACE_MINUTES;
 }
 
-// TXTAIRE OPC Code of Discipline, Series 1, 2025 Edition -- the full offense catalog, one
-// entry per row of the document's "Schedule of Penalties" tables, grouped exactly as the
-// document groups them. `schedule` is the penalty for the 1st, 2nd, 3rd... occurrence
-// (within a trailing 12-month period, per the document) as a code: 'VW' (Verbal Warning),
-// 'WW' (Written Warning), an integer+'S' (days of Suspension without pay), or 'D'
-// (Dismissal). Where the document splits one offense into loss-amount sub-tiers (e.g.
-// "Minor loss" vs "Major loss"), each sub-tier is its own catalog entry, matching how the
-// document itself tables them. Shared by the admin Disciplinary case form (offense
-// selection + suggested-penalty lookup) and the ESS "Code of Discipline" reference page.
+// The four offense classes of the TXTAIRE OPC Code of Discipline, Series 2, 2026 Edition
+// (Sec. 3.3-3.4). The Series 1 Edition wrote a penalty out per offense with no stated
+// scheme, so like offenses drew unlike penalties; this edition assigns every offense a
+// class and states the penalty for each class exactly once -- which is why `schedule`
+// below is DERIVED from `klass` rather than typed per offense, so the two can never drift.
+// Codes are the same vocabulary the admin editor and penaltyLabel() already used: 'VW'
+// (Verbal Warning), 'WW' (Written Warning), integer+'S' (days of suspension without pay),
+// 'D' (Dismissal). Suspension never exceeds 15 days as a PENALTY in this edition -- the
+// previous edition's 30-day penalties risked being treated as constructive dismissal.
+const PENALTY_CLASSES = {
+  A: { label: 'Light', labelFil: 'Magaan', schedule: ['VW', 'WW', '3S', '7S'] },
+  B: { label: 'Less Grave', labelFil: 'Katamtaman', schedule: ['WW', '3S', '7S', 'D'] },
+  C: { label: 'Grave', labelFil: 'Mabigat', schedule: ['7S', '15S', 'D'] },
+  D: { label: 'Serious', labelFil: 'Napakabigat', schedule: ['D'] },
+};
+
+function classSchedule(klass) {
+  const c = PENALTY_CLASSES[klass];
+  return c ? c.schedule.slice() : [];
+}
+
+// TXTAIRE OPC Code of Discipline, Series 2, 2026 Edition -- the full offense catalog, one
+// entry per row of the document's Part IV "Schedule of Offenses" tables, grouped exactly
+// as the document groups them. Each offense carries a `klass` (A/B/C/D per
+// PENALTY_CLASSES above); `schedule` is filled in from that class immediately below this
+// array, so an offense's penalty progression always matches the single Schedule of
+// Penalties in Sec. 3.4 of the document.
+//
+// `code` values are deliberately carried over unchanged from the Series 1 catalog wherever
+// the offense survived into this edition, so disciplinaryCases rows already recorded
+// against an old code still resolve to their offense (and still get a suggested-penalty
+// lookup) instead of silently going blank. Offenses this edition dropped -- notably the
+// Series 1 entry penalising an off-duty fight away from company premises unconnected to
+// work, which Sec. 1.1 now puts outside the Code's scope altogether -- are simply absent;
+// suggestedPenaltyFor() already returns null for an unknown code, and the case's stored
+// `violation` text still displays.
+//
+// Where the document splits one offense into loss-amount sub-tiers, each sub-tier is its
+// own catalog entry, matching how the document itself tables them.
+//
 // labelFil/categoryFil are a first-pass Filipino translation for the ESS "Code of
 // Discipline" page's language toggle (js/ess-views/discipline.js) -- written in plain,
 // everyday/spoken Filipino (the way HR would actually explain it to an employee), not
 // formal literary Tagalog, and mixing in common workplace English terms (time card, ID,
-// supervisor, invoice, etc.) the way Filipino offices actually talk. Same disclaimer as
-// the rest of this app's Filipino strings (js/ess-i18n.js): a native/fluent speaker
-// should review these before treating them as polished/legally authoritative. English
+// supervisor, PPE, etc.) the way Filipino offices actually talk. Same disclaimer as the
+// rest of this app's Filipino strings (js/ess-i18n.js): a native/fluent speaker should
+// review these before treating them as polished/legally authoritative. English
 // label/category stay the canonical fields the admin Disciplinary case form uses.
 const DISCIPLINE_OFFENSE_CATALOG = [
-  { category: 'Against Attendance', categoryFil: 'Mga Paglabag sa Attendance', offenses: [
-    { code: 'simple-absence', label: 'Simple case of Absence (1–2 days unauthorized)', labelFil: 'Karaniwang Pagliban (1–2 araw na walang pahintulot)', schedule: ['WW', '3S', '5S', 'D'] },
-    { code: 'excessive-absence', label: 'Excessive Absence (3–5 days unauthorized)', labelFil: 'Sobrang Pagliban (3–5 araw na walang pahintulot)', schedule: ['5S', 'D'] },
-    { code: 'abandonment', label: 'Abandonment of Work (more than 5 days unauthorized, or clear intent not to return)', labelFil: 'Pag-iwan sa Trabaho (mahigit 5 araw na wala, o halatang ayaw nang bumalik)', schedule: ['D'] },
+  { category: 'Attendance and Punctuality', categoryFil: 'Attendance at Pagiging Maagap', offenses: [
+    { code: 'excessive-tardiness-count', klass: 'A', label: 'Tardiness — reporting for work after the 15-minute grace period, four (4) or more times within one calendar month', labelFil: 'Pagiging huli — lampas sa 15 minutong grace period, apat (4) o higit pang beses sa loob ng isang buwan' },
+    { code: 'excessive-tardiness', klass: 'B', label: 'Excessive tardiness — accumulated tardiness of 300 minutes or more within one calendar month', labelFil: 'Sobrang late — umabot sa 300 minuto o higit pa ang kabuuang late sa loob ng isang buwan' },
+    { code: 'undertime', klass: 'A', label: 'Undertime — leaving before the end of the shift without the approval of the immediate superior, twice or more within one calendar month', labelFil: 'Undertime — maagang pag-uwi nang walang pahintulot ng supervisor, dalawang beses o higit pa sa isang buwan' },
+    { code: 'late-leave-filing', klass: 'A', label: 'Absence for one day where you gave timely notice and had a legitimate reason, but failed to file the leave form on your first day back', labelFil: 'Pagliban ng isang araw na may maagang paalam at totoong dahilan, pero hindi nag-file ng leave form sa unang araw ng balik' },
+    { code: 'simple-absence', klass: 'B', label: 'Absence without prior approved leave and without notice (no call, no show) for one working day', labelFil: 'Pagliban nang walang aprubadong leave at walang paalam (walang tawag, hindi pumasok) ng isang araw' },
+    { code: 'excessive-absence', klass: 'C', label: 'Absence without approved leave for two (2) to four (4) consecutive working days', labelFil: 'Pagliban nang walang aprubadong leave, dalawa (2) hanggang apat (4) na magkakasunod na araw' },
+    { code: 'abandonment', klass: 'D', label: 'Absence without approved leave for five (5) or more consecutive working days, or failure to return after an approved leave expired, where you cannot be contacted and there is a clear indication of an intention not to return', labelFil: 'Pagliban nang walang aprubadong leave ng lima (5) o higit pang magkakasunod na araw, o hindi pagbalik pagkatapos ng leave, na hindi ka na makontak at halatang ayaw mo nang bumalik' },
+    { code: 'missed-overtime-callout', klass: 'B', label: 'Failure to report for a scheduled and previously accepted overtime, emergency call-out or weekend service assignment, without valid reason and without notice', labelFil: 'Hindi pagpasok sa napagkasunduang overtime, emergency call-out, o weekend na trabaho, nang walang dahilan at walang paalam' },
+    { code: 'wasting-time', klass: 'B', label: 'Leaving the assigned jobsite, client premises or office during working hours without the permission of the immediate superior', labelFil: 'Pag-alis sa jobsite, sa kliyente, o sa opisina sa oras ng trabaho nang walang pahintulot ng supervisor' },
+    { code: 'wrong-site-report', klass: 'B', label: 'Failure to report to the assigned client site, or reporting to a site other than the one assigned, without authority', labelFil: 'Hindi pagpunta sa itinalagang site ng kliyente, o pagpunta sa ibang site nang walang pahintulot' },
   ]},
-  { category: 'On Timekeeping', categoryFil: 'Mga Paglabag sa Time Card / Oras ng Trabaho', offenses: [
-    { code: 'falsifying-timecards', label: 'Falsifying time cards or any other timekeeping records', labelFil: 'Pagpeke ng time card o kahit anong record ng oras', schedule: ['D'] },
-    { code: 'benefiting-falsified-timecards', label: "Knowingly receiving salary or allowances by virtue of falsified time cards, vouchers, receipts or the like", labelFil: 'Sadyang pagtanggap ng sahod dahil sa pekeng time card, voucher, o resibo', schedule: ['D'] },
-    { code: 'false-reason-absent-late', label: 'Giving false reason for being absent or late', labelFil: 'Pagsisinungaling sa dahilan ng pagliban o pagiging huli', schedule: ['3S', '5S', 'D'] },
-    { code: 'punching-others-timecard', label: "Punching another employee's timecard", labelFil: 'Pag-punch ng time card ng kasamahan', schedule: ['D', 'D'] },
-    { code: 'beneficiary-of-punching', label: 'Being the employee for whose benefit another employee’s timecard was punched, if done with your knowledge, consent or acquiescence', labelFil: 'Pagpapa-punch ng sariling time card sa iba, alam mo o pumayag ka', schedule: ['D'] },
-    { code: 'repeated-failure-punch', label: 'Repeated failure or refusal to punch time cards (for card-punching employees)', labelFil: 'Paulit-ulit na hindi mag-punch ng time card', schedule: ['3S', '5S', 'D'] },
-    { code: 'excessive-tardiness', label: 'Excessive Tardiness (late for a total of 260 minutes or more in one month)', labelFil: 'Sobrang Late (260 minuto o higit pa ang total na huli sa loob ng isang buwan)', schedule: ['WW', 'WW', '3S', '5S', 'D'] },
+
+  { category: 'Timekeeping and Records', categoryFil: 'Time Record at Dokumento', offenses: [
+    { code: 'repeated-failure-punch', klass: 'A', label: 'Unintentional failure to log in or log out on the biometric device or timesheet, three (3) or more times within one calendar month. The hours you actually worked are still paid in full through a Time Correction Form — no deduction is made and you are not marked absent for hours actually worked', labelFil: 'Hindi sinasadyang hindi pag-log in o log out sa biometrics o timesheet, tatlo (3) o higit pang beses sa isang buwan. Babayaran pa rin nang buo ang oras na talagang pinasukan mo sa pamamagitan ng Time Correction Form — walang bawas at hindi ka ituturing na absent' },
+    { code: 'refusal-punch', klass: 'B', label: 'Repeated failure or refusal to log in or log out after having been issued a written warning for the same conduct', labelFil: 'Paulit-ulit na hindi pag-log in o log out matapos kang mabigyan ng sulat na babala sa parehong bagay' },
+    { code: 'late-reports', klass: 'A', label: 'Failure to submit a required timesheet, service report, job order or accomplishment report within the prescribed period', labelFil: 'Hindi pagpasa ng timesheet, service report, job order, o accomplishment report sa takdang panahon' },
+    { code: 'false-reason-absent-late', klass: 'C', label: 'Giving a false reason to justify an absence, tardiness or undertime', labelFil: 'Pagsisinungaling sa dahilan ng pagliban, pagiging huli, o undertime' },
+    { code: 'punching-others-timecard', klass: 'D', label: "Logging in or logging out on behalf of another employee, or allowing or asking another employee to do so on your behalf. Both employees are liable", labelFil: 'Pag-log in o log out para sa kasamahan, o pagpapagawa nito sa iba para sa iyo. Pareho kayong may pananagutan' },
+    { code: 'falsifying-timecards', klass: 'D', label: 'Falsifying, altering or tampering with a time record, timesheet, daily time record, service report, job order, gate pass, delivery receipt or any other company or client record', labelFil: 'Pagpeke, pagbago, o pakikialam sa time record, timesheet, DTR, service report, job order, gate pass, delivery receipt, o kahit anong record ng kompanya o kliyente' },
+    { code: 'benefiting-falsified-timecards', klass: 'D', label: 'Knowingly receiving salary, overtime pay, allowance, reimbursement or any benefit you are not entitled to by reason of a falsified or erroneous record, and failing to report it within a reasonable time', labelFil: 'Sadyang pagtanggap ng sahod, overtime, allowance, o benepisyo na hindi naman para sa iyo dahil sa pekeng o maling record, at hindi ito iniulat agad' },
+    { code: 'tampering-timekeeping', klass: 'C', label: "Refusing to submit to, or tampering with, the Company's timekeeping system, including the biometric device", labelFil: 'Pagtanggi o pakikialam sa timekeeping system ng kompanya, kasama na ang biometrics' },
   ]},
-  { category: 'Against Health, Security and Safety', categoryFil: 'Kalusugan, Seguridad, at Kaligtasan', offenses: [
-    { code: 'health-medical-noncompliance', label: 'Failure or refusal to comply with the health or medical requirement of the company', labelFil: 'Ayaw sumunod sa health o medical na requirement ng kompanya', schedule: ['WW', '3S', '5S', 'D'] },
-    { code: 'concealing-communicable-disease', label: 'Deliberately concealing a suspected communicable disease or ailment', labelFil: 'Sadyang pagtatago ng nakakahawang sakit', schedule: ['WW', '3S', '5S', 'D'] },
-    { code: 'disregard-cleanliness', label: 'Willful disregard of directives relative to cleanliness and orderliness (littering, leaving soiled dishes, dirty comfort room)', labelFil: 'Hindi pagsunod sa kalinisan (nangangalat, hindi naglilinis, maruming CR)', schedule: ['WW', '3S', '5S', 'D'] },
-    { code: 'lending-id', label: 'Lending an ID to a co-employee or third person not connected with the Company', labelFil: 'Pagpapahiram ng ID sa kasamahan o sa taong wala sa kompanya', schedule: ['3S', '10S', '15S', 'D'] },
-    { code: 'unauthorized-weapons', label: 'Unauthorized carrying or possession of firearms, explosive and/or other deadly weapons and/or paraphernalia within Company premises', labelFil: 'Pagdadala ng baril, pampasabog, o ibang mapanganib na armas sa loob ng kompanya', schedule: ['D'] },
-    { code: 'conviction-crime', label: 'Conviction of a crime', labelFil: 'Nahatulan sa isang kaso ng krimen', schedule: ['D'] },
-    { code: 'forcing-entry-after-hours', label: 'Forcing entry into the office after office hours', labelFil: 'Sapilitang pagpasok sa opisina pagkatapos ng oras', schedule: ['5S', '10S', 'D'] },
-    { code: 'unauthorized-opening', label: "Unauthorized opening of another's office, locker or drawer", labelFil: 'Nagbukas ng opisina, locker, o drawer ng iba nang walang pahintulot', schedule: ['5S', '10S', 'D'] },
-    { code: 'disobey-safety', label: "Willful disobedience to safety instructions in connection with the employee's work", labelFil: 'Hindi pagsunod sa mga patakaran sa kaligtasan', schedule: ['30S', 'D'] },
-    { code: 'failure-report-accident', label: 'Failure to immediately report the occurrence of an accident or the presence of an unsafe condition', labelFil: 'Hindi agad pag-report ng aksidente o delikadong sitwasyon', schedule: ['30S', 'D'] },
+
+  { category: 'Health, Safety and Security', categoryFil: 'Kalusugan, Kaligtasan, at Seguridad', offenses: [
+    { code: 'disregard-cleanliness', klass: 'A', label: 'Failure to observe housekeeping and orderliness in the office, stockroom, service vehicle or jobsite; leaving tools, materials or refuse uncleared', labelFil: 'Hindi pagpapanatili ng kalinisan at kaayusan sa opisina, stockroom, service vehicle, o jobsite; hindi paglilinis ng gamit, materyales, o basura' },
+    { code: 'smoking-vaping', klass: 'A', label: 'Smoking or vaping outside a designated smoking area, or within client premises where it is prohibited', labelFil: 'Paninigarilyo o pag-vape sa labas ng smoking area, o sa loob ng kliyente kung saan bawal ito' },
+    { code: 'health-medical-noncompliance', klass: 'A', label: 'Failure or refusal to comply with a lawful health or medical requirement of the Company, such as the annual physical examination or a fit-to-work clearance', labelFil: 'Hindi pagsunod sa health o medical requirement ng kompanya, tulad ng taunang physical exam o fit-to-work clearance' },
+    { code: 'ppe-noncompliance', klass: 'B', label: 'Failure to wear or properly use the prescribed personal protective equipment (helmet, safety shoes, gloves, eye protection, harness, insulated tools) while on duty', labelFil: 'Hindi pagsuot o maling paggamit ng PPE (helmet, safety shoes, guwantes, salamin sa mata, harness, insulated na kagamitan) habang naka-duty' },
+    { code: 'failure-report-accident', klass: 'B', label: 'Failure to immediately report to the immediate superior or the Safety Officer a work-related accident, injury, near-miss, spill, or an unsafe or unhealthy condition', labelFil: 'Hindi agad pag-report sa supervisor o Safety Officer ng aksidente, sugat, muntik nang aksidente, tumapon na kemikal, o delikadong sitwasyon sa trabaho' },
+    { code: 'lending-id', klass: 'B', label: 'Lending your company identification card, access card, gate pass or uniform to another person; or using that of another', labelFil: 'Pagpapahiram ng ID, access card, gate pass, o uniform sa iba; o paggamit ng sa iba' },
+    { code: 'concealing-communicable-disease', klass: 'C', label: 'Deliberately concealing a known communicable disease, or a medical condition that renders you unfit for the work assigned, where concealment places you or others at risk. This does not apply to HIV, Hepatitis B or tuberculosis status, which you never have to disclose and which can never be a ground for discipline', labelFil: 'Sadyang pagtatago ng nakakahawang sakit o kondisyong hindi ka nababagay sa trabahong bigay sa iyo, kung dahil dito ay nalalagay sa panganib ang sarili mo o ang iba. Hindi kasama rito ang HIV, Hepatitis B, o TB — hindi mo kailangang sabihin ang mga ito at hindi kailanman puwedeng maging dahilan ng parusa' },
+    { code: 'forcing-entry-after-hours', klass: 'C', label: "Forcing entry into the office, stockroom, tool crib or client premises outside authorized hours; or opening another person's locker, drawer, bag or workstation without authority", labelFil: 'Sapilitang pagpasok sa opisina, stockroom, tool crib, o sa kliyente sa labas ng oras; o pagbukas ng locker, drawer, bag, o workstation ng iba nang walang pahintulot' },
+    { code: 'disobey-safety', klass: 'D', label: 'Willful refusal to follow a safety instruction, or willful violation of a safety rule, which exposes you or any other person to the danger of death or serious injury — such as working at height without fall protection, working on energised equipment without lock-out / tag-out, defeating a machine guard or interlock, or operating equipment you are not certified to operate. Where the violation was inadvertent and no injury resulted, the PPE item above applies instead', labelFil: 'Sadyang hindi pagsunod sa safety instruction o safety rule na naglalagay sa iyo o sa iba sa panganib ng kamatayan o malubhang sugat — tulad ng pagtatrabaho sa mataas na walang harness, pagtatrabaho sa may kuryente nang walang lock-out/tag-out, pagtanggal ng safety guard, o pag-operate ng makinang wala kang certification. Kung hindi sinasadya at walang nasaktan, ang PPE na item sa itaas ang gagamitin' },
+    { code: 'unauthorized-weapons', klass: 'D', label: 'Unauthorized possession or carrying of a firearm, explosive, or other deadly weapon within company or client premises, or in a company vehicle', labelFil: 'Pagdadala ng baril, pampasabog, o ibang mapanganib na armas sa loob ng kompanya o ng kliyente, o sa sasakyan ng kompanya, nang walang pahintulot' },
+    { code: 'prohibited-drugs', klass: 'D', label: 'Use, possession, sale, distribution, or being under the influence of dangerous drugs within company or client premises, in a company vehicle, or while on duty. Testing follows the safeguards in the Code — a DOH-accredited laboratory and a confirmatory test — and referral for treatment applies in appropriate cases', labelFil: 'Paggamit, pagdadala, pagbebenta, pamimigay, o pagiging lasing sa droga sa loob ng kompanya o ng kliyente, sa sasakyan ng kompanya, o habang naka-duty. May tamang proseso ang pag-test — DOH-accredited na lab at confirmatory test — at may referral sa gamutan kung nararapat' },
+    { code: 'drinking-alcohol', klass: 'C', label: 'Reporting for work under the influence of alcohol; or drinking alcoholic beverages within company or client premises or during working hours. This is treated as a Serious offense where you are assigned to driving, work at height, or work on energised equipment', labelFil: 'Pagpasok na lasing; o pag-inom ng alak sa loob ng kompanya o ng kliyente, o sa oras ng trabaho. Ituturing itong Napakabigat kung ikaw ay nagmamaneho, nagtatrabaho sa mataas, o sa may kuryente' },
+    { code: 'conviction-crime', klass: 'D', label: 'Final conviction by a court of a crime involving moral turpitude, or of any crime against the Company, its officers, employees, clients or their property. A pending charge is not a conviction', labelFil: 'Pinal na hatol ng korte sa krimeng may kinalaman sa moralidad, o sa anumang krimen laban sa kompanya, sa opisyal, kasamahan, kliyente, o ari-arian nila. Ang nakabinbing kaso ay hindi pa hatol' },
   ]},
-  { category: 'Related to Job Performance', categoryFil: 'Performance sa Trabaho', offenses: [
-    { code: 'sabotage', label: 'Sabotage or deliberate acts intended to disrupt operations, whether or not damage was caused', labelFil: 'Sadyang pagsira sa operasyon ng kompanya', schedule: ['D'] },
-    { code: 'espionage', label: 'Industrial or other forms of espionage — disclosing trade secrets, confidential materials or documents without proper authorization', labelFil: 'Pagbunyag ng trade secret o confidential na bagay ng kompanya', schedule: ['D'] },
-    { code: 'gross-misconduct-controls', label: 'Gross misconduct arising from blatant disregard of or deviation from established controls, policies and procedure', labelFil: 'Lantarang hindi pagsunod sa patakaran o proseso ng kompanya', schedule: ['10S', 'D'] },
-    { code: 'gross-misconduct-bribery', label: "Gross misconduct arising from accepting, directly or indirectly, money, offer, promise and/or gift in consideration of any act pertaining to one's work", labelFil: 'Pagtanggap ng pera, regalo, o pabor bilang kapalit ng anumang gawain sa trabaho', schedule: ['D'] },
-    { code: 'insubordination', label: 'Disobedience, insubordination or refusal to obey legitimate instruction', labelFil: 'Pagsuway o pagtanggi sa tamang utos ng superyor', schedule: ['10S', '15S', 'D'] },
-    { code: 'negligence-minor-loss', label: 'Negligence or gross inefficiency resulting in minor/unquantified loss (₱200–₱5,000)', labelFil: 'Kapabayaan na nagresulta sa maliit na pinsala (₱200–₱5,000)', schedule: ['10S', '15S', 'D'] },
-    { code: 'negligence-major-loss', label: 'Negligence or gross inefficiency resulting in major loss (over ₱5,000, up to ₱30,000)', labelFil: 'Kapabayaan na nagresulta sa malaking pinsala (₱5,000–₱30,000)', schedule: ['30S', 'D'] },
-    { code: 'unauthorized-broker', label: "Acting as broker or agent, or negotiating on behalf of a unit owner or another person without authority to do so", labelFil: 'Nag-broker o nakipag-usap sa ngalan ng may-ari ng unit nang walang pahintulot', schedule: ['5S', 'D'] },
-    { code: 'wasting-time', label: 'Wasting time, loafing, loitering, or leaving place of work during working hours without permission from supervisor', labelFil: 'Pag-aaksaya ng oras o pag-alis sa trabaho nang walang pahintulot ng supervisor', schedule: ['WW', '3S', '5S', 'D'] },
-    { code: 'sleeping-on-duty', label: 'Sleeping during working hours or deliberately evading assigned work', labelFil: 'Pagtulog habang naka-duty o pag-iwas sa trabaho', schedule: ['WW', '3S', '5S', 'D'] },
-    { code: 'hindering-output', label: 'Willful holding back, slow down, hindering or limiting work output, or inducing/encouraging a fellow employee to do so', labelFil: 'Sadyang pagpapabagal ng trabaho, o paghikayat sa iba na gawin din ito', schedule: ['5S', '15S', 'D'] },
-    { code: 'uniform-noncompliance', label: 'Failure to wear prescribed work uniform or attire when on duty, except when excused', labelFil: 'Hindi pagsuot ng uniform sa trabaho nang walang dahilan', schedule: ['VW', 'WW', '3S', '5S'] },
-    { code: 'phone-unreachable', label: "Deliberate failure to make their company-provided phone available/reachable (plus ₱500 fine / confiscation of unit)", labelFil: 'Sadyang hindi pagsagot o pagbukas ng cellphone na ibinigay ng kompanya (may ₱500 multa o kukunin ang unit)', schedule: ['VW', 'WW'] },
+
+  { category: 'Job Performance', categoryFil: 'Performance sa Trabaho', offenses: [
+    { code: 'loafing', klass: 'A', label: 'Wasting time, loafing, idling, or engaging in personal activities during working hours', labelFil: 'Pag-aaksaya ng oras, tambay, o paggawa ng personal na bagay sa oras ng trabaho' },
+    { code: 'uniform-noncompliance', klass: 'A', label: 'Failure to wear the prescribed uniform, or to maintain the prescribed grooming and appearance, while on duty, except when excused', labelFil: 'Hindi pagsuot ng uniform o hindi maayos na ayos habang naka-duty, maliban kung may pahintulot' },
+    { code: 'phone-unreachable', klass: 'A', label: 'Failure to keep the company-issued mobile phone or radio charged, available and reachable during working hours or while on call. No fine is imposed and no unit is confiscated for this offense', labelFil: 'Hindi pag-charge o hindi pagsagot sa cellphone o radyo na bigay ng kompanya sa oras ng trabaho o habang naka-on call. Walang multa at hindi kukunin ang unit dahil dito' },
+    { code: 'sleeping-on-duty', klass: 'B', label: 'Sleeping during working hours, or deliberately evading assigned work. This is treated as Grave where you are driving, working at height, or monitoring energised or pressurised equipment', labelFil: 'Pagtulog sa oras ng trabaho, o sadyang pag-iwas sa trabaho. Ituturing itong Mabigat kung nagmamaneho ka, nasa mataas, o nagbabantay ng makinang may kuryente o presyon' },
+    { code: 'negligence-minor-loss', klass: 'B', label: 'Simple negligence or inefficiency in the performance of duties resulting in no loss, or in a loss of not more than ₱5,000', labelFil: 'Simpleng kapabayaan o kakulangan sa trabaho na walang pinsala, o may pinsalang hindi hihigit sa ₱5,000' },
+    { code: 'negligence-major-loss', klass: 'C', label: 'Negligence in the performance of duties resulting in a loss of more than ₱5,000 but not more than ₱30,000', labelFil: 'Kapabayaan sa trabaho na may pinsalang higit sa ₱5,000 pero hindi hihigit sa ₱30,000' },
+    { code: 'gross-habitual-neglect', klass: 'D', label: 'Gross and habitual neglect of duties; or negligence resulting in a loss of more than ₱30,000; or negligence resulting in serious physical injury to any person', labelFil: 'Malubha at paulit-ulit na kapabayaan sa trabaho; o kapabayaang may pinsalang higit sa ₱30,000; o kapabayaang nagdulot ng malubhang sugat kaninuman' },
+    { code: 'insubordination', klass: 'C', label: 'Willful disobedience of, or refusal to carry out, a lawful and reasonable instruction of a superior in connection with your work. The order must have been lawful and reasonable, made known to you, and related to the duties you were engaged to perform — refusing an unlawful order, or refusing work that is imminently dangerous, is not disobedience', labelFil: 'Sadyang pagsuway o pagtanggi sa makatuwiran at legal na utos ng superyor tungkol sa trabaho mo. Kailangang legal at makatuwiran ang utos, alam mo ito, at may kinalaman sa trabaho mo — ang pagtanggi sa iligal na utos o sa delikadong gawain ay hindi pagsuway' },
+    { code: 'hindering-output', klass: 'C', label: 'Willful holding back, slowing down or limiting work output; or inducing or encouraging a fellow employee to do so. This does not apply to lawful concerted activity, which is a protected right', labelFil: 'Sadyang pagpapabagal o paglimita ng trabaho; o paghikayat sa kasamahan na gawin ito. Hindi kasama rito ang legal na sama-samang pagkilos, na karapatan ninyo' },
+    { code: 'unauthorized-broker', klass: 'C', label: 'Acting as a broker or agent for, or negotiating on behalf of, a client, unit owner, supplier or third person in a transaction involving the Company, without written authority', labelFil: 'Pagiging broker o ahente, o pakikipag-usap para sa kliyente, may-ari ng unit, supplier, o ibang tao sa transaksyon ng kompanya, nang walang nakasulat na pahintulot' },
+    { code: 'gross-misconduct-bribery', klass: 'D', label: 'Accepting or soliciting, directly or indirectly, any sum of money, commission, discount, gift or benefit from a supplier, contractor, client or applicant in consideration of any act pertaining to your work', labelFil: 'Pagtanggap o paghingi, direkta man o hindi, ng pera, komisyon, diskwento, regalo, o benepisyo mula sa supplier, contractor, kliyente, o aplikante kapalit ng anumang bagay sa trabaho mo' },
+    { code: 'espionage', klass: 'D', label: "Disclosing to an unauthorized person, or using for personal benefit, trade secrets, costing, pricing, bid information, client lists, technical drawings, or other confidential information of the Company or of its clients", labelFil: 'Pagbunyag sa hindi awtorisadong tao, o paggamit para sa sarili, ng trade secret, costing, presyo, bid, listahan ng kliyente, technical drawing, o ibang confidential na impormasyon ng kompanya o ng kliyente' },
+    { code: 'sabotage', klass: 'D', label: 'Sabotage, or any deliberate act intended to disrupt operations or to damage the Company, its property, its clients, or the property of its clients, whether or not damage actually resulted', labelFil: 'Sabotahe, o sadyang paggawa ng bagay para guluhin ang operasyon o sirain ang kompanya, ang ari-arian nito, ang kliyente, o ang ari-arian ng kliyente, may pinsala man o wala' },
   ]},
-  { category: 'Against Property', categoryFil: 'Ari-arian ng Kompanya', offenses: [
-    { code: 'willful-damage', label: 'Willful damage or destruction of any company property or equipment owned by the company or its clients', labelFil: 'Sadyang pagsira sa ari-arian ng kompanya o ng kliyente', schedule: ['D'] },
-    { code: 'unauthorized-use-minor', label: 'Unauthorized use of company property or equipment resulting in minor loss (₱100–₱500)', labelFil: 'Hindi pinahintulutang paggamit ng gamit ng kompanya, may maliit na pinsala (₱100–₱500)', schedule: ['5S', '15S', 'D'] },
-    { code: 'unauthorized-use-major', label: 'Unauthorized use of company property or equipment resulting in major loss (over ₱500, up to ₱10,000)', labelFil: 'Hindi pinahintulutang paggamit ng gamit ng kompanya, may malaking pinsala (₱500–₱10,000)', schedule: ['15S', 'D'] },
-    { code: 'malversation', label: "Malversation of Company funds, theft of any Company or Client's property or money, including acquisition under fraudulent or false pretenses", labelFil: 'Pagnanakaw ng pera o ari-arian ng kompanya o kliyente', schedule: ['D'] },
-    { code: 'attempted-removal-no-loss', label: "Attempt to remove or frustrated removal of Company or Client's property without proper authorization, without loss, damage or injury", labelFil: 'Pagtatangkang kunin ang gamit ng kompanya nang walang pahintulot, walang naganap na pinsala', schedule: ['15S', '30S', 'D'] },
-    { code: 'attempted-removal-with-loss', label: "Attempt to remove or frustrated removal of Company or Client's property without proper authorization, with loss, damage or injury", labelFil: 'Pagtatangkang kunin ang gamit ng kompanya nang walang pahintulot, may naganap na pinsala', schedule: ['D'] },
-    { code: 'carelessness-minor-loss', label: "Carelessness or improper use of company or client's property, materials and/or equipment — minor loss (₱100–₱5,000)", labelFil: 'Kapabayaan sa gamit ng kompanya, may maliit na pinsala (₱100–₱5,000)', schedule: ['5S', '15S', 'D'] },
-    { code: 'carelessness-major-loss', label: "Carelessness or improper use of company or client's property, materials and/or equipment — major loss (over ₱5,000, up to ₱30,000)", labelFil: 'Kapabayaan sa gamit ng kompanya, may malaking pinsala (₱5,000–₱30,000)', schedule: ['D'] },
-    { code: 'vandalism', label: "Any act of vandalism that damages, deforms or destroys Company or Client's property, or the property of others, inside Company premises", labelFil: 'Pagsira o pagpapangit ng gamit ng kompanya, kliyente, o ibang tao sa loob ng kompanya', schedule: ['5S', '10S', '15S', 'D'] },
-    { code: 'unauthorized-vehicle-no-damage', label: "Unauthorized use of company or Client's vehicle, without causing damage or injury", labelFil: 'Paggamit ng sasakyan ng kompanya nang walang pahintulot, walang aksidente', schedule: ['15S', '30S', 'D'] },
-    { code: 'unauthorized-vehicle-with-damage', label: "Unauthorized use of company or Client's vehicle, causing damage or injury", labelFil: 'Paggamit ng sasakyan ng kompanya nang walang pahintulot, may aksidente', schedule: ['D'] },
-    { code: 'reckless-driving-no-damage', label: 'Driving company vehicle in a reckless and imprudent manner, without causing damage or injury', labelFil: 'Pabigla-bigla o pabayang pagmamaneho ng sasakyan ng kompanya, walang aksidente', schedule: ['15S', '30S', 'D'] },
-    { code: 'reckless-driving-with-damage', label: 'Driving company vehicle in a reckless and imprudent manner, causing damage or injury', labelFil: 'Pabigla-bigla o pabayang pagmamaneho ng sasakyan ng kompanya, may aksidente', schedule: ['D'] },
+
+  { category: 'Company and Client Property', categoryFil: 'Ari-arian ng Kompanya at Kliyente', offenses: [
+    { code: 'carelessness-minor-loss', klass: 'B', label: 'Careless, improper or unauthorized use of company or client property, tools, materials, equipment, refrigerant or supplies, resulting in no loss or in a loss of not more than ₱5,000', labelFil: 'Pabaya, mali, o walang pahintulot na paggamit ng gamit, kasangkapan, materyales, o refrigerant ng kompanya o kliyente, na walang pinsala o may pinsalang hindi hihigit sa ₱5,000' },
+    { code: 'carelessness-major-loss', klass: 'C', label: 'The same act, resulting in a loss of more than ₱5,000 but not more than ₱30,000', labelFil: 'Ganito rin, pero may pinsalang higit sa ₱5,000 pero hindi hihigit sa ₱30,000' },
+    { code: 'carelessness-severe-loss', klass: 'D', label: 'The same act, resulting in a loss of more than ₱30,000', labelFil: 'Ganito rin, pero may pinsalang higit sa ₱30,000' },
+    { code: 'failure-report-loss', klass: 'B', label: 'Failure to report the loss, damage or malfunction of company or client property, tools or equipment in your custody', labelFil: 'Hindi pag-report ng nawala, nasira, o nasirang gamit ng kompanya o kliyente na nasa iyong pangangalaga' },
+    { code: 'vandalism', klass: 'C', label: 'Any act of vandalism that defaces or damages company or client property, or the property of another person within company or client premises', labelFil: 'Pagsira o pagpapangit ng ari-arian ng kompanya, ng kliyente, o ng ibang tao sa loob ng kompanya o ng kliyente' },
+    { code: 'willful-damage', klass: 'D', label: 'Willful or malicious damage to, or destruction of, any property or equipment owned by the Company or by its clients', labelFil: 'Sadya o may masamang layuning pagsira sa ari-arian o kagamitan ng kompanya o ng kliyente' },
+    { code: 'unauthorized-vehicle-no-damage', klass: 'C', label: 'Unauthorized use of a company or client vehicle, without resulting damage or injury', labelFil: 'Paggamit ng sasakyan ng kompanya o kliyente nang walang pahintulot, walang pinsala o nasaktan' },
+    { code: 'unauthorized-vehicle-with-damage', klass: 'D', label: 'Unauthorized use of a company or client vehicle, resulting in damage or injury', labelFil: 'Paggamit ng sasakyan ng kompanya o kliyente nang walang pahintulot, may pinsala o may nasaktan' },
+    { code: 'reckless-driving-no-damage', klass: 'C', label: 'Driving a company vehicle in a reckless or imprudent manner, or while not holding the appropriate valid licence, without resulting damage or injury', labelFil: 'Pabigla-bigla o pabayang pagmamaneho ng sasakyan ng kompanya, o pagmamaneho nang walang tamang lisensya, walang pinsala o nasaktan' },
+    { code: 'reckless-driving-with-damage', klass: 'D', label: 'The same act, resulting in damage to property or injury to any person', labelFil: 'Ganito rin, pero may nasirang ari-arian o may nasaktan' },
+    { code: 'attempted-removal-no-loss', klass: 'C', label: 'Attempted or frustrated removal of company or client property from the premises without proper authorization or gate pass, where the property was recovered and no loss resulted', labelFil: 'Pagtatangkang ilabas ang gamit ng kompanya o kliyente nang walang pahintulot o gate pass, pero nabawi ito at walang nawala' },
+    { code: 'attempted-removal-with-loss', klass: 'D', label: 'Removing company or client property from the premises without authorization, where the property was taken away or lost', labelFil: 'Paglabas ng gamit ng kompanya o kliyente nang walang pahintulot, at ito ay nadala o nawala' },
+    { code: 'theft-pilferage', klass: 'D', label: 'Theft or pilferage of property or money belonging to the Company, a client, a co-employee, or any third person, within company or client premises; including obtaining property or money under fraudulent or false pretences', labelFil: 'Pagnanakaw ng ari-arian o pera ng kompanya, kliyente, kasamahan, o kahit sino, sa loob ng kompanya o ng kliyente; kasama ang pagkuha nito sa pamamagitan ng panloloko' },
   ]},
-  { category: 'Against Honesty', categoryFil: 'Katapatan', offenses: [
-    { code: 'theft-pilferage', label: "Theft/pilferage of Company or Client's property, or of personal property of a co-employee or third person, in the company or Client's premises", labelFil: 'Pagnanakaw sa kompanya, kliyente, o gamit ng kasamahan', schedule: ['D'] },
-    { code: 'unauthorized-use-funds', label: "Using Company or Client's funds or property without prior approval from immediate superior or any accountable person", labelFil: 'Paggamit ng pera o gamit ng kompanya nang walang pahintulot', schedule: ['D'] },
-    { code: 'falsification-records', label: "Fictitious transactions, falsification of Company or Client's records and documents", labelFil: 'Peke o kathang-isip na transaksyon, pagpeke ng record ng kompanya', schedule: ['D'] },
-    { code: 'misappropriation', label: "Misappropriation or embezzlement of Company or Client's funds or property", labelFil: 'Maling paggamit o pagnanakaw ng pera o ari-arian ng kompanya', schedule: ['D'] },
-    { code: 'withholding-funds', label: 'Withholding funds due to the company or the Client; kiting or collections, short remittance or non-remittance of collections', labelFil: 'Hindi pagbibigay ng perang dapat matanggap ng kompanya o kliyente', schedule: ['D'] },
-    { code: 'non-issuance-invoice', label: 'Non-issuance or mis-issuance of invoices and/or receipts and commercial documents, if required', labelFil: 'Hindi pagbibigay ng invoice o resibo kung kailangan ito', schedule: ['D'] },
-    { code: 'forgery', label: 'Forgery, misuse or abuse of funds', labelFil: 'Pamemeke o maling paggamit ng pera', schedule: ['D'] },
-    { code: 'competing-business', label: 'Engaging privately in business that tends to compete with the company', labelFil: 'Sariling negosyo na kalaban ng kompanya', schedule: ['D'] },
-    { code: 'conspiring', label: 'Conspiring or conniving with, directing or instigating others to commit any of the foregoing', labelFil: 'Pakikipagsabwatan o paghikayat sa iba na gawin ang alinman sa mga nabanggit', schedule: ['D'] },
+
+  { category: 'Honesty and Integrity', categoryFil: 'Katapatan', offenses: [
+    { code: 'misappropriation', klass: 'D', label: 'Misappropriation, embezzlement or malversation of company or client funds or property', labelFil: 'Maling paggamit, pagkulimbat, o pagnanakaw ng pera o ari-arian ng kompanya o ng kliyente' },
+    { code: 'unauthorized-use-funds', klass: 'D', label: 'Using company or client funds, property or facilities for personal purposes without the prior approval of your immediate superior or other accountable person', labelFil: 'Paggamit ng pera, ari-arian, o pasilidad ng kompanya o kliyente para sa sarili nang walang paunang pahintulot ng supervisor o ng may pananagutan' },
+    { code: 'falsification-records', klass: 'D', label: 'Creating fictitious or "ghost" transactions; or falsifying company or client records, receipts, invoices, quotations, job orders, liquidations or documents', labelFil: 'Paggawa ng peke o "ghost" na transaksyon; o pagpeke ng record, resibo, invoice, quotation, job order, liquidation, o dokumento ng kompanya o kliyente' },
+    { code: 'withholding-funds', klass: 'D', label: 'Withholding funds due to the Company or to a client; kiting; short remittance or non-remittance of collections', labelFil: 'Hindi pagbibigay ng perang para sa kompanya o kliyente; kiting; kulang o hindi pag-remit ng koleksyon' },
+    { code: 'non-issuance-invoice', klass: 'D', label: 'Non-issuance or wrongful issuance of official receipts, invoices or commercial documents where these are required', labelFil: 'Hindi pagbibigay o maling pagbibigay ng opisyal na resibo, invoice, o commercial na dokumento kung kailangan ito' },
+    { code: 'forgery', klass: 'D', label: 'Forgery, or the misuse or abuse of company funds', labelFil: 'Pamemeke, o mali at labis na paggamit ng pera ng kompanya' },
+    { code: 'competing-business', klass: 'D', label: 'Engaging privately, directly or through another person, in a business that competes with the Company; or diverting to yourself or to another a business opportunity belonging to the Company or to a client', labelFil: 'Pagpasok sa negosyong kalaban ng kompanya, ikaw man mismo o sa pangalan ng iba; o pagkuha para sa sarili o sa iba ng oportunidad na para sa kompanya o kliyente' },
+    { code: 'undeclared-sideline', klass: 'C', label: 'Undeclared outside employment, consultancy or sideline that conflicts with your duties, or that makes use of company time, tools, materials, vehicles or information. Outside work that does not conflict and does not use company resources is not an offense, but must be declared', labelFil: 'Hindi idineklarang ibang trabaho, consultancy, o sideline na sumasagabal sa trabaho mo, o gumagamit ng oras, gamit, materyales, sasakyan, o impormasyon ng kompanya. Ang trabaho sa labas na walang conflict at hindi gumagamit ng gamit ng kompanya ay hindi paglabag, pero kailangang ideklara' },
+    { code: 'undeclared-conflict', klass: 'C', label: 'Failure to declare a conflict of interest that the Code requires you to declare. Declaring a conflict is never itself a violation and is never a ground for discipline — failing to declare it is', labelFil: 'Hindi pagdeklara ng conflict of interest na dapat ideklara. Ang pagdeklara mismo ay hindi kailanman paglabag at hindi dahilan ng parusa — ang hindi pagdeklara ang paglabag' },
+    { code: 'false-application-statement', klass: 'D', label: 'Making a false statement, or submitting a falsified or fraudulently obtained document, in an application for employment, promotion, transfer, leave, reimbursement, loan or any benefit', labelFil: 'Pagsisinungaling o pagpasa ng pekeng dokumento sa aplikasyon sa trabaho, promotion, transfer, leave, reimbursement, utang, o kahit anong benepisyo' },
+    { code: 'conspiring', klass: 'D', label: 'Conspiring or conniving with, directing, inducing or instigating another person to commit any of the foregoing', labelFil: 'Pakikipagsabwatan, pag-utos, o paghikayat sa iba na gawin ang alinman sa mga nabanggit' },
   ]},
-  { category: 'Against Proper Conduct and Behavior', categoryFil: 'Asal at Ugali', offenses: [
-    { code: 'horseplay-no-loss', label: 'Horseplay or other unruly conduct causing disorder, disruption, annoyance or scandal, without loss, damage or injury', labelFil: 'Kalokohan o magulong asal sa opisina, walang pinsala', schedule: ['WW', '3S', '5S', 'D'] },
-    { code: 'horseplay-with-loss', label: 'Horseplay or other unruly conduct causing disorder, disruption, annoyance or scandal, with loss, damage or injury', labelFil: 'Kalokohan o magulong asal sa opisina, may pinsala', schedule: ['30S', 'D'] },
-    { code: 'drinking-alcohol', label: 'Drinking alcoholic beverage or liquor within Company premises or during working hours', labelFil: 'Pag-inom ng alak sa loob ng kompanya o sa oras ng trabaho', schedule: ['15S', 'D'] },
-    { code: 'prohibited-drugs', label: 'Use or possession of prohibited drugs or other derivatives, including the sale or brokering thereof', labelFil: 'Paggamit o pagbebenta ng bawal na droga', schedule: ['D'] },
-    { code: 'fighting-on-premises', label: 'Fighting, provoking or instigating a fight, while on or off duty within Company premises', labelFil: 'Pakikipag-away sa loob ng kompanya', schedule: ['D'] },
-    { code: 'fighting-work-related', label: 'Fighting, provoking or instigating a fight, while off duty outside Company premises but due to work-related causes', labelFil: 'Pakikipag-away sa labas ng kompanya dahil sa trabaho', schedule: ['D'] },
-    { code: 'fighting-not-work-related', label: 'Fighting, provoking or instigating a fight, while off duty outside Company premises, not due to work-related causes', labelFil: 'Pakikipag-away sa labas ng kompanya, hindi dahil sa trabaho', schedule: ['15S', 'D'] },
-    { code: 'physical-injury-minor', label: 'Willful or deliberate physical injury to a superior, employee or third person due to work-related causes — minor injury', labelFil: 'Pananakit sa superyor o kasamahan dahil sa trabaho — magaan na sugat', schedule: ['5S', '15S', 'D'] },
-    { code: 'physical-injury-major', label: 'Willful or deliberate physical injury to a superior, employee or third person due to work-related causes — major injury', labelFil: 'Pananakit sa superyor o kasamahan dahil sa trabaho — malubhang sugat', schedule: ['30S', 'D'] },
-    { code: 'disrespect-threats', label: 'Acts of disrespect, use of foul language or signs, challenging a fight, or giving threats against a superior, co-employee or third person in the course of business', labelFil: 'Kawalang-galang, masamang salita, o pagbabanta sa superyor o kasamahan', schedule: ['15S', 'D'] },
-    { code: 'intrigues', label: 'Creating intrigues against another employee which tend to cast dishonor, discredit or contempt upon the latter', labelFil: 'Paninirang-puri o paggawa ng kwento laban sa kasamahan', schedule: ['15S', 'D'] },
-    { code: 'immoral-conduct', label: 'Immoral conduct or indecent acts; sexual activities within Company premises; sexual harassment (verbal or physical); acts of lasciviousness', labelFil: 'Malaswang gawa o sexual harassment sa loob ng kompanya', schedule: ['D'] },
-    { code: 'obscene-materials', label: 'Posting, distributing or drawing obscene, scandalous or offensive pictures or subversive materials; acts of vandalism; unauthorized removal of bulletin board materials; uploading such materials online in a way that affects Company reputation', labelFil: 'Pagpost o pagpapakalat ng malaswang larawan; pagsira ng gamit; o online post na nakakasama sa pangalan ng kompanya', schedule: ['15S', 'D'] },
-    { code: 'gambling', label: 'Gambling or engaging in a game of chance, soliciting bets, or lending money to be used for such activity, during working hours or within Company premises', labelFil: 'Pagsusugal sa loob ng kompanya o sa oras ng trabaho', schedule: ['D'] },
-    { code: 'planting-evidence', label: 'Planting evidence against a superior or another employee', labelFil: 'Paglalagay ng ebidensya laban sa superyor o kasamahan', schedule: ['D'] },
-    { code: 'physical-injury-any-person', label: 'Intentionally or deliberately inflicting physical injury upon any person during working hours or within company premises', labelFil: 'Sadyang pananakit sa kahit sino sa loob ng kompanya o sa oras ng trabaho', schedule: ['15S', 'D'] },
-    { code: 'gross-discourtesy', label: 'Acts of gross discourtesy to any person, whether made physically or verbally', labelFil: 'Malubhang kawalang-galang sa kahit sino', schedule: ['15S', '30S', 'D'] },
-    { code: 'borrowing-from-clients', label: "Borrowing money, merchandise or goods from Client's visitors or customers", labelFil: 'Panghihiram ng pera o gamit sa bisita o customer ng kliyente', schedule: ['30S', 'D'] },
-    { code: 'soliciting-from-subordinates', label: 'Soliciting or borrowing money, merchandise or goods by management staff (managers/supervisors) from their subordinates for personal or unofficial use', labelFil: 'Manager o supervisor na naghihingi o nanghihiram ng pera sa sariling tauhan para sa sarili nilang gamit', schedule: ['D'] },
-    { code: 'unauthorized-business', label: 'Engaging in any kind of business within the Company premises or during working hours', labelFil: 'Paggawa ng sariling negosyo sa loob ng kompanya o sa oras ng trabaho', schedule: ['3S', '10S', 'D'] },
+
+  { category: 'Proper Conduct and Behavior', categoryFil: 'Asal at Ugali', offenses: [
+    { code: 'horseplay-no-loss', klass: 'A', label: 'Horseplay or unruly conduct which causes or tends to cause disorder, disrupts work, or creates a disturbance within company or client premises, where no loss, damage or injury results', labelFil: 'Kalokohan o magulong asal na nakakagulo sa trabaho o sa loob ng kompanya o ng kliyente, na walang pinsala o nasaktan' },
+    { code: 'horseplay-with-loss', klass: 'C', label: 'The same conduct, where loss or damage to property, or injury to any person, results', labelFil: 'Ganito rin, pero may nasira o may nasaktan' },
+    { code: 'bulletin-tampering', klass: 'A', label: 'Removing, defacing or tampering with a notice posted on the company bulletin board or issued through official company channels', labelFil: 'Pagtanggal, pagpapangit, o pakikialam sa paskil sa bulletin board o sa opisyal na anunsyo ng kompanya' },
+    { code: 'gross-discourtesy', klass: 'B', label: "Discourtesy, rudeness or improper behaviour towards a client, a client's visitor or tenant, a supplier, or a member of the public", labelFil: 'Kawalang-galang, kabastusan, o maling asal sa kliyente, sa bisita o tenant ng kliyente, sa supplier, o sa kahit sinong tao' },
+    { code: 'gross-discourtesy-client-loss', klass: 'D', label: "Gross or repeated discourtesy towards a client, resulting in the loss of, or serious damage to, a client account or to the Company's reputation", labelFil: 'Malubha o paulit-ulit na kawalang-galang sa kliyente na ikinawala o lubhang ikinasira ng account ng kliyente o ng pangalan ng kompanya' },
+    { code: 'disrespect-threats', klass: 'B', label: 'Acts of disrespect towards a superior, co-employee or third person; the use of foul, abusive or insulting language or gestures; or challenging another to a fight, in the course of business', labelFil: 'Kawalang-galang sa superyor, kasamahan, o ibang tao; masama o nakakainsultong salita o senyas; o paghamon ng away, sa loob ng trabaho' },
+    { code: 'intrigues', klass: 'B', label: 'Spreading malicious rumours, or creating intrigues against a co-employee or officer, which tend to cast dishonour, discredit or contempt upon that person', labelFil: 'Pagkalat ng masamang tsismis o intriga laban sa kasamahan o opisyal, na nakakasira sa dangal o pangalan niya' },
+    { code: 'threat-of-harm', klass: 'C', label: 'Making a threat of harm against a superior, co-employee, client or third person', labelFil: 'Pagbabanta ng pananakit sa superyor, kasamahan, kliyente, o ibang tao' },
+    { code: 'threat-with-weapon', klass: 'D', label: 'Making such a threat while carrying or brandishing a weapon, or in a manner that places the person threatened in immediate fear of serious harm', labelFil: 'Pagbabanta habang may dalang armas o nagwawagayway nito, o sa paraang tunay na kinatatakutan ng tao na masaktan agad' },
+    { code: 'bullying', klass: 'C', label: 'Bullying — repeated verbal, psychological, social or online conduct directed at a co-employee that creates an intimidating, hostile, humiliating or offensive work environment. Legitimate performance management, correction and discipline are not bullying', labelFil: 'Pambu-bully — paulit-ulit na pananakit sa salita, sa isip, sa pakikitungo, o online sa kasamahan na nagdudulot ng nakakatakot, magulo, o nakakahiyang kapaligiran sa trabaho. Ang tamang pagtuturo, pagwawasto, at disiplina ay hindi pambu-bully' },
+    { code: 'fighting-on-premises', klass: 'C', label: 'Fighting, or provoking or instigating a fight, within company or client premises or while on duty, where no serious physical injury results and no weapon is used. Where you were genuinely defending yourself, no penalty is imposed', labelFil: 'Pakikipag-away, panunulsol, o pang-uudyok ng away sa loob ng kompanya o ng kliyente o habang naka-duty, na walang malubhang sugat at walang gamit na armas. Kung nagtatanggol ka lang talaga sa sarili, walang parusa' },
+    { code: 'fighting-aggravated', klass: 'D', label: 'Fighting where serious physical injury results, where a weapon is used, or where you were the instigator or aggressor', labelFil: 'Pakikipag-away na may malubhang sugat, may gamit na armas, o ikaw ang nanimula o umatake' },
+    { code: 'physical-injury-work-related', klass: 'D', label: 'Willfully or deliberately inflicting physical injury upon a superior, co-employee, client or third person, in connection with work, whether within or outside company premises', labelFil: 'Sadyang pananakit sa superyor, kasamahan, kliyente, o ibang tao dahil sa trabaho, nasa loob man o labas ng kompanya' },
+    { code: 'immoral-conduct', klass: 'D', label: 'Sexual harassment, or gender-based sexual harassment, in any of the forms defined by law, whether committed in person, in writing, or through any online or electronic medium. Complaints are handled by the Committee on Decorum and Investigation. Lighter gender-based acts follow the graduated scale in the Safe Spaces Act, beginning at Less Grave', labelFil: 'Sexual harassment o gender-based sexual harassment sa anumang anyo na nakasaad sa batas, personal man, nakasulat, o online. Ang Committee on Decorum and Investigation ang humahawak ng reklamo. Ang mas magagaang gender-based na gawi ay sumusunod sa hagdan ng parusa sa Safe Spaces Act, magsisimula sa Katamtaman' },
+    { code: 'indecent-conduct', klass: 'D', label: 'Immoral or indecent conduct, or engaging in sexual activity, within company or client premises', labelFil: 'Malaswa o hindi disenteng gawi, o pakikipagtalik, sa loob ng kompanya o ng kliyente' },
+    { code: 'gambling', klass: 'B', label: 'Gambling, or soliciting or accepting bets, or lending money to be used for such activity, within company or client premises or during working hours', labelFil: 'Pagsusugal, panghihingi o pagtanggap ng pusta, o pagpapautang para dito, sa loob ng kompanya o ng kliyente o sa oras ng trabaho' },
+    { code: 'unauthorized-business', klass: 'B', label: 'Engaging in any private business, or selling goods or services, within company or client premises or during working hours', labelFil: 'Paggawa ng sariling negosyo, o pagbebenta ng paninda o serbisyo, sa loob ng kompanya o ng kliyente o sa oras ng trabaho' },
+    { code: 'borrowing-from-clients', klass: 'C', label: "Borrowing money, merchandise or goods from a client, a client's staff, tenant or visitor, or from a supplier or contractor of the Company", labelFil: 'Panghihiram ng pera o gamit sa kliyente, sa staff, tenant, o bisita ng kliyente, o sa supplier o contractor ng kompanya' },
+    { code: 'soliciting-from-subordinates', klass: 'C', label: 'Soliciting or borrowing money, merchandise or goods from a subordinate; or lending money to a subordinate at interest', labelFil: 'Paghingi o panghihiram ng pera o gamit sa tauhan mo; o pagpapautang sa tauhan mo nang may tubo' },
+    { code: 'obscene-materials', klass: 'C', label: 'Posting, publishing, sharing or distributing, in any medium including social media, obscene, defamatory or malicious material, or confidential company or client information, which damages or tends to damage the reputation of the Company, its officers, its employees or its clients. This is treated as Serious where it discloses confidential or client data, identifies a client, or is done maliciously and causes serious damage. Lawful comment on working conditions, and lawful concerted activity, are protected and are not offenses', labelFil: 'Pag-post, paglathala, pag-share, o pamimigay, saan mang midya kasama ang social media, ng malaswa, mapanira, o masamang materyal, o confidential na impormasyon ng kompanya o kliyente, na nakakasira sa pangalan ng kompanya, opisyal, kasamahan, o kliyente. Ituturing itong Napakabigat kung may nabunyag na confidential o datos ng kliyente, natukoy ang kliyente, o sinadya at malaki ang pinsala. Ang legal na pagpuna sa kalagayan sa trabaho at ang legal na sama-samang pagkilos ay protektado at hindi paglabag' },
+    { code: 'planting-evidence', klass: 'D', label: 'Planting or fabricating evidence against a superior or a co-employee; or knowingly filing a false complaint or giving false testimony in a company investigation', labelFil: 'Paglalagay o paggawa ng pekeng ebidensya laban sa superyor o kasamahan; o sadyang paghahain ng pekeng reklamo o pagsisinungaling sa imbestigasyon' },
+    { code: 'obstructing-investigation', klass: 'C', label: 'Refusing without valid reason to cooperate in an official company investigation, or obstructing one, including by destroying evidence or influencing a witness. If you are yourself the respondent, you have the right to remain silent and will never be penalised under this item for exercising it', labelFil: 'Pagtanggi nang walang dahilan na tumulong sa opisyal na imbestigasyon, o pagharang dito, kasama ang pagsira ng ebidensya o pang-impluwensya sa testigo. Kung ikaw mismo ang inirereklamo, may karapatan kang manahimik at hindi ka kailanman paparusahan dito' },
+    { code: 'retaliation', klass: 'D', label: 'Retaliating against any person who, in good faith, reported a violation, filed a complaint, gave evidence, or took part in an investigation', labelFil: 'Paghihiganti sa sinumang may magandang loob na nag-report ng paglabag, naghain ng reklamo, nagbigay ng ebidensya, o sumali sa imbestigasyon' },
   ]},
-  { category: 'Neglect of Duty of Supervisors or Managers', categoryFil: 'Pagpapabaya ng Supervisor o Manager', offenses: [
-    { code: 'failure-disseminate', label: 'Failure to disseminate to employees under his/her supervision, Company policies, work rules and procedure and other related matters', labelFil: 'Hindi pagpapaalam sa sariling tauhan ng mga patakaran o alituntunin ng kompanya', schedule: ['3S', '5S', '10S', 'D'] },
-    { code: 'failure-prevent-report', label: 'Failure to prevent or report any violation of this Code, work rules and regulation', labelFil: 'Hindi pagpigil o hindi pag-report ng paglabag sa Code of Discipline', schedule: ['3S', '5S', '10S', 'D'] },
+
+  { category: 'Accountability of Supervisors and Managers', categoryFil: 'Pananagutan ng Supervisor at Manager', offenses: [
+    { code: 'failure-disseminate', klass: 'B', label: 'Failure to disseminate to subordinates this Code, company policies, work rules, safety procedures and other work-related matters', labelFil: 'Hindi pagpapaalam sa mga tauhan ng Code na ito, ng patakaran, alituntunin, safety procedure, at iba pang bagay sa trabaho' },
+    { code: 'failure-prevent-report', klass: 'B', label: 'Failure to report to HR, within five (5) working days of learning of it, a violation of this Code committed by a subordinate', labelFil: 'Hindi pag-report sa HR, sa loob ng limang (5) araw ng trabaho mula nang malaman, ng paglabag ng isang tauhan' },
+    { code: 'failure-evaluate', klass: 'A', label: 'Failure to conduct, document or discuss the required performance evaluations of subordinates', labelFil: 'Hindi paggawa, pagtala, o pagtalakay ng kinakailangang performance evaluation ng mga tauhan' },
+    { code: 'failure-supervise', klass: 'C', label: 'Failure to properly supervise, resulting in a substantial loss to the Company or a client, or in an injury that could reasonably have been prevented', labelFil: 'Hindi maayos na pamamahala na nagdulot ng malaking pinsala sa kompanya o kliyente, o ng sugat na sana ay naiwasan' },
+    { code: 'favouritism', klass: 'C', label: 'Showing manifest partiality or favouritism in work assignments, overtime allocation, evaluation, recommendation for promotion, or discipline', labelFil: 'Halatang pagtatangi o paboritismo sa pamamahagi ng trabaho, overtime, evaluation, rekomendasyon sa promotion, o disiplina' },
+    { code: 'informal-penalty', klass: 'C', label: 'Imposing on a subordinate any disciplinary penalty, fine, wage deduction or informal sanction outside the procedure laid down in this Code', labelFil: 'Pagpataw sa tauhan ng parusa, multa, bawas sa sahod, o hindi opisyal na parusa sa labas ng proseso ng Code na ito' },
+    { code: 'misuse-preventive-suspension', klass: 'C', label: 'Using preventive suspension as an informal penalty, or to avoid holding a hearing', labelFil: 'Paggamit ng preventive suspension bilang parusa, o para iwasan ang pagdinig' },
+    { code: 'directing-violation', klass: 'D', label: 'Directing, instructing or requiring a subordinate to commit an act that violates this Code, a company policy, or the law; or to falsify a record', labelFil: 'Pag-utos o pagpilit sa tauhan na gumawa ng labag sa Code na ito, sa patakaran, o sa batas; o mamekeng record' },
+    { code: 'concealing-harassment', klass: 'D', label: 'Failing to act upon, or concealing, a report of sexual harassment, gender-based harassment, bullying, discrimination, or a serious unsafe condition', labelFil: 'Hindi pagkilos o pagtatago ng report tungkol sa sexual harassment, gender-based harassment, pambu-bully, diskriminasyon, o malubhang delikadong kalagayan' },
+    { code: 'supervisor-retaliation', klass: 'D', label: 'Retaliating against, or permitting or directing retaliation against, an employee who in good faith reported a violation, filed a complaint, or participated in an investigation', labelFil: 'Paghihiganti, o pagpayag o pag-utos ng paghihiganti, sa empleyadong may magandang loob na nag-report, naghain ng reklamo, o sumali sa imbestigasyon' },
+    { code: 'soliciting-favours-subordinate', klass: 'D', label: 'Soliciting money, goods, services or personal favours from a subordinate as a condition, express or implied, of favourable treatment', labelFil: 'Paghingi ng pera, gamit, serbisyo, o personal na pabor sa tauhan bilang kapalit, sabihin man o hindi, ng magandang pagtrato' },
   ]},
 ];
+
+// Offense codes that existed in the Series 1, 2025 catalog and are NOT in the Series 2
+// catalog above, each because this edition folded it into a broader offense or put it out
+// of scope. Listed explicitly so the re-sync can tell an offense THIS EDITION retired apart
+// from one HR wrote themselves -- both are simply "not in the built-in catalog", and only
+// the first should ever be removed.
+//
+//   beneficiary-of-punching    -> punching-others-timecard (now covers both employees)
+//   unauthorized-opening       -> forcing-entry-after-hours (now covers lockers/drawers/bags)
+//   gross-misconduct-controls  -> insubordination / gross-habitual-neglect
+//   unauthorized-use-minor     -> carelessness-minor-loss  (tiers merged, thresholds raised)
+//   unauthorized-use-major     -> carelessness-major-loss
+//   malversation               -> misappropriation (which names malversation) / theft-pilferage
+//   fighting-work-related      -> fighting-on-premises (now covers "or while on duty")
+//   fighting-not-work-related  -> dropped: off-duty conduct away from company premises and
+//                                 unconnected to work is outside this Code's scope (Sec. 1.1)
+//   physical-injury-minor      -> physical-injury-work-related (gravity handled by Sec. 3.5)
+//   physical-injury-major      -> physical-injury-work-related / fighting-aggravated
+//   physical-injury-any-person -> physical-injury-work-related / fighting-aggravated
+const RETIRED_OFFENSE_CODES = [
+  'beneficiary-of-punching', 'unauthorized-opening', 'gross-misconduct-controls',
+  'unauthorized-use-minor', 'unauthorized-use-major', 'malversation',
+  'fighting-work-related', 'fighting-not-work-related',
+  'physical-injury-minor', 'physical-injury-major', 'physical-injury-any-person',
+];
+
+// Fill each offense's occurrence-by-occurrence penalty schedule in from its class, so the
+// catalog above only ever states a class and the Schedule of Penalties lives in exactly
+// one place (PENALTY_CLASSES). Consumers -- the admin Disciplinary case form, the ESS Code
+// of Discipline page, and suggestedPenaltyFor() -- keep reading `schedule` exactly as before.
+DISCIPLINE_OFFENSE_CATALOG.forEach((cat) => {
+  cat.offenses.forEach((o) => { if (!o.schedule) o.schedule = classSchedule(o.klass); });
+});
+
 
 // Human-readable text for a Code of Discipline penalty code ('D', 'WW', 'VW', or an
 // integer+'S' for days of suspension) -- shared by the Disciplinary case form's suggested-
@@ -1044,7 +1141,13 @@ const Store = (function () {
         index[r.category] = { category: r.category, categoryFil: r.categoryFil || '', offenses: [] };
         byCategory.push(index[r.category]);
       }
-      index[r.category].offenses.push({ code: r.code, label: r.label, labelFil: r.labelFil || '', schedule: r.schedule || [] });
+      index[r.category].offenses.push({
+        code: r.code, label: r.label, labelFil: r.labelFil || '', klass: r.klass || '',
+        // A row saved before the class column existed keeps whatever schedule it has;
+        // one saved with a class but no explicit schedule derives it, same as the
+        // built-in catalog does, so the two paths can't disagree.
+        schedule: (r.schedule && r.schedule.length) ? r.schedule : classSchedule(r.klass),
+      });
     });
     return byCategory;
   }
@@ -1072,7 +1175,8 @@ const Store = (function () {
       cat.offenses.forEach((o, offIdx) => {
         rows.push({
           id: genId('doff'), code: o.code, category: cat.category, categoryFil: cat.categoryFil || '',
-          label: o.label, labelFil: o.labelFil || '', schedule: o.schedule || [],
+          label: o.label, labelFil: o.labelFil || '', klass: o.klass || '',
+          schedule: o.schedule || classSchedule(o.klass),
           sortOrder: catIdx * 100 + offIdx,
         });
       });
@@ -1081,6 +1185,102 @@ const Store = (function () {
     if (error) { toast('Import failed: ' + error.message); throw error; }
     await refetch('disciplineOffenses');
     logAudit('disciplineOffenses.import', TABLES.disciplineOffenses, null, { count: rows.length });
+  }
+
+  // ---- One-time re-sync of an already-imported catalog to the built-in edition ----
+  // importDefaultDisciplineCatalog() above only ever runs against an empty table. HR who
+  // imported the Series 1 catalog before the Series 2, 2026 Edition landed therefore has
+  // rows carrying the old wording, the old penalty schedules and no class at all -- and no
+  // way to get the new edition short of deleting ~100 rows by hand and re-importing, which
+  // would also throw away any offense they added themselves. This pair of functions closes
+  // that gap: disciplineCatalogSyncStatus() reports the difference without touching
+  // anything, and resyncDisciplineCatalog() applies it.
+  //
+  // Matching is by `code`, which is why the Series 2 catalog deliberately kept the Series 1
+  // codes for every offense that survived -- an offense HR edited in place is updated,
+  // not duplicated.
+  //
+  // Rows whose code is NOT in the built-in catalog are never touched and never deleted:
+  // that set is both the offenses this edition dropped AND anything HR wrote themselves,
+  // and the two are indistinguishable from here. They're returned as `retired` so the admin
+  // page can flag them for a human to decide on.
+  function disciplineCatalogSyncStatus() {
+    const rows = state.disciplineOffenses;
+    if (!rows.length) return null; // nothing imported yet -- the empty-state import covers it
+    const byCode = new Map();
+    rows.forEach((r) => byCode.set(r.code, r));
+
+    const toUpdate = [];
+    const toAdd = [];
+    const catalogCodes = new Set();
+
+    DISCIPLINE_OFFENSE_CATALOG.forEach((cat, catIdx) => {
+      cat.offenses.forEach((o, offIdx) => {
+        catalogCodes.add(o.code);
+        const want = {
+          code: o.code, category: cat.category, categoryFil: cat.categoryFil || '',
+          label: o.label, labelFil: o.labelFil || '', klass: o.klass || '',
+          schedule: o.schedule || classSchedule(o.klass),
+          sortOrder: catIdx * 100 + offIdx,
+        };
+        const row = byCode.get(o.code);
+        if (!row) { toAdd.push(want); return; }
+        const unchanged =
+          row.category === want.category &&
+          (row.categoryFil || '') === want.categoryFil &&
+          row.label === want.label &&
+          (row.labelFil || '') === want.labelFil &&
+          (row.klass || '') === want.klass &&
+          JSON.stringify(row.schedule || []) === JSON.stringify(want.schedule) &&
+          Number(row.sortOrder) === want.sortOrder;
+        if (!unchanged) toUpdate.push(Object.assign({ id: row.id }, want));
+      });
+    });
+
+    // "Not in the built-in catalog" is two very different things. A code on
+    // RETIRED_OFFENSE_CODES is one THIS EDITION dropped, and leaving it behind would show
+    // employees a Code that no longer exists -- worse, under its old Series 1 category
+    // name, which would sprout stale categories on the portal. Anything else is HR's own
+    // work and is never touched or counted as being out of sync.
+    const retiredSet = new Set(RETIRED_OFFENSE_CODES);
+    const retired = rows.filter((r) => !catalogCodes.has(r.code) && retiredSet.has(r.code));
+    const custom = rows.filter((r) => !catalogCodes.has(r.code) && !retiredSet.has(r.code));
+    return {
+      toUpdate, toAdd, retired, custom,
+      inSync: toUpdate.length === 0 && toAdd.length === 0 && retired.length === 0,
+    };
+  }
+
+  // Applies what disciplineCatalogSyncStatus() reported, as a single upsert keyed on the
+  // primary key -- rows carrying an existing id are updated, rows with a fresh one are
+  // inserted. One round trip, one refetch and one audit entry rather than ~100 of each,
+  // which is why this doesn't go through updateRow()/insertRow().
+  async function resyncDisciplineCatalog() {
+    const status = disciplineCatalogSyncStatus();
+    if (!status) return null;
+    const rows = status.toUpdate.concat(
+      status.toAdd.map((a) => Object.assign({ id: genId('doff') }, a))
+    );
+    if (rows.length) {
+      const { error } = await sb.from(TABLES.disciplineOffenses).upsert(rows.map(sanitize));
+      if (error) { toast('Re-sync failed: ' + error.message); throw error; }
+    }
+    if (status.retired.length) {
+      const { error } = await sb.from(TABLES.disciplineOffenses)
+        .delete().in('id', status.retired.map((r) => r.id));
+      if (error) { toast('Re-sync could not remove retired offenses: ' + error.message); throw error; }
+    }
+    if (rows.length || status.retired.length) {
+      await refetch('disciplineOffenses');
+      logAudit('disciplineOffenses.resync', TABLES.disciplineOffenses, null, {
+        updated: status.toUpdate.length, added: status.toAdd.length,
+        removed: status.retired.map((r) => r.code), kept: status.custom.length,
+      });
+    }
+    return {
+      updated: status.toUpdate.length, added: status.toAdd.length,
+      removed: status.retired.length, custom: status.custom.length,
+    };
   }
 
   // Looks up the Code of Discipline's suggested penalty for an employee's NEXT occurrence
@@ -2365,6 +2565,8 @@ const Store = (function () {
     listOffboarding, getOffboarding, activeOffboardingForEmployee, startOffboarding, updateClearanceItem, computeFinalPay, saveFinalPaySnapshot, releaseFinalPay, issueCOE,
     listAnnouncements, getAnnouncement, addAnnouncement, updateAnnouncement, deleteAnnouncement,
     disciplineCatalog, listDisciplineOffenses, getDisciplineOffense, addDisciplineOffense,
+    penaltyClasses: () => PENALTY_CLASSES, classSchedule,
+    disciplineCatalogSyncStatus, resyncDisciplineCatalog,
     updateDisciplineOffense, deleteDisciplineOffense, importDefaultDisciplineCatalog,
   };
 })();
