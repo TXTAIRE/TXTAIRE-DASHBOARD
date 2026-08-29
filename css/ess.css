@@ -131,3 +131,37 @@
 .ess-tour-tooltip.center .ess-tour-footer { justify-content: center; flex-direction: column-reverse; gap: 12px; }
 .ess-tour-step-count { font-size: 11.5px; color: var(--text-faint); }
 .ess-tour-actions { display: flex; gap: 8px; }
+
+/* Birthday celebration overlay (js/ess-app.js showEssBirthdayCelebration) -- sits above
+   .modal-backdrop (z-index 100) the same way .crop-overlay does, since it's built as its
+   own hand-rolled overlay rather than going through openEssModal. */
+.birthday-overlay {
+  position: fixed; inset: 0; z-index: 300; overflow: hidden;
+  background: radial-gradient(circle at 50% 20%, rgba(79,141,255,0.35), rgba(0,0,0,0.65) 70%);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.birthday-confetti-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.confetti-piece {
+  position: absolute; top: -14px; width: 8px; height: 14px; opacity: 0.95; border-radius: 2px;
+  animation-name: confetti-fall; animation-timing-function: cubic-bezier(0.25, 0.1, 0.5, 1); animation-fill-mode: forwards;
+}
+@keyframes confetti-fall {
+  from { transform: translateY(0) rotate(0deg); opacity: 0.95; }
+  to { transform: translateY(115vh) rotate(var(--rot, 360deg)); opacity: 0.25; }
+}
+.birthday-card {
+  position: relative; background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 16px; padding: 32px 26px 26px; max-width: 320px; width: 100%;
+  text-align: center; box-shadow: 0 12px 40px rgba(16,24,40,0.4);
+}
+.birthday-logo { width: 100%; max-width: 130px; height: auto; margin-bottom: 14px; }
+.birthday-emoji { font-size: 40px; margin-bottom: 10px; }
+.birthday-card h2 { margin: 0; font-size: 20px; }
+.birthday-close {
+  position: absolute; top: 8px; right: 10px; background: none; border: none;
+  font-size: 22px; line-height: 1; color: var(--text-dim); cursor: pointer; padding: 4px;
+}
+/* Audio only, no visible video -- a near-zero-size iframe still plays the embedded
+   video's audio track (display:none would suspend it in some browsers, so this stays
+   barely visible instead of fully hidden). */
+.birthday-audio { width: 1px; height: 1px; border: none; position: absolute; opacity: 0.01; pointer-events: none; }

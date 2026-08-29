@@ -86,8 +86,7 @@ window.Views.staff = (function () {
 
   // Quick action — sets just Default Time In/Out without opening the full Edit Employee
   // form. Used to auto-detect late arrivals and auto-file Overtime requests on My Portal
-  // (js/store.js isLateArrival/exceedsDefaultTimeOut, both with a 15-minute grace period),
-  // and to correctly exclude the unpaid lunch break from real OT pay (effectivePaidHours).
+  // (js/store.js isLateArrival/exceedsDefaultTimeOut, both with a 15-minute grace period).
   // `onSaved(main)` re-renders whichever view opened this (the list or the detail drawer).
   function openSetHoursModal(main, id, onSaved) {
     const e = Store.getEmployee(id);
@@ -159,6 +158,7 @@ window.Views.staff = (function () {
         Category: ${escapeHtml(e.category)}<br/>
         Employment status: ${escapeHtml(e.employmentStatus)}<br/>
         Date hired: ${fmtDate(e.dateHired)} · Length of service: ${lengthOfService(e.dateHired)}<br/>
+        Birthday: ${e.birthDate ? fmtDate(e.birthDate) : '<span class="dim">not set</span>'}<br/>
         Phone: ${escapeHtml(e.phone || '—')}<br/>
         Email: ${escapeHtml(e.email || '—')}
       </div>
@@ -600,7 +600,7 @@ window.Views.staff = (function () {
 
   function openEmployeeModal(main, id) {
     const editing = id ? Store.getEmployee(id) : null;
-    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, housingAllowance: 0, nightShiftDifferential: false, fixedHours: true, defaultTimeIn: '', defaultTimeOut: '', payCycle: '10-20', notes: '', bankAccountNumber: '', sex: '', region: '', soloParentStatus: false };
+    const e = editing || { name: '', category: 'Admin', position: '', status: 'Active', employmentStatus: 'Regular', dateHired: '', birthDate: '', phone: '', email: '', payType: 'Monthly', rate: '', allowancePerDay: 0, fixedAllowance: 0, housingAllowance: 0, nightShiftDifferential: false, fixedHours: true, defaultTimeIn: '', defaultTimeOut: '', payCycle: '10-20', notes: '', bankAccountNumber: '', sex: '', region: '', soloParentStatus: false };
     const wageCheck = editing ? Store.isBelowMinimumWage(editing) : null;
 
     openModal(`
@@ -621,6 +621,7 @@ window.Views.staff = (function () {
             <select name="employmentStatus">${['Regular', 'Probationary', 'Contractual'].map(s => `<option ${s === e.employmentStatus ? 'selected' : ''}>${s}</option>`).join('')}</select>
           </div>
           <div class="field"><label>Date hired</label><input type="date" name="dateHired" value="${e.dateHired}" /></div>
+          <div class="field"><label>Birthday <span class="dim">(shows a birthday greeting on their My Portal)</span></label><input type="date" name="birthDate" value="${e.birthDate || ''}" /></div>
           <div class="field"><label>Phone</label><input name="phone" value="${escapeHtml(e.phone)}" /></div>
           <div class="field"><label>Email</label><input type="email" name="email" value="${escapeHtml(e.email)}" /></div>
           <div class="field"><label>Sex <span class="dim">(for Maternity/Paternity leave eligibility)</span></label>
@@ -683,6 +684,7 @@ window.Views.staff = (function () {
           status: fd.get('status'),
           employmentStatus: fd.get('employmentStatus'),
           dateHired: fd.get('dateHired'),
+          birthDate: fd.get('birthDate') || null,
           phone: fd.get('phone').trim(),
           email: fd.get('email').trim(),
           sex: fd.get('sex') || null,

@@ -3118,3 +3118,9 @@ alter publication supabase_realtime add table "disciplineOffenses";
 drop policy if exists "public reads pinned announcements" on announcements;
 create policy "public reads pinned announcements" on announcements
   for select to anon using (pinned = true);
+
+-- HR-set birthday, used only to auto-show a one-day birthday celebration (confetti +
+-- greeting) on that employee's own My Portal (js/ess-app.js) -- purely a client-side date
+-- comparison against today, no cron/Edge Function involved. No RLS change needed: the
+-- existing employees policies already let HR write it and an employee read their own row.
+alter table employees add column if not exists "birthDate" date;

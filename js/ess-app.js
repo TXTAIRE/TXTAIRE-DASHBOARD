@@ -879,6 +879,84 @@ async function maybeShowPushPrompt() {
   });
 }
 
+// ---- Birthday celebration -- My Portal only, never the admin dashboard ----
+// HR sets birthDate on the employee record (js/views/staff.js); when today's month/day
+// matches it, this pops up automatically -- a plain client-side date comparison, no cron
+// job or push notification involved. Shown at most once per employee per calendar day
+// (localStorage-gated below), so re-renders/re-logins the same day don't repeat it.
+const BIRTHDAY_SHOWN_KEY = 'essBirthdayShownOn';
+
+function isEmployeeBirthdayToday(emp) {
+  if (!emp || !emp.birthDate) return false;
+  const bd = new Date(emp.birthDate + 'T00:00:00');
+  if (isNaN(bd.getTime())) return false;
+  const today = new Date();
+  return bd.getMonth() === today.getMonth() && bd.getDate() === today.getDate();
+}
+function birthdayAlreadyShownToday(emp) {
+  try {
+    const shown = JSON.parse(localStorage.getItem(BIRTHDAY_SHOWN_KEY) || '{}');
+    return shown[emp.id] === todayISO();
+  } catch (err) { return false; }
+}
+function markBirthdayShownToday(emp) {
+  try {
+    const shown = JSON.parse(localStorage.getItem(BIRTHDAY_SHOWN_KEY) || '{}');
+    shown[emp.id] = todayISO();
+    localStorage.setItem(BIRTHDAY_SHOWN_KEY, JSON.stringify(shown));
+  } catch (err) { /* ignore */ }
+}
+
+const CONFETTI_COLORS = ['#ff5e7e', '#ffd166', '#06d6a0', '#4f8dff', '#a78bfa', '#ff9f43'];
+function spawnConfetti(container, count) {
+  for (let i = 0; i < count; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = (Math.random() * 100) + '%';
+    piece.style.background = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
+    piece.style.animationDuration = (2.2 + Math.random() * 1.8) + 's';
+    piece.style.animationDelay = (Math.random() * 0.8) + 's';
+    piece.style.setProperty('--rot', (Math.random() * 360) + 'deg');
+    container.appendChild(piece);
+  }
+}
+
+// A dedicated full-screen overlay (not openEssModal) -- both for the confetti layer
+// underneath it and so a once-a-year moment visually stands apart from every other
+// routine modal in the app. Reuses the same chime as every other push notification, a
+// small deliberate touch (sound + vibration-adjacent confetti) rather than a silent popup.
+function showEssBirthdayCelebration(emp) {
+  markBirthdayShownToday(emp);
+  const overlay = document.createElement('div');
+  overlay.className = 'birthday-overlay';
+  const firstName = (emp.name || '').trim().split(' ')[0] || emp.name;
+  overlay.innerHTML = `
+    <div class="birthday-confetti-layer"></div>
+    <div class="birthday-card">
+      <button type="button" class="birthday-close" aria-label="Close">&times;</button>
+      <img src="assets/logo.svg" alt="TxTAIRE" class="birthday-logo" />
+      <div class="birthday-emoji">🎉🎂🎉</div>
+      <h2>Happy Birthday, ${escapeHtml(firstName)}!</h2>
+      <div class="ess-sub" style="margin-top:6px;">From your TXTAIRE family — wishing you a great year ahead. 🎈</div>
+      <iframe class="birthday-audio" title="Birthday song" frameborder="0" allow="autoplay"></iframe>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  spawnConfetti(qs('.birthday-confetti-layer', overlay), 70);
+  try { playEssNotificationTone(); } catch (err) { /* best-effort */ }
+  // Audio only, no visible video -- a 1x1 iframe still plays the embedded video's audio
+  // track. Autoplay-with-sound is attempted immediately, no manual play button -- works on
+  // browsers that grant it based on the earlier login-form user gesture (Chrome/Android in
+  // practice), but isn't guaranteed everywhere (iOS Safari in particular blocks unmuted
+  // autoplay outright, by deliberate choice here with no play-button fallback -- that
+  // device just gets a silent popup, same as it would for any other autoplaying media).
+  qs('.birthday-audio', overlay).src = 'https://www.youtube.com/embed/2du6HVW28aw?autoplay=1&mute=0&rel=0&playsinline=1';
+  const close = () => overlay.remove();
+  qs('.birthday-close', overlay).addEventListener('click', close);
+  overlay.addEventListener('mousedown', (ev) => { if (ev.target === overlay) close(); });
+  setTimeout(close, 9000);
+}
+
 let essStarted = false;
 async function startEss(session) {
   if (essStarted) return;
@@ -933,12 +1011,16 @@ async function startEss(session) {
   // Wrapped defensively -- a setTimeout callback that throws fails completely silently
   // (no visible error, nothing in the console the user could report), which would look
   // exactly like "nothing happens." try/catch here turns that into a visible signal.
-  // Shows at most one of these per login -- the onboarding tour takes priority on a
-  // brand-new device (orient first, ask for anything else after), then the install prompt
-  // when there's still an install step to do (the iOS prerequisite for push), otherwise
-  // the push-enable prompt -- so employees are never stacked with two modals back to back.
+  // Shows at most one of these per login -- a birthday takes priority over everything
+  // else on that one day (see isEmployeeBirthdayToday above), then the onboarding tour on
+  // a brand-new device (orient first, ask for anything else after), then the install
+  // prompt when there's still an install step to do (the iOS prerequisite for push),
+  // otherwise the push-enable prompt -- so employees are never stacked with two modals
+  // back to back.
   setTimeout(() => {
-    if (shouldShowEssTutorial()) {
+    if (isEmployeeBirthdayToday(myEmployee) && !birthdayAlreadyShownToday(myEmployee)) {
+      try { showEssBirthdayCelebration(myEmployee); } catch (err) { toast('Birthday celebration error: ' + (err && err.message ? err.message : err)); }
+    } else if (shouldShowEssTutorial()) {
       try { startEssTutorial(); } catch (err) { toast('Tour error: ' + (err && err.message ? err.message : err)); }
     } else if (shouldShowInstallPrompt()) {
       try { maybeShowInstallPrompt(); } catch (err) { toast('Install prompt error: ' + (err && err.message ? err.message : err)); }
