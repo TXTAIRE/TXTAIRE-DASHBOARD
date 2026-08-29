@@ -939,18 +939,27 @@ function showEssBirthdayCelebration(emp) {
       <h2>Happy Birthday, ${escapeHtml(firstName)}!</h2>
       <div class="ess-sub" style="margin-top:6px;">From your TXTAIRE family — wishing you a great year ahead. 🎈</div>
       <iframe class="birthday-audio" title="Birthday song" frameborder="0" allow="autoplay"></iframe>
+      <button type="button" class="link-btn" id="birthday-play-btn" style="margin-top:8px;">🎵 Play birthday song</button>
     </div>
   `;
   document.body.appendChild(overlay);
   spawnConfetti(qs('.birthday-confetti-layer', overlay), 70);
   try { playEssNotificationTone(); } catch (err) { /* best-effort */ }
   // Audio only, no visible video -- a 1x1 iframe still plays the embedded video's audio
-  // track. Autoplay-with-sound is attempted immediately, no manual play button -- works on
-  // browsers that grant it based on the earlier login-form user gesture (Chrome/Android in
-  // practice), but isn't guaranteed everywhere (iOS Safari in particular blocks unmuted
-  // autoplay outright, by deliberate choice here with no play-button fallback -- that
-  // device just gets a silent popup, same as it would for any other autoplaying media).
-  qs('.birthday-audio', overlay).src = 'https://www.youtube.com/embed/2du6HVW28aw?autoplay=1&mute=0&rel=0&playsinline=1';
+  // track. Autoplay-with-sound is attempted immediately (works on browsers that grant it
+  // based on the earlier login-form user gesture, e.g. Chrome/Android), but that's never
+  // guaranteed -- iOS Safari in particular blocks unmuted autoplay outright regardless of
+  // any prior gesture. The button re-points the same iframe at a fresh URL from directly
+  // inside a click handler, which every browser's autoplay policy allows unconditionally,
+  // so sound always has a one-tap fallback that actually works.
+  const audioFrame = qs('.birthday-audio', overlay);
+  const playBtn = qs('#birthday-play-btn', overlay);
+  const songUrl = (cacheBust) => 'https://www.youtube.com/embed/2du6HVW28aw?autoplay=1&mute=0&rel=0&playsinline=1&cb=' + cacheBust;
+  audioFrame.src = songUrl(0);
+  playBtn.addEventListener('click', () => {
+    audioFrame.src = songUrl(Date.now());
+    playBtn.textContent = '🎵 Playing…';
+  });
   const close = () => overlay.remove();
   qs('.birthday-close', overlay).addEventListener('click', close);
   overlay.addEventListener('mousedown', (ev) => { if (ev.target === overlay) close(); });
