@@ -555,27 +555,10 @@ function withinScheduleGrace(actualTime, defaultTime) {
 
 const STANDARD_WORKDAY_HOURS = 8;
 
-// Labor Code Art. 83 (8-hour normal workday) + Art. 85 (unpaid 60-minute meal period,
-// excluded from hours worked): a 9:00 AM-6:00 PM schedule is 9 clock hours but only 8 PAID
-// hours, and OT worked until 8:00 PM off that same schedule is 2 hours, not 3 -- the meal
-// break has to come out of the raw clocked span either way. Used for real pay (computeDayPay
-// OT/holiday hours), not just the DTR printout.
-const LUNCH_BREAK_HOURS = 1;
-
-// Effective (paid) hours for one day. Only kicks in for an employee with a Default Time
-// In/Out set, and only once the shift actually covers their full scheduled day (Time In at
-// or before defaultTimeIn+grace, Time Out at or after defaultTimeOut-grace) -- that's what
-// tells us the meal break genuinely fell inside the clocked span. Anything short of a full
-// scheduled day (no default set, or the employee left before finishing it) is left as the
-// raw clocked hours -- this only ever removes the lunch hour, never adds hours back, and
-// never touches the stored attendance.hours field itself.
-function effectivePaidHours(rawHours, timeIn, timeOut, emp) {
-  if (!emp || !emp.defaultTimeIn || !emp.defaultTimeOut || !timeIn || !timeOut) return rawHours;
-  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-  const coveredFullShift = toMin(timeIn) <= toMin(emp.defaultTimeIn) + ATTENDANCE_GRACE_MINUTES
-    && toMin(timeOut) >= toMin(emp.defaultTimeOut) - ATTENDANCE_GRACE_MINUTES;
-  return coveredFullShift ? Math.max(0, rawHours - LUNCH_BREAK_HOURS) : rawHours;
-}
+// Labor Code Art. 85's unpaid 60-minute meal period (previously subtracted from a full
+// scheduled shift's hours before counting toward OT/holiday pay and the DTR printout, via
+// a now-removed effectivePaidHours helper) no longer reduces computed hours -- explicit
+// company decision. Hours worked/paid are the raw clocked span, full stop.
 
 // Hours to print on the DTR for one day. A day within the grace period on BOTH Time In and
 // Time Out (i.e. not actually Late, not actually filing OT) shows the clean standard 8
@@ -591,7 +574,7 @@ function dtrDisplayHours(r, emp) {
   if (r.timeIn && r.timeOut && withinScheduleGrace(r.timeIn, emp.defaultTimeIn) && withinScheduleGrace(r.timeOut, emp.defaultTimeOut)) {
     return STANDARD_WORKDAY_HOURS;
   }
-  return effectivePaidHours(rawHours, r.timeIn, r.timeOut, emp);
+  return rawHours;
 }
 
 // Hours of a shift ("HH:MM"-"HH:MM") that fall within the legal night-shift-differential
@@ -637,11 +620,10 @@ function nightOverlapHours(timeIn, timeOut) {
 function computeDayPay(dailyRateEq, rec, holiday, emp) {
   const hourlyRate = dailyRateEq / 8;
   const hrs = rec ? (Number(rec.hours) || 0) : 0;
-  // Labor Code Art. 85: the unpaid 60-minute meal break comes out of the raw clocked span
-  // before it counts toward OT/holiday hours -- see effectivePaidHours above. Only applies
-  // once emp.defaultTimeIn/defaultTimeOut are set and the shift actually covered the full
-  // scheduled day; otherwise this is just the raw hours, unchanged.
-  const effHrs = rec ? effectivePaidHours(hrs, rec.timeIn, rec.timeOut, emp) : 0;
+  // No lunch-break deduction here (removed per company decision, see the note above
+  // dtrDisplayHours) -- effHrs is just the raw clocked hours, counted toward OT/holiday
+  // pay unreduced.
+  const effHrs = hrs;
 
   // A record can carry its own holidayType, overriding/standing in for the shared
   // Holidays list entry for that date — lets HR grant the holiday premium for a specific
