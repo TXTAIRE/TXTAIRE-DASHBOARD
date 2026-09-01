@@ -75,7 +75,6 @@ window.EssViews.expenses = (function () {
       <div class="ess-sub" style="margin-bottom:12px;">Take a photo of a receipt, or upload one — the details below will be filled in for you to check before saving.</div>
       <div class="ess-card">
         <div class="ess-card-label">Receipt Photo</div>
-        <div class="ess-sub" style="margin-bottom:8px;">Only one photo is scanned, so get it right in one take: lay the receipt flat, fill the frame with it, hold steady in good light, and make sure the TIN and total amount aren't blurry or cut off.</div>
         <input type="file" id="expense-receipt-input" accept="image/*" capture="environment" />
       </div>
       <div id="expense-status" class="ess-sub" style="margin-top:8px;"></div>
@@ -248,13 +247,7 @@ window.EssViews.expenses = (function () {
 
     let resizedBlob;
     try {
-      // 2000px @ 0.92 rather than the old 1600/0.82 -- there's only ever one photo per
-      // receipt (no retake-until-legible flow below), so the small print that actually
-      // matters (TIN, invoice number) needs to survive resizing sharp enough for the
-      // vision model to read correctly the first time. Same resized copy is both scanned
-      // and uploaded as the permanent record, so this is a one-time tradeoff (a bit more
-      // upload/scan time) for reading it right in that single shot.
-      resizedBlob = await resizeImageToBlob(file, 2000, 0.92);
+      resizedBlob = await resizeImageToBlob(file, 1600, 0.82);
     } catch (err) {
       statusEl.textContent = 'Could not read that photo — try again.';
       return;
