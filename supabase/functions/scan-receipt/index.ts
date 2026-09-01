@@ -99,17 +99,36 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Image data is required' }, 400);
   }
 
-  var instructions = 'This is a photo of a receipt or invoice. Read it and return a JSON object with ' +
-    'exactly these keys: ' +
-    '"date" (the transaction date in YYYY-MM-DD format), ' +
-    '"invoiceNumber" (the service/sales invoice or receipt number), ' +
-    '"vendor" (the business/vendor name), ' +
-    '"tinNumber" (the vendor\'s TIN -- on Philippine receipts this is usually printed as ' +
-    '"VATREGTIN", "VAT REG TIN", or just "TIN", formatted like 000-000-000-00000 if shown), ' +
-    '"location" (the vendor\'s city/municipality and region, e.g. "QUEZON CITY, NCR"), ' +
-    '"category" (a short 1-3 word description of what was purchased, e.g. "MATERIALS", "FUEL", "OFFICE SUPPLIES"), ' +
-    '"amount" (the total amount paid, as a plain number with no currency symbol or commas). ' +
-    'If a field is not legible or not present on the receipt, use an empty string for text fields or 0 for amount -- never guess or invent a value.';
+  // This only ever gets ONE photo per receipt (see js/ess-views/expenses.js -- a plain
+  // native camera capture, no retake-until-it-looks-right flow), so extraction has to be
+  // right the first time. Every field below spells out exactly where to look and what to
+  // ignore, rather than trusting a generic reading -- the two accuracy-critical fields
+  // (amount, TIN) get the most explicit guidance since those are the two a wrong guess
+  // actually costs money or breaks BIR compliance on.
+  var instructions = 'This is a photo of a Philippine business receipt or invoice, captured in a ' +
+    'single shot with no retake -- read every printed character carefully, especially digits, ' +
+    'since this will be used for actual accounting records. Look at the WHOLE image before ' +
+    'answering, including faint, small, or edge-of-frame text. Return a JSON object with exactly ' +
+    'these keys: ' +
+    '"date" (the transaction date, in YYYY-MM-DD format -- Philippine receipts are often ' +
+    'MM/DD/YYYY or DD-Mon-YYYY; convert it), ' +
+    '"invoiceNumber" (the invoice/receipt number -- look for labels like "SI No.", "OR No.", ' +
+    '"Invoice No.", "Receipt No.", or "SI#"/"OR#", and copy the full number including any ' +
+    'leading zeros exactly as printed), ' +
+    '"vendor" (the business name at the top of the receipt, not a franchise/branch sub-label), ' +
+    '"tinNumber" (the vendor\'s TIN, usually printed near "VAT REG TIN", "VATREGTIN", or "TIN" -- ' +
+    'read every digit carefully and format it 000-000-000-000 or 000-000-000-00000 if a branch ' +
+    'code suffix is shown; this must match the receipt exactly, digit for digit), ' +
+    '"location" (the vendor\'s city/municipality and region as printed on the receipt, e.g. ' +
+    '"QUEZON CITY, NCR"), ' +
+    '"category" (a short 1-3 word description of what was purchased, e.g. "MATERIALS", "FUEL", ' +
+    '"OFFICE SUPPLIES"), ' +
+    '"amount" (the FINAL total amount actually paid -- look for "TOTAL", "TOTAL AMOUNT DUE", ' +
+    '"GRAND TOTAL", or "AMOUNT DUE", NOT a subtotal, VAT-exclusive amount, or a line-item price; ' +
+    'if a discount was applied use the amount AFTER the discount; return a plain number with no ' +
+    'currency symbol, commas, or spaces). ' +
+    'If a field is genuinely not legible or not present on the receipt, use an empty string for ' +
+    'text fields or 0 for amount -- never guess, round, or invent a value you cannot actually read.';
 
   var groqUrl = 'https://api.groq.com/openai/v1/chat/completions';
   var groqBody = JSON.stringify({
@@ -122,7 +141,11 @@ Deno.serve(async (req) => {
       ],
     }],
     response_format: { type: 'json_object' },
-    max_tokens: 500,
+    // 0 rather than the API default -- this is a one-shot factual reading task (copy what's
+    // printed on the receipt), not a creative one, so the most-likely/deterministic token at
+    // each step is exactly what accuracy calls for here, not variety across retries.
+    temperature: 0,
+    max_tokens: 600,
   });
 
   // A single attempt only -- retrying with backoff inside one function call risked running
