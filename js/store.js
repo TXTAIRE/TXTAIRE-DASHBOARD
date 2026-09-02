@@ -356,10 +356,11 @@ function hoursBetween(timeIn, timeOut) {
 
 // Shared leniency window around an employee's default Time In/Time Out -- a few minutes
 // either side of the schedule is normal, not something to auto-flag. Used for clocking out
-// past defaultTimeOut (before it's worth auto-filing an Overtime request), the early-
-// clock-in pay clamp, and DTR "on schedule" display rounding. Late ARRIVAL specifically
-// uses TARDINESS_GRACE_MINUTES instead (see below) -- the Code of Discipline's Policy of
-// Punctuality documents a 10-minute grace period there, distinct from this general one.
+// past defaultTimeOut (before it's worth auto-filing an Overtime request), and DTR "on
+// schedule" display rounding. Late ARRIVAL specifically uses TARDINESS_GRACE_MINUTES
+// instead (see below) -- the Code of Discipline's Policy of Punctuality documents a
+// 10-minute grace period there, distinct from this general one. The early-clock-in pay
+// clamp has its own separate, smaller constant -- see EARLY_CLOCKIN_PAID_MINUTES below.
 const ATTENDANCE_GRACE_MINUTES = 15;
 
 // Code of Discipline, "Policy of Punctuality": a 10-minute grace period after the official
@@ -624,19 +625,25 @@ function exceedsDefaultTimeOut(timeIn, actualTimeOut, defaultTimeOut) {
   return actual > def;
 }
 
-// Hours worked, the same as hoursBetween, except an employee who badges in well ahead of
-// their scheduled shift doesn't get paid for that early arrival -- the effective start
-// clamps to the employee's Default Time In (unless there's no schedule set, in which case
-// there's nothing to clamp against). Within the same grace window used for lateness
-// (ATTENDANCE_GRACE_MINUTES) an early arrival is still treated as on-schedule, same
-// leniency philosophy as the rest of the attendance logic. The raw attendance.timeIn value
-// itself is never touched by this -- only the hours figure derived from it -- so the
-// actual clock-in time still displays correctly everywhere (DTR, attendance records, etc).
+// Photo attendance itself never blocks an early Time In -- an employee can badge in
+// however far ahead of their shift they like. This only governs the HOURS figure derived
+// from it: pay starts counting no earlier than EARLY_CLOCKIN_PAID_MINUTES before the
+// employee's Default Time In (unless there's no schedule set, in which case there's
+// nothing to clamp against) -- badging in further ahead than that doesn't earn pay for the
+// extra early minutes, it just clamps down to that 5-minute mark instead of their actual,
+// earlier timeIn. The raw attendance.timeIn value itself is never touched by this -- only
+// the hours figure derived from it -- so the actual clock-in time still displays correctly
+// everywhere (DTR, attendance records, etc).
+const EARLY_CLOCKIN_PAID_MINUTES = 5;
 function paidHoursBetween(timeIn, timeOut, emp) {
   if (!emp || !emp.defaultTimeIn) return hoursBetween(timeIn, timeOut);
   const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-  const earliestPaidStart = toMin(emp.defaultTimeIn) - ATTENDANCE_GRACE_MINUTES;
-  const effectiveStart = toMin(timeIn) < earliestPaidStart ? emp.defaultTimeIn : timeIn;
+  const toTime = (min) => {
+    const m = ((min % 1440) + 1440) % 1440;
+    return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  };
+  const earliestPaidStartMin = toMin(emp.defaultTimeIn) - EARLY_CLOCKIN_PAID_MINUTES;
+  const effectiveStart = toMin(timeIn) < earliestPaidStartMin ? toTime(earliestPaidStartMin) : timeIn;
   return hoursBetween(effectiveStart, timeOut);
 }
 
