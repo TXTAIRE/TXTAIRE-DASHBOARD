@@ -394,6 +394,24 @@ const PENALTY_CLASSES = {
   D: { label: 'Serious', labelFil: 'Napakabigat', schedule: ['D'] },
 };
 
+// Severity order, used wherever the catalog is DISPLAYED. The printed Code lists each
+// section's offenses light-first so the table escalates down the page; the portal and the
+// NTE offense picker read from the same order, so an employee comparing the two sees the
+// same sequence. It is deliberately not applied to listDisciplineOffenses(), which backs
+// the admin editing grid -- that keeps sortOrder so rows stay where HR left them.
+const CLASS_ORDER = { A: 0, B: 1, C: 2, D: 3 };
+
+function bySeverity(a, b) {
+  const ao = CLASS_ORDER[a.klass];
+  const bo = CLASS_ORDER[b.klass];
+  // An offense with no class (a legacy row, or one HR added) keeps its place at the end
+  // rather than being silently promoted above classified offenses.
+  if (ao === undefined && bo === undefined) return 0;
+  if (ao === undefined) return 1;
+  if (bo === undefined) return -1;
+  return ao - bo;
+}
+
 function classSchedule(klass) {
   const c = PENALTY_CLASSES[klass];
   return c ? c.schedule.slice() : [];
@@ -485,15 +503,15 @@ const DISCIPLINE_OFFENSE_CATALOG = [
 
   { category: 'Company and Client Property', categoryFil: 'Ari-arian ng Kompanya at Kliyente', offenses: [
     { code: 'carelessness-minor-loss', klass: 'B', label: 'Careless, improper or unauthorized use of company or client property, tools, materials, equipment, refrigerant or supplies, resulting in no loss or in a loss of not more than ₱5,000', labelFil: 'Pabaya, mali, o walang pahintulot na paggamit ng gamit, kasangkapan, materyales, o refrigerant ng kompanya o kliyente, na walang pinsala o may pinsalang hindi hihigit sa ₱5,000' },
-    { code: 'carelessness-major-loss', klass: 'C', label: 'The same act, resulting in a loss of more than ₱5,000 but not more than ₱30,000', labelFil: 'Ganito rin, pero may pinsalang higit sa ₱5,000 pero hindi hihigit sa ₱30,000' },
-    { code: 'carelessness-severe-loss', klass: 'D', label: 'The same act, resulting in a loss of more than ₱30,000', labelFil: 'Ganito rin, pero may pinsalang higit sa ₱30,000' },
+    { code: 'carelessness-major-loss', klass: 'C', label: 'Careless, improper or unauthorized use of company or client property, tools, materials, equipment or refrigerant, resulting in a loss of more than ₱5,000 but not more than ₱30,000', labelFil: 'Pabaya, mali, o walang pahintulot na paggamit ng gamit, kasangkapan, materyales, o refrigerant ng kompanya o kliyente, na may pinsalang higit sa ₱5,000 pero hindi hihigit sa ₱30,000' },
+    { code: 'carelessness-severe-loss', klass: 'D', label: 'Careless, improper or unauthorized use of company or client property, tools, materials, equipment or refrigerant, resulting in a loss of more than ₱30,000', labelFil: 'Pabaya, mali, o walang pahintulot na paggamit ng gamit, kasangkapan, materyales, o refrigerant ng kompanya o kliyente, na may pinsalang higit sa ₱30,000' },
     { code: 'failure-report-loss', klass: 'B', label: 'Failure to report the loss, damage or malfunction of company or client property, tools or equipment in your custody', labelFil: 'Hindi pag-report ng nawala, nasira, o nasirang gamit ng kompanya o kliyente na nasa iyong pangangalaga' },
     { code: 'vandalism', klass: 'C', label: 'Any act of vandalism that defaces or damages company or client property, or the property of another person within company or client premises', labelFil: 'Pagsira o pagpapangit ng ari-arian ng kompanya, ng kliyente, o ng ibang tao sa loob ng kompanya o ng kliyente' },
     { code: 'willful-damage', klass: 'D', label: 'Willful or malicious damage to, or destruction of, any property or equipment owned by the Company or by its clients', labelFil: 'Sadya o may masamang layuning pagsira sa ari-arian o kagamitan ng kompanya o ng kliyente' },
     { code: 'unauthorized-vehicle-no-damage', klass: 'C', label: 'Unauthorized use of a company or client vehicle, without resulting damage or injury', labelFil: 'Paggamit ng sasakyan ng kompanya o kliyente nang walang pahintulot, walang pinsala o nasaktan' },
     { code: 'unauthorized-vehicle-with-damage', klass: 'D', label: 'Unauthorized use of a company or client vehicle, resulting in damage or injury', labelFil: 'Paggamit ng sasakyan ng kompanya o kliyente nang walang pahintulot, may pinsala o may nasaktan' },
     { code: 'reckless-driving-no-damage', klass: 'C', label: 'Driving a company vehicle in a reckless or imprudent manner, or while not holding the appropriate valid licence, without resulting damage or injury', labelFil: 'Pabigla-bigla o pabayang pagmamaneho ng sasakyan ng kompanya, o pagmamaneho nang walang tamang lisensya, walang pinsala o nasaktan' },
-    { code: 'reckless-driving-with-damage', klass: 'D', label: 'The same act, resulting in damage to property or injury to any person', labelFil: 'Ganito rin, pero may nasirang ari-arian o may nasaktan' },
+    { code: 'reckless-driving-with-damage', klass: 'D', label: 'Driving a company vehicle in a reckless or imprudent manner, or while not holding the appropriate valid licence, resulting in damage to property or injury to any person', labelFil: 'Pabigla-bigla o pabayang pagmamaneho ng sasakyan ng kompanya, o pagmamaneho nang walang tamang lisensya, na may nasirang ari-arian o may nasaktan' },
     { code: 'attempted-removal-no-loss', klass: 'C', label: 'Attempted or frustrated removal of company or client property from the premises without proper authorization or gate pass, where the property was recovered and no loss resulted', labelFil: 'Pagtatangkang ilabas ang gamit ng kompanya o kliyente nang walang pahintulot o gate pass, pero nabawi ito at walang nawala' },
     { code: 'attempted-removal-with-loss', klass: 'D', label: 'Removing company or client property from the premises without authorization, where the property was taken away or lost', labelFil: 'Paglabas ng gamit ng kompanya o kliyente nang walang pahintulot, at ito ay nadala o nawala' },
     { code: 'theft-pilferage', klass: 'D', label: 'Theft or pilferage of property or money belonging to the Company, a client, a co-employee, or any third person, within company or client premises; including obtaining property or money under fraudulent or false pretences', labelFil: 'Pagnanakaw ng ari-arian o pera ng kompanya, kliyente, kasamahan, o kahit sino, sa loob ng kompanya o ng kliyente; kasama ang pagkuha nito sa pamamagitan ng panloloko' },
@@ -515,7 +533,7 @@ const DISCIPLINE_OFFENSE_CATALOG = [
 
   { category: 'Proper Conduct and Behavior', categoryFil: 'Asal at Ugali', offenses: [
     { code: 'horseplay-no-loss', klass: 'A', label: 'Horseplay or unruly conduct which causes or tends to cause disorder, disrupts work, or creates a disturbance within company or client premises, where no loss, damage or injury results', labelFil: 'Kalokohan o magulong asal na nakakagulo sa trabaho o sa loob ng kompanya o ng kliyente, na walang pinsala o nasaktan' },
-    { code: 'horseplay-with-loss', klass: 'C', label: 'The same conduct, where loss or damage to property, or injury to any person, results', labelFil: 'Ganito rin, pero may nasira o may nasaktan' },
+    { code: 'horseplay-with-loss', klass: 'C', label: 'Horseplay or unruly conduct which causes disorder, disrupts work or creates a disturbance within company or client premises, where loss or damage to property, or injury to any person, results', labelFil: 'Kalokohan o magulong asal na nakakagulo sa trabaho o sa loob ng kompanya o ng kliyente, na may nasira o may nasaktan' },
     { code: 'bulletin-tampering', klass: 'A', label: 'Removing, defacing or tampering with a notice posted on the company bulletin board or issued through official company channels', labelFil: 'Pagtanggal, pagpapangit, o pakikialam sa paskil sa bulletin board o sa opisyal na anunsyo ng kompanya' },
     { code: 'gross-discourtesy', klass: 'B', label: "Discourtesy, rudeness or improper behaviour towards a client, a client's visitor or tenant, a supplier, or a member of the public", labelFil: 'Kawalang-galang, kabastusan, o maling asal sa kliyente, sa bisita o tenant ng kliyente, sa supplier, o sa kahit sinong tao' },
     { code: 'gross-discourtesy-client-loss', klass: 'D', label: "Gross or repeated discourtesy towards a client, resulting in the loss of, or serious damage to, a client account or to the Company's reputation", labelFil: 'Malubha o paulit-ulit na kawalang-galang sa kliyente na ikinawala o lubhang ikinasira ng account ng kliyente o ng pangalan ng kompanya' },
@@ -585,6 +603,10 @@ const RETIRED_OFFENSE_CODES = [
 // of Discipline page, and suggestedPenaltyFor() -- keep reading `schedule` exactly as before.
 DISCIPLINE_OFFENSE_CATALOG.forEach((cat) => {
   cat.offenses.forEach((o) => { if (!o.schedule) o.schedule = classSchedule(o.klass); });
+  // Order light-first here too. disciplineCatalog() returns this array verbatim whenever
+  // the disciplineOffenses table is still empty, so without this the fallback would list
+  // offenses in a different order from the imported catalog -- and from the printed Code.
+  cat.offenses.sort(bySeverity);
 });
 
 
@@ -1156,6 +1178,8 @@ const Store = (function () {
         schedule: (r.schedule && r.schedule.length) ? r.schedule : classSchedule(r.klass),
       });
     });
+    // stable within a class: rows keep their sortOrder sequence
+    byCategory.forEach((c) => { c.offenses = c.offenses.slice().sort(bySeverity); });
     return byCategory;
   }
   function listDisciplineOffenses() { return state.disciplineOffenses.slice().sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder)); }
