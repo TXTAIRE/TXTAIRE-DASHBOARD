@@ -1043,9 +1043,15 @@ window.EssViews.attendance = (function () {
             render(main, emp);
           } else if (!askedOvertime) {
             // The original camera-preview modal (and this exact button) is still on
-            // screen -- safe to just unlock it for a retry.
+            // screen -- safe to just unlock it for a retry. A real (non-connectivity)
+            // failure here used to leave the button silently back to normal with zero
+            // indication anything went wrong -- looked exactly like an unresponsive
+            // button, not an error, with nothing to go on. Surfacing the actual message
+            // (RLS/storage/auth errors already carry a readable one) at least tells the
+            // employee something failed and gives HR something to search for.
             confirmBtn.disabled = false;
             confirmBtn.textContent = `Confirm ${kind === 'in' ? 'Time In' : 'Time Out'}`;
+            toast('Could not save — ' + ((e && e.message) || 'please try again') + '.');
           } else {
             // The overtime question replaced that modal already -- nothing left to
             // re-enable, so just close out and let them start the whole capture over.
