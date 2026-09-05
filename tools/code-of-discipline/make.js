@@ -32,13 +32,15 @@ const footer = new d.Footer({
     new d.Paragraph({
       spacing: { before: 60, after: 0 },
       border: { top: { style: d.BorderStyle.SINGLE, size: 6, color: 'C7D2E4', space: 6 } },
+      // An explicit right tab stop at the content width, not a PositionalTab. Word's PDF
+      // export honours the ptab inconsistently -- it worked in the 45-page build and
+      // collapsed on 44 of 46 pages in the next one, printing the page number jammed
+      // against the strap, with no change to this markup. A real tab stop lands the same
+      // every time. make-fil.js carries the identical fix.
+      tabStops: [{ type: d.TabStopType.RIGHT, position: W }],
       children: [
         new d.TextRun({ text: 'TXTAIRE OPC  |  Code of Discipline  |  Series 2, 2026 Edition', font: 'Arial', size: 15, color: '7A7A7A' }),
-        new d.PositionalTab({
-          alignment: d.PositionalTabAlignment.RIGHT,
-          relativeTo: d.PositionalTabRelativeTo.MARGIN,
-          leader: d.PositionalTabLeader.NONE,
-        }),
+        new d.TextRun({ children: [new d.Tab()] }),
         new d.TextRun({ children: [d.PageNumber.CURRENT], font: 'Arial', size: 17, bold: true, color: C.navy }),
         new d.TextRun({ text: ' | Page', font: 'Arial', size: 15, color: '7A7A7A' }),
       ],
