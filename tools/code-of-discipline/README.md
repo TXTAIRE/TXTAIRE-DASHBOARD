@@ -1,13 +1,9 @@
 # Code of Discipline — document build
 
-Builds the two PDFs served by the portal and handed to employees:
+Builds the three PDFs served by the portal and handed to employees. See **Current
+baseline** below for the page counts and where each one ships.
 
-| Output | Pages | Ships to |
-| --- | --- | --- |
-| `out.pdf` — English | 45 | `assets/docs/code-of-discipline-2026-en.pdf` |
-| `out-fil.pdf` — Filipino | 47 | `assets/docs/code-of-discipline-2026-fil.pdf` |
-
-Both are the same document in two languages: 8 categories, 102 offenses, identical
+All three are the same Code: 8 categories, 102 offenses, identical
 class split (A 14 / B 20 / C 29 / D 39). The Filipino offense wording is read from
 `fil-offenses.json`, which is generated from the app's own `labelFil` fields, so the
 PDF and the portal cannot drift apart. Do not re-translate offense text by hand.
@@ -37,7 +33,11 @@ python pagemap.py out.pdf              # must now report no change = converged
 ```
 
 The Filipino edition is the same sequence with `make-fil.js`, `topdf-fil.ps1`,
-`pagemap-fil.py` and `out-fil.*`.
+`pagemap-fil.py` and `out-fil.*`. The employee copy is the same again with `make-emp.js`,
+`pagemap-emp.py` and `out-emp.*` (it uses `topdf.ps1`).
+
+`lib.js` is shared by all three, so **rebuild and re-verify all three whenever you touch
+it** — a change made for one silently repaginates the others.
 
 `topdf.ps1` throws a COM exception on `Quit` after a successful export. It is
 harmless — check for the `PAGES=` line, which means the export completed.
@@ -53,9 +53,12 @@ reviewer who was eyeballing the document instead of measuring it.
 | `orphans.py` | a page whose last line is a heading (stranded Part banner) |
 | `blanks.py` | pages with no content |
 | `fill.py` | pages that end well above the bottom margin |
+| `dropcheck.py` | paragraphs the modules produce that never reached the document |
 | `pv.py` | renders pages to PNG for a visual pass |
 
-Use the `fil-` prefixed copies for the Filipino edition.
+Use the `fil-` prefixed copies for the Filipino edition and the `emp-` prefixed copies
+for the employee copy. `dropcheck.py` takes the edition as an argument:
+`python dropcheck.py out-fil.docx fil`, `python dropcheck.py out-emp.docx employee`.
 
 ## Gotchas
 
@@ -94,6 +97,17 @@ column, so `labelFil` carries its caveats inline. A note written against the Eng
 layout ends up repeating the offense it annotates. `fil-part4.js` warns at build time
 when a note overlaps its own offense text by more than 60%.
 
+**A note() item written as `[ 'a string' ]` renders as an EMPTY paragraph.** `note()`
+treats an array item as a list of TextRuns, and docx drops a bare string in that position
+without raising anything. Three prohibitions in Section 3.12 — no fines, no withholding of
+pay for hours actually worked, no liquidated damages for short resignation notice — were
+written that way and were silently missing from **every edition shipped before this was
+found**, in both languages. Nothing else caught it: the page map converged, no page ended
+on a heading, no page was blank, fill was normal, and the section still showed its heading
+and its label, so the page looked complete. `note()` now wraps bare strings, and
+`dropcheck.py` compares what the modules produce against what reaches the DOCX. Run it on
+every edition, every build.
+
 **Watch for homoglyphs in the Filipino text.** Cyrillic characters reached a draft
 inside an otherwise-Latin word. Scan the built PDF's text layer for non-Latin
 scripts; only em/en dash, bullet, thin space, arrow, middle dot and the peso sign
@@ -101,10 +115,18 @@ should appear above ASCII.
 
 ## Current baseline
 
-| Edition | Pages | Delivered file |
-| --- | --- | --- |
-| English | 46 | `assets/docs/code-of-discipline-2026-en.pdf` |
-| Filipino | 47 | `assets/docs/code-of-discipline-2026-fil.pdf` |
+| Edition | Build | Pages | Delivered file |
+| --- | --- | --- | --- |
+| English, full | `make.js` | 46 | `assets/docs/code-of-discipline-2026-en.pdf` |
+| Filipino, full | `make-fil.js` | 47 | `assets/docs/code-of-discipline-2026-fil.pdf` |
+| English, employee copy | `make-emp.js` | 41 | `assets/docs/code-of-discipline-2026-en-employee.pdf` |
+
+The employee copy is the same Code with the edition apparatus removed: no NEW / REVISED /
+WITHDRAWN markers, no Summary of Changes, no passages comparing this edition with the
+2025 one, and no Annex F (HR's headcount checklist). It is a build flag, not a second set
+of content — `L.setAudience('employee')` — so the two cannot drift apart. Passages that
+mixed a comparison with a rule are rewritten through `L.pick(full, employee)` rather than
+dropped; **nothing in the employee copy may remove a rule.**
 
 Both are reproducible from this tree with the committed lockfile. `pagemap.json` and
 `pagemap-fil.json` match the delivered documents.

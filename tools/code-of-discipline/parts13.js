@@ -209,7 +209,9 @@ const part3 = () => [
   })(),
   gap(160),
   note('A suspension is never longer than fifteen days', [
-    'The previous edition of this Code allowed suspensions of thirty (30) days as an ordinary penalty. A suspension of that length, imposed as a penalty, is difficult to defend and risks being treated as a constructive dismissal. Under this edition the longest penalty short of dismissal is fifteen (15) working days.',
+    L.pick(
+      'The previous edition of this Code allowed suspensions of thirty (30) days as an ordinary penalty. A suspension of that length, imposed as a penalty, is difficult to defend and risks being treated as a constructive dismissal. Under this edition the longest penalty short of dismissal is fifteen (15) working days.',
+      'The longest penalty short of dismissal is fifteen (15) working days. The Company does not impose a longer suspension as a penalty.'),
     'This is separate from PREVENTIVE suspension under Section 3.8, which is not a penalty and which the law separately caps at thirty (30) days.',
   ]),
 
@@ -368,7 +370,9 @@ const part3 = () => [
   ], { edge: C.blue, fill: 'EEF3FB', labelColor: C.navy }),
 
   secHead('3.7  The Administrative Review Panel', 'rev'),
-  p('The previous edition required a panel of three managers for every case. At the Company’s present size that is not workable, and it delays simple cases. The following applies instead, and scales as the Company grows:'),
+  p(L.pick(
+    'The previous edition required a panel of three managers for every case. At the Company’s present size that is not workable, and it delays simple cases. The following applies instead, and scales as the Company grows:',
+    'Who reviews a case depends on how serious it is. The following applies, and scales as the Company grows:')),
   ...(() => {
     const RW = [2400, 3400, 3946];
     const rows = [
@@ -429,9 +433,14 @@ const part3 = () => [
   p('Effect on benefits and promotion. A cleared penalty shall not be used as a ground to deny promotion, transfer, training or any benefit.'),
 
   secHead('3.12  Restitution and the Prohibition on Fines', 'new'),
-  note('This section replaces provisions of the previous edition that were contrary to law', [
-    ['The Company shall not impose fines. The previous edition provided for a "P500 fine / confiscation of unit". A fine deducted from wages is not among the deductions permitted by Article 113 of the Labor Code and shall no longer be imposed.'],
-    ['The Company shall not withhold pay for hours actually worked. The previous edition provided that an employee who forgot to punch in or out "shall be marked absent and without pay for that day". An employee who actually rendered work must be paid for it. A missed time entry is corrected through a Time Correction Form certified by the immediate superior, and is dealt with, if at all, as a Class A offense under Section 4.2.'],
+  note(L.pick('This section replaces provisions of the previous edition that were contrary to law',
+              'Fines and the withholding of earned pay are not allowed'), [
+    [L.pick(
+      'The Company shall not impose fines. The previous edition provided for a "P500 fine / confiscation of unit". A fine deducted from wages is not among the deductions permitted by Article 113 of the Labor Code and shall no longer be imposed.',
+      'The Company shall not impose fines. A fine deducted from wages is not among the deductions permitted by Article 113 of the Labor Code, and no unit or tool of yours will be confiscated as a penalty.')],
+    [L.pick(
+      'The Company shall not withhold pay for hours actually worked. The previous edition provided that an employee who forgot to punch in or out "shall be marked absent and without pay for that day". An employee who actually rendered work must be paid for it. A missed time entry is corrected through a Time Correction Form certified by the immediate superior, and is dealt with, if at all, as a Class A offense under Section 4.2.',
+      'The Company shall not withhold pay for hours actually worked. If you actually rendered work you must be paid for it, even if you forgot to punch in or out. A missed time entry is corrected through a Time Correction Form certified by your immediate superior, and is dealt with, if at all, as a Class A offense under Section 4.2.')],
     ['The Company shall not impose liquidated damages of two months’ salary for failure to serve notice of resignation. See Section 6.4.'],
   ], { edge: C.Dtxt, fill: 'FDF0F0', labelColor: C.Dtxt }),
   gap(160),

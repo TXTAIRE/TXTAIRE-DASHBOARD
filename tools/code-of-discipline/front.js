@@ -50,9 +50,14 @@ const cover = () => [
     children: [run('DISCIPLINE', { size: 84, bold: true, color: '2E7D32' })],
   }),
   new d.Paragraph({
-    alignment: d.AlignmentType.CENTER, spacing: { after: 320 },
+    alignment: d.AlignmentType.CENTER, spacing: { after: L.forEmployee() ? 40 : 320 },
     children: [run('Series 2, 2026 Edition', { size: 26, bold: true, color: '1A1A1A' })],
   }),
+  // The two documents must be tellable apart at a glance, on paper, from across a desk.
+  ...(L.forEmployee() ? [new d.Paragraph({
+    alignment: d.AlignmentType.CENTER, spacing: { after: 300 },
+    children: [run('Employee Copy', { size: 22, color: '595959' })],
+  })] : []),
 
   img('cover.jpg', 470, 314),
   pageBreak(),
@@ -154,24 +159,48 @@ const controlSheet = (pageMap) => {
     ], CW),
 
     gap(280),
-    secHead('Why this edition was issued'),
-    p('This Series 2, 2026 Edition replaces the Series 1, 2025 Edition of the TXTAIRE OPC Code of Discipline in its entirety. It was issued for four reasons:'),
-    bullet([
-      run('To match the size of the Company. ', { bold: true }),
-      run('TXTAIRE OPC currently employs about twenty (20) people and expects to grow to about one hundred (100) within the next year. The previous edition assumed a large organisation with several layers of managers. This edition sets out procedures that a twenty-person company can actually carry out today, and that will still work at one hundred.'),
+    // The full edition opens by explaining what changed and why, which is what HR needs.
+    // The employee copy opens by explaining how to find things, which is what an employee
+    // needs. Neither version states a rule, so this is a straight swap.
+    ...(L.forEmployee() ? [
+      secHead('How to use this Code'),
+      p('This Code applies to every employee of TXTAIRE OPC. It sets out the standards expected of you, the conduct the Company treats as an offense, the penalty attached to each offense, and the procedure the Company must follow before any penalty is imposed on you.'),
+      bullet([
+        run('What is expected of you. ', { bold: true }),
+        run('Part II states the Company’s ethical standards — how the Company expects you to deal with clients, with your co-employees and with company property, before any question of discipline arises.'),
+      ]),
+      bullet([
+        run('How discipline works. ', { bold: true }),
+        run('Part III explains the four classes of offense, the penalty attached to each class, and the two-notice procedure the Company follows in every case. Read Section 3.6 before anything else if you have received a Notice to Explain.'),
+      ]),
+      bullet([
+        run('The list of offenses. ', { bold: true }),
+        run('Part IV lists every offense and its class. Within each group the offenses run from the lightest to the most serious, so you can see where a rule sits without cross-referencing the penalty table.'),
+      ]),
+      bullet([
+        run('Your hours, leaves and benefits. ', { bold: true }),
+        run('Part V covers working hours, overtime, leaves, pay and benefits. Part VI covers promotion, resignation, and what you are entitled to on separation.'),
+      ], { after: 200 }),
+    ] : [
+      secHead('Why this edition was issued'),
+      p('This Series 2, 2026 Edition replaces the Series 1, 2025 Edition of the TXTAIRE OPC Code of Discipline in its entirety. It was issued for four reasons:'),
+      bullet([
+        run('To match the size of the Company. ', { bold: true }),
+        run('TXTAIRE OPC currently employs about twenty (20) people and expects to grow to about one hundred (100) within the next year. The previous edition assumed a large organisation with several layers of managers. This edition sets out procedures that a twenty-person company can actually carry out today, and that will still work at one hundred.'),
+      ]),
+      bullet([
+        run('To make the penalties fair and proportionate. ', { bold: true }),
+        run('A number of offenses in the previous edition carried dismissal on the very first commission, or suspensions of thirty (30) days, even for lapses that caused no loss to the Company. Penalties in this edition are graduated: light offenses are corrected, and dismissal is reserved for the serious causes recognised by law.'),
+      ]),
+      bullet([
+        run('To comply with the Labor Code and current DOLE regulations. ', { bold: true }),
+        run('Provisions that exposed the Company to legal risk have been removed, including the imposition of fines and the withholding of pay for hours actually worked. Procedural due process has been written out in full, following the twin-notice rule.'),
+      ]),
+      bullet([
+        run('To state the Company’s ethical standards in writing. ', { bold: true }),
+        run('Part II of this Code is new. It states plainly what TXTAIRE expects of every employee before any question of discipline arises.'),
+      ], { after: 200 }),
     ]),
-    bullet([
-      run('To make the penalties fair and proportionate. ', { bold: true }),
-      run('A number of offenses in the previous edition carried dismissal on the very first commission, or suspensions of thirty (30) days, even for lapses that caused no loss to the Company. Penalties in this edition are graduated: light offenses are corrected, and dismissal is reserved for the serious causes recognised by law.'),
-    ]),
-    bullet([
-      run('To comply with the Labor Code and current DOLE regulations. ', { bold: true }),
-      run('Provisions that exposed the Company to legal risk have been removed, including the imposition of fines and the withholding of pay for hours actually worked. Procedural due process has been written out in full, following the twin-notice rule.'),
-    ]),
-    bullet([
-      run('To state the Company’s ethical standards in writing. ', { bold: true }),
-      run('Part II of this Code is new. It states plainly what TXTAIRE expects of every employee before any question of discipline arises.'),
-    ], { after: 200 }),
 
     note('Reading this Code', [
       'This Code is written to be read by everyone, not only by lawyers and managers. If any provision of this Code is unclear to you, or appears to conflict with your employment contract or with law, ask the Human Resources Department. Where any provision of this Code conflicts with the Labor Code of the Philippines, its Implementing Rules, or an issuance of the Department of Labor and Employment, the law prevails and this Code shall be read as amended accordingly.',
@@ -181,6 +210,12 @@ const controlSheet = (pageMap) => {
 };
 
 // ------------------------------------------------------- TABLE OF CONTENTS
+// Entries the employee copy does not carry: the Summary of Changes (a record of what
+// moved between editions) and Annex F (HR's headcount planning checklist).
+const EMPLOYEE_OMITS = ['soc', 'socA', 'socB', 'socC', 'socD', 'anxF'];
+const entriesFor = () =>
+  (L.forEmployee() ? TOC_ENTRIES.filter((e) => EMPLOYEE_OMITS.indexOf(e[3]) === -1) : TOC_ENTRIES);
+
 const TOC_ENTRIES = [
   ['part', 'SUMMARY', 'SUMMARY OF CHANGES FROM THE 2025 EDITION', 'soc'],
   ['item', 'A', 'Penalties that were reduced', 'socA'],
@@ -299,9 +334,9 @@ const toc = (pageMap) => {
       }), { w: W, fill: C.blue })],
     })], [W], { borderless: true }),
     gap(300),
-    ...TOC_ENTRIES.map((e) => tocLine(e[0], e[1], e[2], pageMap[e[3]])),
+    ...entriesFor().map((e) => tocLine(e[0], e[1], e[2], pageMap[e[3]])),
     pageBreak(),
   ];
 };
 
-module.exports = { cover, missionVision, controlSheet, toc, TOC_ENTRIES };
+module.exports = { cover, missionVision, controlSheet, toc, TOC_ENTRIES, entriesFor };

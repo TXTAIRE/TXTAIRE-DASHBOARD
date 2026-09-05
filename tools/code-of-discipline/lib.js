@@ -58,6 +58,28 @@ let LANG = 'en';
 const setLang = (l) => { LANG = (l === 'fil') ? 'fil' : 'en'; };
 const S = () => STRINGS[LANG];
 
+// Audience. The full edition is the HR reference: it carries the NEW / REVISED /
+// WITHDRAWN markers, the Summary of Changes, and the passages explaining how each rule
+// differs from the 2025 edition. The employee copy is the same Code with that apparatus
+// removed -- an employee needs to know what the rule IS, not what it used to be.
+//
+// This is a flag rather than a second set of content modules on purpose. Two copies of
+// the same 100-odd rules would drift the first time one was amended, and the whole point
+// of this Code is that the employee copy and the HR reference say the same thing.
+//
+// Nothing here may delete a RULE. Several of the passages that compare the two editions
+// also state something operative -- that self-defence carries no penalty, that Section
+// 4.8 applies where authority was abused -- so those pass through `pick`, which supplies
+// a rewritten sentence for the employee copy instead of dropping the passage.
+let AUDIENCE = 'full';
+const setAudience = (a) => { AUDIENCE = (a === 'employee') ? 'employee' : 'full'; };
+const forEmployee = () => AUDIENCE === 'employee';
+const pick = (full, employee) => (forEmployee() ? employee : full);
+const hrOnly = (...items) => (forEmployee() ? [] : items);
+// Change markers resolve through here so suppressing them is one decision, not one per
+// call site: both the heading pills and the per-offense pills go through chgStyle.
+const chgStyle = (kind) => (forEmployee() ? undefined : CHG[kind]);
+
 const cls = { A: C.A, B: C.B, C: C.Cc, D: C.D };
 const clsTxt = { A: C.Atxt, B: C.Btxt, C: C.Ctxt, D: C.Dtxt };
 
@@ -153,7 +175,7 @@ const CHG = {
 };
 
 const chgRun = (kind, size) => {
-  const c = CHG[kind];
+  const c = chgStyle(kind);
   if (!c) return [];
   return [
     new d.TextRun({ text: '  ', font: F, size: size || 15 }),
@@ -234,10 +256,20 @@ const note = (label, lines, o) => {
           spacing: { after: 60 },
           children: [run(label, { bold: true, size: 19, color: o.labelColor || '7F5200', caps: true })],
         }),
+        // An item may be a plain string, or an array of runs where part of the line needs
+        // its own formatting. A bare STRING inside that array has to be wrapped here:
+        // docx drops a raw string in a children array without raising anything, and the
+        // paragraph renders empty. Three prohibitions in Section 3.12 -- no fines, no
+        // withholding of earned pay, no liquidated damages for short notice -- were
+        // written that way and were silently absent from every edition built before this
+        // was found. _dropcheck.js compares what the modules produce against what reaches
+        // the DOCX, so a paragraph lost this way cannot go unnoticed again.
         ...lines.map((l, i) => new d.Paragraph({
           alignment: d.AlignmentType.JUSTIFIED,
           spacing: { after: i === lines.length - 1 ? 0 : 80, line: 250 },
-          children: Array.isArray(l) ? l : [run(l, { size: 19 })],
+          children: Array.isArray(l)
+            ? l.map((x) => (typeof x === 'string' ? run(x, { size: 19 }) : x))
+            : [run(l, { size: 19 })],
         })),
       ], { w: W, fill: o.fill || 'FFF9EC', va: d.VerticalAlign.TOP })],
     })],
@@ -294,16 +326,16 @@ const offRow = (n, text, k, extra, chg) => new d.TableRow({ cantSplit: true,
     cell([
       new d.Paragraph({
         alignment: d.AlignmentType.CENTER,
-        spacing: { after: chg ? 30 : 0, line: 250 },
+        spacing: { after: chgStyle(chg) ? 30 : 0, line: 250 },
         children: [run(String(n), { size: 19, bold: true, color: C.grey })],
       }),
-      ...(CHG[chg] ? [new d.Paragraph({
+      ...(chgStyle(chg) ? [new d.Paragraph({
         alignment: d.AlignmentType.CENTER,
         spacing: { after: 0, line: 200 },
         children: [new d.TextRun({
-          text: ' ' + (chg === 'rev' ? S().chg.revShort : CHG[chg].text) + ' ',
-          font: F, size: 12, bold: true, color: CHG[chg].fg,
-          shading: { type: d.ShadingType.CLEAR, fill: CHG[chg].bg, color: 'auto' },
+          text: ' ' + (chg === 'rev' ? S().chg.revShort : chgStyle(chg).text) + ' ',
+          font: F, size: 12, bold: true, color: chgStyle(chg).fg,
+          shading: { type: d.ShadingType.CLEAR, fill: chgStyle(chg).bg, color: 'auto' },
         })],
       })] : []),
     ], { w: OFF_W[0], va: d.VerticalAlign.TOP }),
@@ -377,7 +409,7 @@ const legend = () => {
 };
 
 module.exports = {
-  d, C, W, F, setLang, S, img, run, p, bullet, gap, pageBreak,
+  d, C, W, F, setLang, S, setAudience, forEmployee, pick, hrOnly, img, run, p, bullet, gap, pageBreak,
   pageBreakBefore,
   partHead, secHead, subHead, cell, tCell, table, note, chgRun, CHG,
   benefitRun, benefitCell, BENEFIT,

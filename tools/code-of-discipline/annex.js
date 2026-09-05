@@ -78,7 +78,9 @@ const signBlock = (left, right) => [
 const annexes = () => [
   ...partHead('ANNEXES', 'Forms and Reference', 'new'),
   p('The forms in these Annexes are the standard forms of the Human Resources Department. They may be reproduced and completed by hand or electronically. Using them is not optional: a disciplinary action recorded on anything else is harder to defend, and a Notice to Explain that omits any of the elements in Annex A is legally defective.'),
-  p('They fit together in order. Annex A goes out first; Annex B comes back from the employee; Annex C is issued only if a conference is to be held; Annex D is the panel’s working paper and is never given to the employee; Annex E closes the case and is served on the employee. Annex F is a planning checklist for HRD rather than a case form, and Annex G is signed once, on receipt of this Code, and filed in the 201 file.'),
+  p(L.pick(
+    'They fit together in order. Annex A goes out first; Annex B comes back from the employee; Annex C is issued only if a conference is to be held; Annex D is the panel’s working paper and is never given to the employee; Annex E closes the case and is served on the employee. Annex F is a planning checklist for HRD rather than a case form, and Annex G is signed once, on receipt of this Code, and filed in the 201 file.',
+    'They fit together in order. Annex A goes out first; Annex B is your written explanation and comes back from you; Annex C is issued only if a conference is to be held; Annex D is the panel’s working paper and is never given to the employee; Annex E closes the case and is served on you. Annex G is signed once, on receipt of this Code, and filed in your 201 file.')),
 
   // ---------------------------------------------------------------- ANNEX A
   ...formHead('Annex A  —  Notice to Explain', 'CD-01'),
@@ -212,49 +214,54 @@ const annexes = () => [
   ...signBlock('Approved by (Owner / General Manager)', 'Received by (Employee) — Signature and date'),
 
   // ---------------------------------------------------------------- ANNEX F
-  ...formHead('Annex F  —  Compliance Checklist as Headcount Grows', 'CD-06'),
-  p('Several legal obligations are triggered by headcount, and the Company expects to grow from about twenty (20) to about one hundred (100) within the next year. This checklist is for HRD’s planning. It is a summary, not a substitute for the issuances themselves; confirm current thresholds with the DOLE Regional Office before each milestone.', { after: 100 }),
-  ...(() => {
-    const CW = [1500, 4400, 3846];
-    const PAD = { top: 26, bottom: 26, left: 80, right: 80 };
-    const rows = [
-      ['Any size', 'Register the establishment with DOLE (Rule 1020); keep an OSH programme; provide free PPE; keep an accident logbook; report accidents and illnesses.', 'RA 11058 / DO 198-18'],
-      ['Any size', 'Constitute a Committee on Decorum and Investigation; post the anti-sexual harassment policy conspicuously; conduct gender sensitivity orientation.', 'RA 7877 / RA 11313'],
-      ['Any size', 'Adopt and post a workplace policy and programme on HIV and AIDS, tuberculosis, Hepatitis B, drug-free workplace and mental health.', 'RA 11166, DO 73-05, DO 05-10, DO 53-03, RA 11036'],
-      ['Any size', 'Provide a lactation station and lactation breaks; maintain the required first aid kit.', 'RA 10028'],
-      ['Any size', 'Register with SSS, PhilHealth and Pag-IBIG; remit contributions on time; issue itemised payslips.', 'SSS, PhilHealth, HDMF laws'],
-      ['10 or more', 'Appoint at least one certified first-aider and a trained Safety Officer 1; all workers to complete the mandatory 8-hour OSH seminar.', 'DO 198-18'],
-      ['10 or more', 'Post the Code of Discipline and other work rules where employees can read them; keep employment records at the workplace.', 'Labor Code, Rule X'],
-      ['11 to 50', 'Constitute the Health and Safety Committee; appoint a Safety Officer 2 where the workplace is classified as high risk (electrical, work at height, confined space — which covers much of the Company’s field work).', 'DO 198-18'],
-      ['21 or more', 'Employ a part-time occupational health physician and nurse, or arrange the required retainer and referral where the workplace is low risk.', 'OSHS Rule 1960'],
-      ['50 or more', 'Employ a full-time Safety Officer 2 (or higher, per risk classification); expand the Health and Safety Committee; maintain a treatment room or clinic as required by risk classification.', 'DO 198-18 / OSHS Rule 1960'],
-      ['51 or more', 'Consider formalising a grievance machinery and a written salary structure; review whether a rank-and-file union may seek recognition and prepare HR accordingly.', 'Labor Code, Book V'],
-      ['100 or more', 'Employ a full-time safety officer and, depending on risk classification, a full-time occupational health nurse; maintain an emergency clinic; expand the Family Welfare Programme.', 'DO 198-18 / OSHS'],
-      ['200 or more', 'Establish a Family Welfare Programme with a designated coordinator; review the requirement for a full-time physician and dentist.', 'DOLE Family Welfare Program'],
-    ];
-    return [table([
-      new d.TableRow({ cantSplit: true,
-        tableHeader: true,
-        children: [
-          tCell('HEADCOUNT', { w: CW[0], bold: true, color: 'FFFFFF', fill: C.blue, size: 17, align: d.AlignmentType.CENTER }),
-          tCell('WHAT MUST BE IN PLACE', { w: CW[1], bold: true, color: 'FFFFFF', fill: C.blue, size: 17 }),
-          tCell('SOURCE', { w: CW[2], bold: true, color: 'FFFFFF', fill: C.blue, size: 17 }),
-        ],
-      }),
-      ...rows.map((r) => new d.TableRow({ cantSplit: true,
-        children: [
-          tCell(r[0], { w: CW[0], bold: true, color: C.navy, align: d.AlignmentType.CENTER, va: d.VerticalAlign.TOP, size: 16, pad: PAD, line: 215 }),
-          tCell(r[1], { w: CW[1], va: d.VerticalAlign.TOP, size: 16, pad: PAD, line: 215 }),
-          tCell(r[2], { w: CW[2], va: d.VerticalAlign.TOP, size: 15, italics: true, pad: PAD, line: 215 }),
-        ],
-      })),
-    ], CW)];
-  })(),
-  gap(120),
-  note('Two things to do before headcount reaches fifty', [
-    'First, appoint and train the Safety Officer now rather than at the threshold. Certification takes time, and the Company’s field work — electrical, refrigerant under pressure, rooftop and elevated work — is high risk regardless of headcount.',
-    'Second, put the Administrative Review Panel on a proper footing. At twenty employees the Panel will often be the same three people. At one hundred it must be possible to constitute a Panel with no one who has an interest in the case. Identify and train a pool of at least six potential members.',
-  ], { edge: C.blue, fill: 'EEF3FB', labelColor: C.navy }),
+  // HR planning material -- headcount thresholds and what to do before each one.
+  // It is not a case form and an employee has no use for it, so the employee copy
+  // omits it. Section 5.7's cross-reference to it is dropped there too.
+  ...L.hrOnly(
+    ...formHead('Annex F  —  Compliance Checklist as Headcount Grows', 'CD-06'),
+    p('Several legal obligations are triggered by headcount, and the Company expects to grow from about twenty (20) to about one hundred (100) within the next year. This checklist is for HRD’s planning. It is a summary, not a substitute for the issuances themselves; confirm current thresholds with the DOLE Regional Office before each milestone.', { after: 100 }),
+    ...(() => {
+      const CW = [1500, 4400, 3846];
+      const PAD = { top: 26, bottom: 26, left: 80, right: 80 };
+      const rows = [
+        ['Any size', 'Register the establishment with DOLE (Rule 1020); keep an OSH programme; provide free PPE; keep an accident logbook; report accidents and illnesses.', 'RA 11058 / DO 198-18'],
+        ['Any size', 'Constitute a Committee on Decorum and Investigation; post the anti-sexual harassment policy conspicuously; conduct gender sensitivity orientation.', 'RA 7877 / RA 11313'],
+        ['Any size', 'Adopt and post a workplace policy and programme on HIV and AIDS, tuberculosis, Hepatitis B, drug-free workplace and mental health.', 'RA 11166, DO 73-05, DO 05-10, DO 53-03, RA 11036'],
+        ['Any size', 'Provide a lactation station and lactation breaks; maintain the required first aid kit.', 'RA 10028'],
+        ['Any size', 'Register with SSS, PhilHealth and Pag-IBIG; remit contributions on time; issue itemised payslips.', 'SSS, PhilHealth, HDMF laws'],
+        ['10 or more', 'Appoint at least one certified first-aider and a trained Safety Officer 1; all workers to complete the mandatory 8-hour OSH seminar.', 'DO 198-18'],
+        ['10 or more', 'Post the Code of Discipline and other work rules where employees can read them; keep employment records at the workplace.', 'Labor Code, Rule X'],
+        ['11 to 50', 'Constitute the Health and Safety Committee; appoint a Safety Officer 2 where the workplace is classified as high risk (electrical, work at height, confined space — which covers much of the Company’s field work).', 'DO 198-18'],
+        ['21 or more', 'Employ a part-time occupational health physician and nurse, or arrange the required retainer and referral where the workplace is low risk.', 'OSHS Rule 1960'],
+        ['50 or more', 'Employ a full-time Safety Officer 2 (or higher, per risk classification); expand the Health and Safety Committee; maintain a treatment room or clinic as required by risk classification.', 'DO 198-18 / OSHS Rule 1960'],
+        ['51 or more', 'Consider formalising a grievance machinery and a written salary structure; review whether a rank-and-file union may seek recognition and prepare HR accordingly.', 'Labor Code, Book V'],
+        ['100 or more', 'Employ a full-time safety officer and, depending on risk classification, a full-time occupational health nurse; maintain an emergency clinic; expand the Family Welfare Programme.', 'DO 198-18 / OSHS'],
+        ['200 or more', 'Establish a Family Welfare Programme with a designated coordinator; review the requirement for a full-time physician and dentist.', 'DOLE Family Welfare Program'],
+      ];
+      return [table([
+        new d.TableRow({ cantSplit: true,
+          tableHeader: true,
+          children: [
+            tCell('HEADCOUNT', { w: CW[0], bold: true, color: 'FFFFFF', fill: C.blue, size: 17, align: d.AlignmentType.CENTER }),
+            tCell('WHAT MUST BE IN PLACE', { w: CW[1], bold: true, color: 'FFFFFF', fill: C.blue, size: 17 }),
+            tCell('SOURCE', { w: CW[2], bold: true, color: 'FFFFFF', fill: C.blue, size: 17 }),
+          ],
+        }),
+        ...rows.map((r) => new d.TableRow({ cantSplit: true,
+          children: [
+            tCell(r[0], { w: CW[0], bold: true, color: C.navy, align: d.AlignmentType.CENTER, va: d.VerticalAlign.TOP, size: 16, pad: PAD, line: 215 }),
+            tCell(r[1], { w: CW[1], va: d.VerticalAlign.TOP, size: 16, pad: PAD, line: 215 }),
+            tCell(r[2], { w: CW[2], va: d.VerticalAlign.TOP, size: 15, italics: true, pad: PAD, line: 215 }),
+          ],
+        })),
+      ], CW)];
+    })(),
+    gap(120),
+    note('Two things to do before headcount reaches fifty', [
+      'First, appoint and train the Safety Officer now rather than at the threshold. Certification takes time, and the Company’s field work — electrical, refrigerant under pressure, rooftop and elevated work — is high risk regardless of headcount.',
+      'Second, put the Administrative Review Panel on a proper footing. At twenty employees the Panel will often be the same three people. At one hundred it must be possible to constitute a Panel with no one who has an interest in the case. Identify and train a pool of at least six potential members.',
+    ], { edge: C.blue, fill: 'EEF3FB', labelColor: C.navy }),
+  ),
 
   // ---------------------------------------------------------------- ANNEX G
   ...formHead('Annex G  —  Employee Acknowledgment and Conforme', 'CD-07'),
