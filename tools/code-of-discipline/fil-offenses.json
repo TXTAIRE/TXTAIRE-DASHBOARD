@@ -1,0 +1,560 @@
+[
+ {
+  "category": "Attendance and Punctuality",
+  "categoryFil": "Attendance at Pagiging Maagap",
+  "offenses": [
+   {
+    "code": "excessive-tardiness-count",
+    "klass": "A",
+    "labelFil": "Pagiging huli — lampas sa 15 minutong grace period, apat (4) o higit pang beses sa loob ng isang buwan"
+   },
+   {
+    "code": "undertime",
+    "klass": "A",
+    "labelFil": "Undertime — maagang pag-uwi nang walang pahintulot ng supervisor, dalawang beses o higit pa sa isang buwan"
+   },
+   {
+    "code": "late-leave-filing",
+    "klass": "A",
+    "labelFil": "Pagliban ng isang araw na may maagang paalam at totoong dahilan, pero hindi nag-file ng leave form sa unang araw ng balik"
+   },
+   {
+    "code": "excessive-tardiness",
+    "klass": "B",
+    "labelFil": "Sobrang late — umabot sa 300 minuto o higit pa ang kabuuang late sa loob ng isang buwan"
+   },
+   {
+    "code": "simple-absence",
+    "klass": "B",
+    "labelFil": "Pagliban nang walang aprubadong leave at walang paalam (walang tawag, hindi pumasok) ng isang araw"
+   },
+   {
+    "code": "missed-overtime-callout",
+    "klass": "B",
+    "labelFil": "Hindi pagpasok sa napagkasunduang overtime, emergency call-out, o weekend na trabaho, nang walang dahilan at walang paalam"
+   },
+   {
+    "code": "wasting-time",
+    "klass": "B",
+    "labelFil": "Pag-alis sa jobsite, sa kliyente, o sa opisina sa oras ng trabaho nang walang pahintulot ng supervisor"
+   },
+   {
+    "code": "wrong-site-report",
+    "klass": "B",
+    "labelFil": "Hindi pagpunta sa itinalagang site ng kliyente, o pagpunta sa ibang site nang walang pahintulot"
+   },
+   {
+    "code": "excessive-absence",
+    "klass": "C",
+    "labelFil": "Pagliban nang walang aprubadong leave, dalawa (2) hanggang apat (4) na magkakasunod na araw"
+   },
+   {
+    "code": "abandonment",
+    "klass": "D",
+    "labelFil": "Pagliban nang walang aprubadong leave ng lima (5) o higit pang magkakasunod na araw, o hindi pagbalik pagkatapos ng leave, na hindi ka na makontak at halatang ayaw mo nang bumalik"
+   }
+  ]
+ },
+ {
+  "category": "Timekeeping and Records",
+  "categoryFil": "Time Record at Dokumento",
+  "offenses": [
+   {
+    "code": "repeated-failure-punch",
+    "klass": "A",
+    "labelFil": "Hindi sinasadyang hindi pag-log in o log out sa biometrics o timesheet, tatlo (3) o higit pang beses sa isang buwan. Babayaran pa rin nang buo ang oras na talagang pinasukan mo sa pamamagitan ng Time Correction Form — walang bawas at hindi ka ituturing na absent"
+   },
+   {
+    "code": "late-reports",
+    "klass": "A",
+    "labelFil": "Hindi pagpasa ng timesheet, service report, job order, o accomplishment report sa takdang panahon"
+   },
+   {
+    "code": "refusal-punch",
+    "klass": "B",
+    "labelFil": "Paulit-ulit na hindi pag-log in o log out matapos kang mabigyan ng sulat na babala sa parehong bagay"
+   },
+   {
+    "code": "false-reason-absent-late",
+    "klass": "C",
+    "labelFil": "Pagsisinungaling sa dahilan ng pagliban, pagiging huli, o undertime"
+   },
+   {
+    "code": "tampering-timekeeping",
+    "klass": "C",
+    "labelFil": "Pagtanggi o pakikialam sa timekeeping system ng kompanya, kasama na ang biometrics"
+   },
+   {
+    "code": "punching-others-timecard",
+    "klass": "D",
+    "labelFil": "Pag-log in o log out para sa kasamahan, o pagpapagawa nito sa iba para sa iyo. Pareho kayong may pananagutan"
+   },
+   {
+    "code": "falsifying-timecards",
+    "klass": "D",
+    "labelFil": "Pagpeke, pagbago, o pakikialam sa time record, timesheet, DTR, service report, job order, gate pass, delivery receipt, o kahit anong record ng kompanya o kliyente"
+   },
+   {
+    "code": "benefiting-falsified-timecards",
+    "klass": "D",
+    "labelFil": "Sadyang pagtanggap ng sahod, overtime, allowance, o benepisyo na hindi naman para sa iyo dahil sa pekeng o maling record, at hindi ito iniulat agad"
+   }
+  ]
+ },
+ {
+  "category": "Health, Safety and Security",
+  "categoryFil": "Kalusugan, Kaligtasan, at Seguridad",
+  "offenses": [
+   {
+    "code": "disregard-cleanliness",
+    "klass": "A",
+    "labelFil": "Hindi pagpapanatili ng kalinisan at kaayusan sa opisina, stockroom, service vehicle, o jobsite; hindi paglilinis ng gamit, materyales, o basura"
+   },
+   {
+    "code": "smoking-vaping",
+    "klass": "A",
+    "labelFil": "Paninigarilyo o pag-vape sa labas ng smoking area, o sa loob ng kliyente kung saan bawal ito"
+   },
+   {
+    "code": "health-medical-noncompliance",
+    "klass": "A",
+    "labelFil": "Hindi pagsunod sa health o medical requirement ng kompanya, tulad ng taunang physical exam o fit-to-work clearance"
+   },
+   {
+    "code": "ppe-noncompliance",
+    "klass": "B",
+    "labelFil": "Hindi pagsuot o maling paggamit ng PPE (helmet, safety shoes, guwantes, salamin sa mata, harness, insulated na kagamitan) habang naka-duty"
+   },
+   {
+    "code": "failure-report-accident",
+    "klass": "B",
+    "labelFil": "Hindi agad pag-report sa supervisor o Safety Officer ng aksidente, sugat, muntik nang aksidente, tumapon na kemikal, o delikadong sitwasyon sa trabaho"
+   },
+   {
+    "code": "lending-id",
+    "klass": "B",
+    "labelFil": "Pagpapahiram ng ID, access card, gate pass, o uniform sa iba; o paggamit ng sa iba"
+   },
+   {
+    "code": "concealing-communicable-disease",
+    "klass": "C",
+    "labelFil": "Sadyang pagtatago ng nakakahawang sakit o kondisyong hindi ka nababagay sa trabahong bigay sa iyo, kung dahil dito ay nalalagay sa panganib ang sarili mo o ang iba. Hindi kasama rito ang HIV, Hepatitis B, o TB — hindi mo kailangang sabihin ang mga ito at hindi kailanman puwedeng maging dahilan ng parusa"
+   },
+   {
+    "code": "forcing-entry-after-hours",
+    "klass": "C",
+    "labelFil": "Sapilitang pagpasok sa opisina, stockroom, tool crib, o sa kliyente sa labas ng oras; o pagbukas ng locker, drawer, bag, o workstation ng iba nang walang pahintulot"
+   },
+   {
+    "code": "drinking-alcohol",
+    "klass": "C",
+    "labelFil": "Pagpasok na lasing; o pag-inom ng alak sa loob ng kompanya o ng kliyente, o sa oras ng trabaho. Ituturing itong Napakabigat kung ikaw ay nagmamaneho, nagtatrabaho sa mataas, o sa may kuryente"
+   },
+   {
+    "code": "disobey-safety",
+    "klass": "D",
+    "labelFil": "Sadyang hindi pagsunod sa safety instruction o safety rule na naglalagay sa iyo o sa iba sa panganib ng kamatayan o malubhang sugat — tulad ng pagtatrabaho sa mataas na walang harness, pagtatrabaho sa may kuryente nang walang lock-out/tag-out, pagtanggal ng safety guard, o pag-operate ng makinang wala kang certification. Kung hindi sinasadya at walang nasaktan, ang PPE na item sa itaas ang gagamitin"
+   },
+   {
+    "code": "unauthorized-weapons",
+    "klass": "D",
+    "labelFil": "Pagdadala ng baril, pampasabog, o ibang mapanganib na armas sa loob ng kompanya o ng kliyente, o sa sasakyan ng kompanya, nang walang pahintulot"
+   },
+   {
+    "code": "prohibited-drugs",
+    "klass": "D",
+    "labelFil": "Paggamit, pagdadala, pagbebenta, pamimigay, o pagiging lasing sa droga sa loob ng kompanya o ng kliyente, sa sasakyan ng kompanya, o habang naka-duty. May tamang proseso ang pag-test — DOH-accredited na lab at confirmatory test — at may referral sa gamutan kung nararapat"
+   },
+   {
+    "code": "conviction-crime",
+    "klass": "D",
+    "labelFil": "Pinal na hatol ng korte sa krimeng may kinalaman sa moralidad, o sa anumang krimen laban sa kompanya, sa opisyal, kasamahan, kliyente, o ari-arian nila. Ang nakabinbing kaso ay hindi pa hatol"
+   }
+  ]
+ },
+ {
+  "category": "Job Performance",
+  "categoryFil": "Performance sa Trabaho",
+  "offenses": [
+   {
+    "code": "loafing",
+    "klass": "A",
+    "labelFil": "Pag-aaksaya ng oras, tambay, o paggawa ng personal na bagay sa oras ng trabaho"
+   },
+   {
+    "code": "uniform-noncompliance",
+    "klass": "A",
+    "labelFil": "Hindi pagsuot ng uniform o hindi maayos na ayos habang naka-duty, maliban kung may pahintulot"
+   },
+   {
+    "code": "phone-unreachable",
+    "klass": "A",
+    "labelFil": "Hindi pag-charge o hindi pagsagot sa cellphone o radyo na bigay ng kompanya sa oras ng trabaho o habang naka-on call. Walang multa at hindi kukunin ang unit dahil dito"
+   },
+   {
+    "code": "sleeping-on-duty",
+    "klass": "B",
+    "labelFil": "Pagtulog sa oras ng trabaho, o sadyang pag-iwas sa trabaho. Ituturing itong Mabigat kung nagmamaneho ka, nasa mataas, o nagbabantay ng makinang may kuryente o presyon"
+   },
+   {
+    "code": "negligence-minor-loss",
+    "klass": "B",
+    "labelFil": "Simpleng kapabayaan o kakulangan sa trabaho na walang pinsala, o may pinsalang hindi hihigit sa ₱5,000"
+   },
+   {
+    "code": "negligence-major-loss",
+    "klass": "C",
+    "labelFil": "Kapabayaan sa trabaho na may pinsalang higit sa ₱5,000 pero hindi hihigit sa ₱30,000"
+   },
+   {
+    "code": "insubordination",
+    "klass": "C",
+    "labelFil": "Sadyang pagsuway o pagtanggi sa makatuwiran at legal na utos ng superyor tungkol sa trabaho mo. Kailangang legal at makatuwiran ang utos, alam mo ito, at may kinalaman sa trabaho mo — ang pagtanggi sa iligal na utos o sa delikadong gawain ay hindi pagsuway"
+   },
+   {
+    "code": "hindering-output",
+    "klass": "C",
+    "labelFil": "Sadyang pagpapabagal o paglimita ng trabaho; o paghikayat sa kasamahan na gawin ito. Hindi kasama rito ang legal na sama-samang pagkilos, na karapatan ninyo"
+   },
+   {
+    "code": "unauthorized-broker",
+    "klass": "C",
+    "labelFil": "Pagiging broker o ahente, o pakikipag-usap para sa kliyente, may-ari ng unit, supplier, o ibang tao sa transaksyon ng kompanya, nang walang nakasulat na pahintulot"
+   },
+   {
+    "code": "gross-habitual-neglect",
+    "klass": "D",
+    "labelFil": "Malubha at paulit-ulit na kapabayaan sa trabaho; o kapabayaang may pinsalang higit sa ₱30,000; o kapabayaang nagdulot ng malubhang sugat kaninuman"
+   },
+   {
+    "code": "gross-misconduct-bribery",
+    "klass": "D",
+    "labelFil": "Pagtanggap o paghingi, direkta man o hindi, ng pera, komisyon, diskwento, regalo, o benepisyo mula sa supplier, contractor, kliyente, o aplikante kapalit ng anumang bagay sa trabaho mo"
+   },
+   {
+    "code": "espionage",
+    "klass": "D",
+    "labelFil": "Pagbunyag sa hindi awtorisadong tao, o paggamit para sa sarili, ng trade secret, costing, presyo, bid, listahan ng kliyente, technical drawing, o ibang confidential na impormasyon ng kompanya o ng kliyente"
+   },
+   {
+    "code": "sabotage",
+    "klass": "D",
+    "labelFil": "Sabotahe, o sadyang paggawa ng bagay para guluhin ang operasyon o sirain ang kompanya, ang ari-arian nito, ang kliyente, o ang ari-arian ng kliyente, may pinsala man o wala"
+   }
+  ]
+ },
+ {
+  "category": "Company and Client Property",
+  "categoryFil": "Ari-arian ng Kompanya at Kliyente",
+  "offenses": [
+   {
+    "code": "carelessness-minor-loss",
+    "klass": "B",
+    "labelFil": "Pabaya, mali, o walang pahintulot na paggamit ng gamit, kasangkapan, materyales, o refrigerant ng kompanya o kliyente, na walang pinsala o may pinsalang hindi hihigit sa ₱5,000"
+   },
+   {
+    "code": "failure-report-loss",
+    "klass": "B",
+    "labelFil": "Hindi pag-report ng nawala, nasira, o nasirang gamit ng kompanya o kliyente na nasa iyong pangangalaga"
+   },
+   {
+    "code": "carelessness-major-loss",
+    "klass": "C",
+    "labelFil": "Pabaya, mali, o walang pahintulot na paggamit ng gamit, kasangkapan, materyales, o refrigerant ng kompanya o kliyente, na may pinsalang higit sa ₱5,000 pero hindi hihigit sa ₱30,000"
+   },
+   {
+    "code": "vandalism",
+    "klass": "C",
+    "labelFil": "Pagsira o pagpapangit ng ari-arian ng kompanya, ng kliyente, o ng ibang tao sa loob ng kompanya o ng kliyente"
+   },
+   {
+    "code": "unauthorized-vehicle-no-damage",
+    "klass": "C",
+    "labelFil": "Paggamit ng sasakyan ng kompanya o kliyente nang walang pahintulot, walang pinsala o nasaktan"
+   },
+   {
+    "code": "reckless-driving-no-damage",
+    "klass": "C",
+    "labelFil": "Pabigla-bigla o pabayang pagmamaneho ng sasakyan ng kompanya, o pagmamaneho nang walang tamang lisensya, walang pinsala o nasaktan"
+   },
+   {
+    "code": "attempted-removal-no-loss",
+    "klass": "C",
+    "labelFil": "Pagtatangkang ilabas ang gamit ng kompanya o kliyente nang walang pahintulot o gate pass, pero nabawi ito at walang nawala"
+   },
+   {
+    "code": "carelessness-severe-loss",
+    "klass": "D",
+    "labelFil": "Pabaya, mali, o walang pahintulot na paggamit ng gamit, kasangkapan, materyales, o refrigerant ng kompanya o kliyente, na may pinsalang higit sa ₱30,000"
+   },
+   {
+    "code": "willful-damage",
+    "klass": "D",
+    "labelFil": "Sadya o may masamang layuning pagsira sa ari-arian o kagamitan ng kompanya o ng kliyente"
+   },
+   {
+    "code": "unauthorized-vehicle-with-damage",
+    "klass": "D",
+    "labelFil": "Paggamit ng sasakyan ng kompanya o kliyente nang walang pahintulot, may pinsala o may nasaktan"
+   },
+   {
+    "code": "reckless-driving-with-damage",
+    "klass": "D",
+    "labelFil": "Pabigla-bigla o pabayang pagmamaneho ng sasakyan ng kompanya, o pagmamaneho nang walang tamang lisensya, na may nasirang ari-arian o may nasaktan"
+   },
+   {
+    "code": "attempted-removal-with-loss",
+    "klass": "D",
+    "labelFil": "Paglabas ng gamit ng kompanya o kliyente nang walang pahintulot, at ito ay nadala o nawala"
+   },
+   {
+    "code": "theft-pilferage",
+    "klass": "D",
+    "labelFil": "Pagnanakaw ng ari-arian o pera ng kompanya, kliyente, kasamahan, o kahit sino, sa loob ng kompanya o ng kliyente; kasama ang pagkuha nito sa pamamagitan ng panloloko"
+   }
+  ]
+ },
+ {
+  "category": "Honesty and Integrity",
+  "categoryFil": "Katapatan",
+  "offenses": [
+   {
+    "code": "undeclared-sideline",
+    "klass": "C",
+    "labelFil": "Hindi idineklarang ibang trabaho, consultancy, o sideline na sumasagabal sa trabaho mo, o gumagamit ng oras, gamit, materyales, sasakyan, o impormasyon ng kompanya. Ang trabaho sa labas na walang conflict at hindi gumagamit ng gamit ng kompanya ay hindi paglabag, pero kailangang ideklara"
+   },
+   {
+    "code": "undeclared-conflict",
+    "klass": "C",
+    "labelFil": "Hindi pagdeklara ng conflict of interest na dapat ideklara. Ang pagdeklara mismo ay hindi kailanman paglabag at hindi dahilan ng parusa — ang hindi pagdeklara ang paglabag"
+   },
+   {
+    "code": "misappropriation",
+    "klass": "D",
+    "labelFil": "Maling paggamit, pagkulimbat, o pagnanakaw ng pera o ari-arian ng kompanya o ng kliyente"
+   },
+   {
+    "code": "unauthorized-use-funds",
+    "klass": "D",
+    "labelFil": "Paggamit ng pera, ari-arian, o pasilidad ng kompanya o kliyente para sa sarili nang walang paunang pahintulot ng supervisor o ng may pananagutan"
+   },
+   {
+    "code": "falsification-records",
+    "klass": "D",
+    "labelFil": "Paggawa ng peke o \"ghost\" na transaksyon; o pagpeke ng record, resibo, invoice, quotation, job order, liquidation, o dokumento ng kompanya o kliyente"
+   },
+   {
+    "code": "withholding-funds",
+    "klass": "D",
+    "labelFil": "Hindi pagbibigay ng perang para sa kompanya o kliyente; kiting; kulang o hindi pag-remit ng koleksyon"
+   },
+   {
+    "code": "non-issuance-invoice",
+    "klass": "D",
+    "labelFil": "Hindi pagbibigay o maling pagbibigay ng opisyal na resibo, invoice, o commercial na dokumento kung kailangan ito"
+   },
+   {
+    "code": "forgery",
+    "klass": "D",
+    "labelFil": "Pamemeke, o mali at labis na paggamit ng pera ng kompanya"
+   },
+   {
+    "code": "competing-business",
+    "klass": "D",
+    "labelFil": "Pagpasok sa negosyong kalaban ng kompanya, ikaw man mismo o sa pangalan ng iba; o pagkuha para sa sarili o sa iba ng oportunidad na para sa kompanya o kliyente"
+   },
+   {
+    "code": "false-application-statement",
+    "klass": "D",
+    "labelFil": "Pagsisinungaling o pagpasa ng pekeng dokumento sa aplikasyon sa trabaho, promotion, transfer, leave, reimbursement, utang, o kahit anong benepisyo"
+   },
+   {
+    "code": "conspiring",
+    "klass": "D",
+    "labelFil": "Pakikipagsabwatan, pag-utos, o paghikayat sa iba na gawin ang alinman sa mga nabanggit"
+   }
+  ]
+ },
+ {
+  "category": "Proper Conduct and Behavior",
+  "categoryFil": "Asal at Ugali",
+  "offenses": [
+   {
+    "code": "horseplay-no-loss",
+    "klass": "A",
+    "labelFil": "Kalokohan o magulong asal na nakakagulo sa trabaho o sa loob ng kompanya o ng kliyente, na walang pinsala o nasaktan"
+   },
+   {
+    "code": "bulletin-tampering",
+    "klass": "A",
+    "labelFil": "Pagtanggal, pagpapangit, o pakikialam sa paskil sa bulletin board o sa opisyal na anunsyo ng kompanya"
+   },
+   {
+    "code": "gross-discourtesy",
+    "klass": "B",
+    "labelFil": "Kawalang-galang, kabastusan, o maling asal sa kliyente, sa bisita o tenant ng kliyente, sa supplier, o sa kahit sinong tao"
+   },
+   {
+    "code": "disrespect-threats",
+    "klass": "B",
+    "labelFil": "Kawalang-galang sa superyor, kasamahan, o ibang tao; masama o nakakainsultong salita o senyas; o paghamon ng away, sa loob ng trabaho"
+   },
+   {
+    "code": "intrigues",
+    "klass": "B",
+    "labelFil": "Pagkalat ng masamang tsismis o intriga laban sa kasamahan o opisyal, na nakakasira sa dangal o pangalan niya"
+   },
+   {
+    "code": "gambling",
+    "klass": "B",
+    "labelFil": "Pagsusugal, panghihingi o pagtanggap ng pusta, o pagpapautang para dito, sa loob ng kompanya o ng kliyente o sa oras ng trabaho"
+   },
+   {
+    "code": "unauthorized-business",
+    "klass": "B",
+    "labelFil": "Paggawa ng sariling negosyo, o pagbebenta ng paninda o serbisyo, sa loob ng kompanya o ng kliyente o sa oras ng trabaho"
+   },
+   {
+    "code": "horseplay-with-loss",
+    "klass": "C",
+    "labelFil": "Kalokohan o magulong asal na nakakagulo sa trabaho o sa loob ng kompanya o ng kliyente, na may nasira o may nasaktan"
+   },
+   {
+    "code": "threat-of-harm",
+    "klass": "C",
+    "labelFil": "Pagbabanta ng pananakit sa superyor, kasamahan, kliyente, o ibang tao"
+   },
+   {
+    "code": "bullying",
+    "klass": "C",
+    "labelFil": "Pambu-bully — paulit-ulit na pananakit sa salita, sa isip, sa pakikitungo, o online sa kasamahan na nagdudulot ng nakakatakot, magulo, o nakakahiyang kapaligiran sa trabaho. Ang tamang pagtuturo, pagwawasto, at disiplina ay hindi pambu-bully"
+   },
+   {
+    "code": "fighting-on-premises",
+    "klass": "C",
+    "labelFil": "Pakikipag-away, panunulsol, o pang-uudyok ng away sa loob ng kompanya o ng kliyente o habang naka-duty, na walang malubhang sugat at walang gamit na armas. Kung nagtatanggol ka lang talaga sa sarili, walang parusa"
+   },
+   {
+    "code": "borrowing-from-clients",
+    "klass": "C",
+    "labelFil": "Panghihiram ng pera o gamit sa kliyente, sa staff, tenant, o bisita ng kliyente, o sa supplier o contractor ng kompanya"
+   },
+   {
+    "code": "soliciting-from-subordinates",
+    "klass": "C",
+    "labelFil": "Paghingi o panghihiram ng pera o gamit sa tauhan mo; o pagpapautang sa tauhan mo nang may tubo"
+   },
+   {
+    "code": "obscene-materials",
+    "klass": "C",
+    "labelFil": "Pag-post, paglathala, pag-share, o pamimigay, saan mang midya kasama ang social media, ng malaswa, mapanira, o masamang materyal, o confidential na impormasyon ng kompanya o kliyente, na nakakasira sa pangalan ng kompanya, opisyal, kasamahan, o kliyente. Ituturing itong Napakabigat kung may nabunyag na confidential o datos ng kliyente, natukoy ang kliyente, o sinadya at malaki ang pinsala. Ang legal na pagpuna sa kalagayan sa trabaho at ang legal na sama-samang pagkilos ay protektado at hindi paglabag"
+   },
+   {
+    "code": "obstructing-investigation",
+    "klass": "C",
+    "labelFil": "Pagtanggi nang walang dahilan na tumulong sa opisyal na imbestigasyon, o pagharang dito, kasama ang pagsira ng ebidensya o pang-impluwensya sa testigo. Kung ikaw mismo ang inirereklamo, may karapatan kang manahimik at hindi ka kailanman paparusahan dito"
+   },
+   {
+    "code": "gross-discourtesy-client-loss",
+    "klass": "D",
+    "labelFil": "Malubha o paulit-ulit na kawalang-galang sa kliyente na ikinawala o lubhang ikinasira ng account ng kliyente o ng pangalan ng kompanya"
+   },
+   {
+    "code": "threat-with-weapon",
+    "klass": "D",
+    "labelFil": "Pagbabanta habang may dalang armas o nagwawagayway nito, o sa paraang tunay na kinatatakutan ng tao na masaktan agad"
+   },
+   {
+    "code": "fighting-aggravated",
+    "klass": "D",
+    "labelFil": "Pakikipag-away na may malubhang sugat, may gamit na armas, o ikaw ang nanimula o umatake"
+   },
+   {
+    "code": "physical-injury-work-related",
+    "klass": "D",
+    "labelFil": "Sadyang pananakit sa superyor, kasamahan, kliyente, o ibang tao dahil sa trabaho, nasa loob man o labas ng kompanya"
+   },
+   {
+    "code": "immoral-conduct",
+    "klass": "D",
+    "labelFil": "Sexual harassment o gender-based sexual harassment sa anumang anyo na nakasaad sa batas, personal man, nakasulat, o online. Ang Committee on Decorum and Investigation ang humahawak ng reklamo. Ang mas magagaang gender-based na gawi ay sumusunod sa hagdan ng parusa sa Safe Spaces Act, magsisimula sa Katamtaman"
+   },
+   {
+    "code": "indecent-conduct",
+    "klass": "D",
+    "labelFil": "Malaswa o hindi disenteng gawi, o pakikipagtalik, sa loob ng kompanya o ng kliyente"
+   },
+   {
+    "code": "planting-evidence",
+    "klass": "D",
+    "labelFil": "Paglalagay o paggawa ng pekeng ebidensya laban sa superyor o kasamahan; o sadyang paghahain ng pekeng reklamo o pagsisinungaling sa imbestigasyon"
+   },
+   {
+    "code": "retaliation",
+    "klass": "D",
+    "labelFil": "Paghihiganti sa sinumang may magandang loob na nag-report ng paglabag, naghain ng reklamo, nagbigay ng ebidensya, o sumali sa imbestigasyon"
+   }
+  ]
+ },
+ {
+  "category": "Accountability of Supervisors and Managers",
+  "categoryFil": "Pananagutan ng Supervisor at Manager",
+  "offenses": [
+   {
+    "code": "failure-evaluate",
+    "klass": "A",
+    "labelFil": "Hindi paggawa, pagtala, o pagtalakay ng kinakailangang performance evaluation ng mga tauhan"
+   },
+   {
+    "code": "failure-disseminate",
+    "klass": "B",
+    "labelFil": "Hindi pagpapaalam sa mga tauhan ng Code na ito, ng patakaran, alituntunin, safety procedure, at iba pang bagay sa trabaho"
+   },
+   {
+    "code": "failure-prevent-report",
+    "klass": "B",
+    "labelFil": "Hindi pag-report sa HR, sa loob ng limang (5) araw ng trabaho mula nang malaman, ng paglabag ng isang tauhan"
+   },
+   {
+    "code": "failure-supervise",
+    "klass": "C",
+    "labelFil": "Hindi maayos na pamamahala na nagdulot ng malaking pinsala sa kompanya o kliyente, o ng sugat na sana ay naiwasan"
+   },
+   {
+    "code": "favouritism",
+    "klass": "C",
+    "labelFil": "Halatang pagtatangi o paboritismo sa pamamahagi ng trabaho, overtime, evaluation, rekomendasyon sa promotion, o disiplina"
+   },
+   {
+    "code": "informal-penalty",
+    "klass": "C",
+    "labelFil": "Pagpataw sa tauhan ng parusa, multa, bawas sa sahod, o hindi opisyal na parusa sa labas ng proseso ng Code na ito"
+   },
+   {
+    "code": "misuse-preventive-suspension",
+    "klass": "C",
+    "labelFil": "Paggamit ng preventive suspension bilang parusa, o para iwasan ang pagdinig"
+   },
+   {
+    "code": "directing-violation",
+    "klass": "D",
+    "labelFil": "Pag-utos o pagpilit sa tauhan na gumawa ng labag sa Code na ito, sa patakaran, o sa batas; o mamekeng record"
+   },
+   {
+    "code": "concealing-harassment",
+    "klass": "D",
+    "labelFil": "Hindi pagkilos o pagtatago ng report tungkol sa sexual harassment, gender-based harassment, pambu-bully, diskriminasyon, o malubhang delikadong kalagayan"
+   },
+   {
+    "code": "supervisor-retaliation",
+    "klass": "D",
+    "labelFil": "Paghihiganti, o pagpayag o pag-utos ng paghihiganti, sa empleyadong may magandang loob na nag-report, naghain ng reklamo, o sumali sa imbestigasyon"
+   },
+   {
+    "code": "soliciting-favours-subordinate",
+    "klass": "D",
+    "labelFil": "Paghingi ng pera, gamit, serbisyo, o personal na pabor sa tauhan bilang kapalit, sabihin man o hindi, ng magandang pagtrato"
+   }
+  ]
+ }
+]

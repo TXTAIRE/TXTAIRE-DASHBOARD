@@ -1,0 +1,8 @@
+{
+  "name": "txtaire-code-of-discipline",
+  "private": true,
+  "description": "Builds the TXTAIRE OPC Code of Discipline PDFs (English and Filipino).",
+  "dependencies": {
+    "docx": "9.7.1"
+  }
+}
