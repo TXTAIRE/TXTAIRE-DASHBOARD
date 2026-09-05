@@ -26,11 +26,16 @@ window.EssViews.discipline = (function () {
     D: { bg: '#f8cbcb', fg: '#9c1c1c', bar: '#d05a5a' },
   };
 
-  // The full Code as published. Served from the app's own origin, so the service worker
-  // caches it on first open and it stays readable offline afterwards (js/../sw.js) --
-  // it is deliberately NOT in PRECACHE_URLS, which would add ~800KB to every install.
+  // The Code as published. Served from the app's own origin, so the service worker caches
+  // it on first open and it stays readable offline afterwards (js/../sw.js) -- it is
+  // deliberately NOT in PRECACHE_URLS, which would add ~800KB to every install.
+  //
+  // English employees get the EMPLOYEE COPY: the same Code without the edition apparatus
+  // (no NEW/REVISED markers, no Summary of Changes, no Annex F headcount checklist), which
+  // is 41 pages against the full 46. There is no Filipino employee copy yet, so Filipino
+  // still opens the full edition -- correct, just longer.
   const PDF = {
-    en: 'assets/docs/code-of-discipline-2026-en.pdf',
+    en: 'assets/docs/code-of-discipline-2026-en-employee.pdf',
     fil: 'assets/docs/code-of-discipline-2026-fil.pdf',
   };
 
@@ -40,10 +45,9 @@ window.EssViews.discipline = (function () {
       intro: 'Penalties depend on the class of the offense, and rise each time the same class of offense is repeated within 12 months. Twelve months with a clean record clears past offenses from the count.',
 
       openPdf: 'Open the full Code (PDF)',
-      openPdfSub: 'The complete 45-page document, including your rights, the full procedure and all the forms.',
+      openPdfSub: 'The complete 41-page employee copy — your rights, the full procedure and the forms.',
       pdfMissing: 'The Filipino edition is not available yet — opening the English one.',
 
-      classesTitle: 'The four offense classes',
       classNames: { A: 'LIGHT', B: 'LESS GRAVE', C: 'GRAVE', D: 'SERIOUS' },
       classSteps: {
         A: 'Verbal warning → Written warning → 3 days → 7 days',
@@ -54,8 +58,9 @@ window.EssViews.discipline = (function () {
       classNote: 'Suspension is never more than 15 days for one offense. Where one act breaks more than one rule, only the highest single penalty applies — you are never penalised twice for one act.',
 
       offensesTitle: 'Offenses',
-      offensesSub: 'Listed light to serious within each group. Tap a group to open it.',
-      occurrence: 'occurrence within 12 months',
+      offensesSub: 'Tap a colour to show only that class. Tap a group to open it.',
+      allLabel: 'All',
+      noneInClass: 'No offenses in this class.',
 
       knowTitle: 'Worth knowing',
 
@@ -98,10 +103,9 @@ window.EssViews.discipline = (function () {
       intro: 'Ang parusa ay nakadepende sa uri ng paglabag, at tumataas kada ulit ng parehong uri sa loob ng 12 buwan. Kapag malinis ang record mo sa loob ng 12 buwan, hindi na bibilangin ang mga nakaraang paglabag.',
 
       openPdf: 'Buksan ang buong Code (PDF)',
-      openPdfSub: 'Ang kumpletong 45-pahinang dokumento — kasama ang mga karapatan mo, ang buong proseso, at lahat ng form.',
+      openPdfSub: 'Ang buong 47-pahinang dokumento — kasama ang mga karapatan mo, ang buong proseso, at lahat ng form.',
       pdfMissing: 'Wala pang Filipino na bersyon — bubuksan ang English.',
 
-      classesTitle: 'Ang apat na uri ng paglabag',
       classNames: { A: 'MAGAAN', B: 'KATAMTAMAN', C: 'MABIGAT', D: 'NAPAKABIGAT' },
       classSteps: {
         A: 'Bibig na babala → Sulat na babala → 3 araw → 7 araw',
@@ -112,8 +116,9 @@ window.EssViews.discipline = (function () {
       classNote: 'Hindi hihigit sa 15 araw ang suspensyon para sa isang paglabag. Kapag isang gawa ang lumabag sa maraming patakaran, iisang parusa lang — ang pinakamataas — ang ipapataw. Hindi ka pinaparusahan nang dalawang beses sa iisang gawa.',
 
       offensesTitle: 'Mga paglabag',
-      offensesSub: 'Nakasunod mula magaan hanggang napakabigat sa bawat grupo. Pindutin ang grupo para buksan.',
-      occurrence: 'na paglabag sa loob ng 12 buwan',
+      offensesSub: 'Pindutin ang kulay para sa isang uri lang. Pindutin ang grupo para buksan.',
+      allLabel: 'Lahat',
+      noneInClass: 'Walang paglabag sa uring ito.',
 
       knowTitle: 'Mabuting malaman',
 
@@ -152,58 +157,82 @@ window.EssViews.discipline = (function () {
     },
   };
 
-  function ordinal(n) {
-    if (n % 10 === 1 && n % 100 !== 11) return n + 'st';
-    if (n % 10 === 2 && n % 100 !== 12) return n + 'nd';
-    if (n % 10 === 3 && n % 100 !== 13) return n + 'rd';
-    return n + 'th';
-  }
 
-  function classChip(klass, lang) {
-    const tint = CLASS_TINT[klass];
-    if (!tint) return '';
-    return `<span class="badge" style="background:${tint.bg}; color:${tint.fg}; white-space:nowrap; font-weight:700;">${klass} · ${escapeHtml(TEXT[lang].classNames[klass])}</span>`;
-  }
+  // Which class the offense list is filtered to. Module-level so it survives the re-render
+  // that a language switch triggers -- changing language should not reset the filter.
+  let classFilter = 'all';
 
-  // The colour legend -- four stacked bands, each tinted with its class colour and stating
-  // the penalty in words. This is the page's main "answer" block, so it stays expanded.
-  function classLegendHtml(lang) {
+  // The toggle bar. This replaces the old stacked colour legend AND the old plain offense
+  // list: it is the colour key and the filter in one control, so the four penalty ladders
+  // are stated once at the top instead of being repeated against all 102 offenses.
+  function classBarHtml(lang, counts) {
     const tx = TEXT[lang];
-    return ['A', 'B', 'C', 'D'].map((k) => {
-      const t = CLASS_TINT[k];
+    const btn = (key, label, tint, count) => {
+      const on = classFilter === key;
+      // A class button keeps its colour whether or not it is selected: the bar has to be
+      // readable as the colour key for the list below it, not only as a control. Selection
+      // is carried by the fill and the thicker underline instead.
       return `
-        <div style="display:flex; align-items:stretch; border-radius:10px; overflow:hidden; background:${t.bg}; margin-bottom:6px;">
-          <div style="width:5px; background:${t.bar}; flex:none;"></div>
-          <div style="padding:9px 11px;">
-            <div style="font-size:12px; font-weight:800; color:${t.fg}; letter-spacing:0.03em;">
-              ${k} &middot; ${escapeHtml(tx.classNames[k])}
-            </div>
-            <div style="font-size:12px; color:#3f3f3f; margin-top:3px;">${escapeHtml(tx.classSteps[k])}</div>
-          </div>
-        </div>`;
-    }).join('');
+        <button type="button" data-class="${key}" aria-pressed="${on}"
+          style="flex:1 1 0; min-width:0; cursor:pointer; padding:7px 4px 5px;
+                 border:1px solid ${tint ? tint.bar : 'var(--border-soft)'};
+                 border-bottom:${on ? '4px' : '2px'} solid ${tint ? tint.bar : 'var(--blue,#2563eb)'};
+                 border-radius:9px;
+                 background:${tint ? tint.bg : 'var(--bg-card)'};
+                 color:${tint ? tint.fg : 'var(--text,#333)'};
+                 box-shadow:${on ? 'inset 0 0 0 1px ' + (tint ? tint.bar : 'var(--blue,#2563eb)') : 'none'};
+                 opacity:${on || classFilter === 'all' ? '1' : '0.5'};
+                 font-weight:${on ? '800' : '700'}; font-size:12.5px; line-height:1.25;">
+          <span style="display:block;">${escapeHtml(label)}</span>
+          <span style="display:block; font-size:10px; font-weight:600; opacity:0.8;">${count}</span>
+        </button>`;
+    };
+    const ladder = classFilter === 'all'
+      ? ['A', 'B', 'C', 'D'].map((k) => {
+          const t = CLASS_TINT[k];
+          return `<div style="display:flex; gap:7px; align-items:baseline; margin-top:5px;">
+              <span style="flex:none; font-size:11px; font-weight:800; color:${t.fg}; min-width:78px;">${k} &middot; ${escapeHtml(tx.classNames[k])}</span>
+              <span style="font-size:11.5px; color:var(--text-soft,#555);">${escapeHtml(tx.classSteps[k])}</span>
+            </div>`;
+        }).join('')
+      : `<div style="margin-top:6px; padding:8px 10px; border-radius:9px; background:${CLASS_TINT[classFilter].bg};">
+           <div style="font-size:11.5px; font-weight:800; color:${CLASS_TINT[classFilter].fg};">${classFilter} &middot; ${escapeHtml(tx.classNames[classFilter])}</div>
+           <div style="font-size:12px; color:#3f3f3f; margin-top:3px;">${escapeHtml(tx.classSteps[classFilter])}</div>
+         </div>`;
+
+    return `
+      <div id="seg-discipline-class" style="display:flex; gap:5px; margin-bottom:2px;">
+        ${btn('all', tx.allLabel, null, counts.all)}
+        ${['A', 'B', 'C', 'D'].map((k) => btn(k, k, CLASS_TINT[k], counts[k] || 0)).join('')}
+      </div>
+      ${ladder}`;
   }
 
-  function scheduleBadgesHtml(schedule, lang) {
-    const label = lang === 'fil' ? penaltyLabelFil : penaltyLabel;
-    return schedule.map((code, i) =>
-      `<span class="badge badge-gray" style="margin:2px 4px 2px 0; font-size:10.5px;" title="${ordinal(i + 1)} ${TEXT[lang].occurrence}">${ordinal(i + 1)}: ${escapeHtml(label(code))}</span>`
-    ).join('');
+  function offenseRowHtml(o, lang) {
+    const t = CLASS_TINT[o.klass] || { bg: 'transparent', fg: 'inherit', bar: 'var(--border-soft)' };
+    const label = lang === 'fil' ? (o.labelFil || o.label) : o.label;
+    return `
+      <div style="display:flex; align-items:stretch; border-radius:9px; overflow:hidden; background:${t.bg};">
+        <div style="width:4px; background:${t.bar}; flex:none;"></div>
+        <div style="padding:8px 10px; flex:1; min-width:0;">
+          <div style="font-size:12.5px; line-height:1.45; color:#2a2a2a;">${escapeHtml(label)}</div>
+          <div style="font-size:10.5px; font-weight:800; color:${t.fg}; margin-top:4px; letter-spacing:0.03em;">
+            ${o.klass} &middot; ${escapeHtml(TEXT[lang].classNames[o.klass] || '')}
+          </div>
+        </div>
+      </div>`;
   }
 
   function categorySectionHtml(cat, lang) {
+    const shown = cat.offenses.filter((o) => classFilter === 'all' || o.klass === classFilter);
+    if (!shown.length) return '';   // a group with nothing in the chosen class just goes
     return `
-      <details class="ess-card" style="margin-bottom:8px;">
+      <details class="ess-card" style="margin-bottom:8px;"${classFilter === 'all' ? '' : ' open'}>
         <summary style="cursor:pointer; font-weight:700; font-size:13px;">${escapeHtml(lang === 'fil' ? (cat.categoryFil || cat.category) : cat.category)}
-          <span class="ess-sub" style="font-weight:400;">&nbsp;(${cat.offenses.length})</span>
+          <span class="ess-sub" style="font-weight:400;">&nbsp;(${shown.length})</span>
         </summary>
-        <div style="margin-top:10px; display:flex; flex-direction:column; gap:13px;">
-          ${cat.offenses.map(o => `
-            <div>
-              <div style="font-size:12.5px; margin-bottom:5px; line-height:1.45;">${escapeHtml(lang === 'fil' ? (o.labelFil || o.label) : o.label)}</div>
-              <div>${classChip(o.klass, lang)} ${scheduleBadgesHtml(o.schedule, lang)}</div>
-            </div>
-          `).join('')}
+        <div style="margin-top:10px; display:flex; flex-direction:column; gap:6px;">
+          ${shown.map((o) => offenseRowHtml(o, lang)).join('')}
         </div>
       </details>
     `;
@@ -224,6 +253,11 @@ window.EssViews.discipline = (function () {
   function render(main, emp) {
     const lang = essLang();
     const tx = TEXT[lang];
+    const catalog = Store.disciplineCatalog();
+    const counts = catalog.reduce((acc, cat) => {
+      cat.offenses.forEach((o) => { acc[o.klass] = (acc[o.klass] || 0) + 1; acc.all += 1; });
+      return acc;
+    }, { all: 0 });
 
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0;">${t('title_discipline')}</div>
@@ -247,15 +281,18 @@ window.EssViews.discipline = (function () {
         </span>
       </a>
 
-      <div class="ess-card" style="margin-bottom:16px;">
-        <div class="ess-card-label">${escapeHtml(tx.classesTitle)}</div>
-        ${classLegendHtml(lang)}
+      <div class="ess-section-title">${escapeHtml(tx.offensesTitle)}</div>
+      <div class="ess-sub" style="margin-bottom:9px;">${escapeHtml(tx.offensesSub)}</div>
+
+      <div class="ess-card" style="margin-bottom:12px;">
+        ${classBarHtml(lang, counts)}
         <div class="ess-sub" style="margin-top:9px; line-height:1.5;">${escapeHtml(tx.classNote)}</div>
       </div>
 
-      <div class="ess-section-title">${escapeHtml(tx.offensesTitle)}</div>
-      <div class="ess-sub" style="margin-bottom:9px;">${escapeHtml(tx.offensesSub)}</div>
-      ${Store.disciplineCatalog().map(cat => categorySectionHtml(cat, lang)).join('')}
+      <div id="discipline-offense-list">
+        ${catalog.map(cat => categorySectionHtml(cat, lang)).join('') ||
+          `<div class="ess-sub" style="padding:12px 2px;">${escapeHtml(tx.noneInClass)}</div>`}
+      </div>
 
       <div class="ess-section-title">${escapeHtml(tx.knowTitle)}</div>
       ${foldout(tx.askedTitle, list(tx.asked))}
@@ -291,6 +328,13 @@ window.EssViews.discipline = (function () {
 
     qsa('#seg-discipline-lang button', main).forEach(b => b.addEventListener('click', () => {
       setEssLang(b.dataset.lang);
+      render(main, emp);
+    }));
+
+    qsa('#seg-discipline-class button', main).forEach(b => b.addEventListener('click', () => {
+      // Tapping the active class clears the filter, so the bar toggles rather than trapping
+      // the reader in one class with no obvious way back to the whole list.
+      classFilter = (classFilter === b.dataset.class) ? 'all' : b.dataset.class;
       render(main, emp);
     }));
   }
