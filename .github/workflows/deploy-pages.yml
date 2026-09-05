@@ -1,9 +1,20 @@
 name: Deploy to GitHub Pages
 
-# Runs on every push to master, and can be triggered manually. This deploys the same
-# static files Netlify serves — no build step, since the app has none. Set up as a
-# fallback so the site stays reachable and up to date even while Netlify's deploys are
-# paused (see README.md — Netlify's team ran out of monthly build minutes).
+# Runs on every push to master, and can be triggered manually. No build step, since the
+# app has none — the static files are published as they are.
+#
+# This is now the site of record:
+#
+#   https://txtaire.github.io/TXTAIRE-DASHBOARD/
+#
+# It began as a fallback while Netlify's deploys were paused (that team ran out of
+# monthly build minutes). Netlify is no longer relied on, and its URL is not recorded
+# anywhere in this repository. If a Netlify site is still up somewhere it is serving a
+# STALE build — which matters, because this repo publishes the Code of Discipline, and
+# two live copies stating different penalties is a problem. Point staff here.
+#
+# The earlier version of this comment said "see README.md". There is no README.md in
+# this repository and there never has been.
 on:
   push:
     branches: [master]
