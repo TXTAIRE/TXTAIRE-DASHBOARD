@@ -101,27 +101,55 @@ should appear above ASCII.
 
 ## Reproducibility — read this before regenerating
 
-The lockfile from the shipped build was not preserved; it declared `docx: ^9.7.1`,
-so the exact version that produced the delivered PDFs is unknown. `package.json` now
-pins 9.7.1 and there is a lockfile again, so builds from here are reproducible with
-each other — but not necessarily with what shipped.
-
-Measured on a clean install of the pinned 9.7.1:
+Measured on a clean install from the committed lockfile:
 
 | Edition | Shipped | Rebuild | |
 | --- | --- | --- | --- |
 | Filipino | 47pp | 47pp | reproduces exactly |
 | English | 45pp | 46pp | **one page longer** |
 
-The English rebuild is not broken — it converges, passes `orphans.py` and
-`blanks.py`, and its cover is byte-comparable (same two images, same text). The text
-is identical; only line-breaking differs, which pushes content forward until a page
-is gained, leaving a short page at p39. The likely cause is a `docx` version
-difference against whatever `^9.7.1` resolved to at the time.
+**The delivered 45-page English PDF cannot be reproduced from this tree**, and the
+missing version is not recoverable — see below. The Filipino edition is unaffected.
 
-So: **the delivered 45-page English PDF cannot currently be reproduced byte-for-byte.**
-If you regenerate the English edition, expect 46 pages and re-run every check in the
-Checks table — the committed `pagemap.json` matches the 45-page shipped document and
-will be stale. The Filipino edition is unaffected.
+The English rebuild is not broken. It converges, passes `orphans.py` and `blanks.py`,
+its cover is intact (same two images, same text), and no content is missing — every
+clause of the shipped document is present, in the same order. Only line-breaking
+differs, which pushes content forward until a page is gained, leaving a short page
+at p39.
 
-If exact reproduction matters, bisect `docx` 9.7.x against the shipped page count.
+### Why, and why it cannot be undone
+
+Not the library. `docx` has exactly one published version satisfying the `^9.7.1`
+range the original build declared — 9.7.1 itself — so the shipped build and any
+rebuild use identical library code. `package.json` now pins it exactly and a
+lockfile is committed.
+
+The cause is `lib.js`, which **both editions share**. Building the Filipino edition
+modified it: the language-table refactor (`STRINGS` / `setLang` / `S()`) and the
+`partHead` spacing fix for the stranded Part III banner. Both changed English metrics
+slightly — visible as spacing shifts around the penalty-schedule arrows and the TOC
+leaders — and that accumulates into one extra page.
+
+The pre-Filipino `lib.js` no longer exists anywhere. It was never committed before
+the pipeline landed in this repo, and the scratchpad it was built in has been
+cleaned. So the 45-page layout is gone; only the delivered PDF itself remains as a
+record of it.
+
+### What this means in practice
+
+- The delivered 45-page English PDF is correct and stays in use. Nothing about it
+  needs revisiting.
+- Regenerating the English edition yields 46 pages. That is the new baseline —
+  accept it rather than trying to force 45.
+- The committed `pagemap.json` matches the 45-page shipped document, so it is stale
+  for English. The two-pass build corrects it, but do not assume its numbers are
+  right on the first pass.
+- Re-run every script in the Checks table after any regeneration. Page numbers move
+  whenever layout does.
+
+### The lesson worth keeping
+
+`lib.js` is shared. A change made for one edition silently repaginates the other,
+and nothing in the build fails to tell you — both editions still converge and still
+pass every check. If you edit `lib.js`, rebuild **both** editions and compare page
+counts against the table above before shipping either one.
