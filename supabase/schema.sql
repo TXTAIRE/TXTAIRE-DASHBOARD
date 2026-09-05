@@ -3090,13 +3090,31 @@ create table if not exists "disciplineOffenses" (
   id text primary key,
   code text not null unique,
   category text not null,
-  "categoryFil" text not null default '',
+  -- categoryFil/labelFil/klass are nullable on purpose: js/store.js sanitize() rewrites an
+  -- empty string to NULL before every insert/update, so a NOT NULL constraint here makes
+  -- saving an offense with a blank Filipino field -- or with no class -- fail outright.
+  -- Every reader coerces back with `|| ''`, so NULL and '' are equivalent to the app.
+  "categoryFil" text default '',
   label text not null,
-  "labelFil" text not null default '',
+  "labelFil" text default '',
+  klass text default '',                        -- Series 2, 2026 offense class: 'A' Light | 'B' Less Grave | 'C' Grave | 'D' Serious
   schedule jsonb not null default '[]'::jsonb,  -- ordered penalty codes: 'VW' | 'WW' | '<N>S' | 'D', one per occurrence
   "sortOrder" numeric(10,2) not null default 0, -- preserves the original document's category/offense ordering
   created_at timestamptz not null default now()
 );
+
+-- Added with the Series 2, 2026 Edition of the Code of Discipline, which assigns every
+-- offense one of four classes and states the penalty per class exactly once (Sec. 3.3-3.4)
+-- instead of writing a schedule out per offense. Existing rows keep their stored schedule;
+-- js/store.js disciplineCatalog() only derives a schedule from the class where a row has
+-- none, so this is safe to apply to a database already holding the Series 1 catalog.
+alter table "disciplineOffenses" add column if not exists klass text default '';
+
+-- Drop the NOT NULL on the three optional text columns, for the sanitize() reason above.
+-- Safe to re-run, and safe on a table already holding the Series 1 catalog.
+alter table "disciplineOffenses" alter column "categoryFil" drop not null;
+alter table "disciplineOffenses" alter column "labelFil"   drop not null;
+alter table "disciplineOffenses" alter column klass        drop not null;
 
 alter table "disciplineOffenses" enable row level security;
 
