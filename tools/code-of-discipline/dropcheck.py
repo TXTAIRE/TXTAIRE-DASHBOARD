@@ -14,6 +14,7 @@ Run it against every edition after every build.
     python dropcheck.py out.docx
     python dropcheck.py out-fil.docx fil
     python dropcheck.py out-emp.docx employee
+    python dropcheck.py out-fil-emp.docx fil-employee
 
 Image relationship ids and OOXML namespace URIs are produced by the modules but never
 appear as document text; they are filtered rather than reported.
@@ -32,9 +33,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
 
 docx = sys.argv[1] if len(sys.argv) > 1 else "out.docx"
-audience = sys.argv[2] if len(sys.argv) > 2 else "full"
-lang = "fil" if audience == "fil" else "en"
-aud = "employee" if audience == "employee" else "full"
+# The edition argument names a language, an audience, or both:
+#   (omitted) | fil | employee | fil-employee
+edition = sys.argv[2] if len(sys.argv) > 2 else "full"
+parts = edition.split("-")
+lang = "fil" if "fil" in parts else "en"
+aud = "employee" if "employee" in parts else "full"
 
 env = dict(os.environ, CODE_LANG=lang, CODE_AUDIENCE=aud)
 res = subprocess.run(["node", "produced.js"], cwd=HERE, capture_output=True,

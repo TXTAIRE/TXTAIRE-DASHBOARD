@@ -49,7 +49,8 @@ const cover = () => [
   }),
   new d.Paragraph({
     alignment: d.AlignmentType.CENTER, spacing: { after: 300 },
-    children: [run('Salin sa Filipino', { size: 22, color: '5A5A5A' })],
+    // Dapat matukoy agad ang pagkakaiba ng dalawang dokumento, kahit nakalimbag lang.
+    children: [run(L.pick('Salin sa Filipino', 'Salin sa Filipino  ·  Kopya ng Empleyado'), { size: 22, color: '5A5A5A' })],
   }),
 
   img('cover.jpg', 470, 314),
@@ -164,6 +165,29 @@ const controlSheet = () => {
     ], { edge: C.blue, fill: 'EEF3FB', labelColor: C.navy }),
 
     gap(240),
+    // Ang buong edisyon ay nagpapaliwanag kung ano ang nagbago at bakit -- iyon ang
+    // kailangan ng HR. Ang kopya ng empleyado ay nagpapaliwanag kung paano hanapin ang
+    // mga bagay -- iyon ang kailangan ng empleyado. Walang panuntunang nawawala rito.
+    ...(L.forEmployee() ? [
+      secHead('Paano gamitin ang Kodigong ito'),
+      p('Nasasaklaw ng Kodigong ito ang bawat empleyado ng TXTAIRE OPC. Nakasaad dito ang inaasahan sa iyo, ang mga gawaing itinuturing na paglabag, ang parusang nakalaan sa bawat paglabag, at ang prosesong dapat sundin ng kompanya bago ipataw sa iyo ang anumang parusa.'),
+      bullet([
+        run('Ang inaasahan sa iyo. ', { bold: true }),
+        run('Nasa Bahagi II ang pamantayang etikal ng kompanya — kung paano ka dapat makitungo sa kliyente, sa mga kasamahan mo, at sa ari-arian ng kompanya, bago pa mapunta sa usapin ng disiplina.'),
+      ]),
+      bullet([
+        run('Paano gumagana ang disiplina. ', { bold: true }),
+        run('Ipinapaliwanag ng Bahagi III ang apat na uri ng paglabag, ang parusa sa bawat uri, at ang prosesong dalawang sulat na sinusunod ng kompanya sa bawat kaso. Basahin muna ang Seksyon 3.6 kung nakatanggap ka ng Notice to Explain.'),
+      ]),
+      bullet([
+        run('Ang talaan ng mga paglabag. ', { bold: true }),
+        run('Nakalista sa Bahagi IV ang bawat paglabag at ang uri nito. Sa bawat grupo, nagsisimula sa pinakamagaan hanggang sa pinakamabigat, para makita mo agad kung gaano kabigat ang isang patakaran nang hindi na kailangang tingnan ang talaan ng parusa.'),
+      ]),
+      bullet([
+        run('Ang oras, leave, at benepisyo mo. ', { bold: true }),
+        run('Nasa Bahagi V ang oras ng trabaho, overtime, leave, sahod, at benepisyo. Nasa Bahagi VI ang promotion, pagbibitiw, at kung ano ang nararapat sa iyo kapag humiwalay ka na.'),
+      ], { after: 200 }),
+    ] : [
     secHead('Bakit inilabas ang edisyong ito'),
     p('Pinapalitan ng Series 2, 2026 Edition na ito ang buong Series 1, 2025 Edition ng TXTAIRE OPC Code of Discipline. Inilabas ito sa apat na dahilan:'),
     bullet([
@@ -182,6 +206,7 @@ const controlSheet = () => {
       run('Para maisulat ang pamantayang etikal ng kompanya. ', { bold: true }),
       run('Bago ang Bahagi II ng Code na ito. Malinaw nitong sinasabi kung ano ang inaasahan ng TXTAIRE sa bawat empleyado bago pa mapunta sa usapin ng disiplina.'),
     ], { after: 200 }),
+    ]),
   ];
 };
 

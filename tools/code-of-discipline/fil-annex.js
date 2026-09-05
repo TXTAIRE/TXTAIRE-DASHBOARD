@@ -73,7 +73,9 @@ const signBlock = (left, right) => [
 const annexes = () => [
   ...partHead('MGA ANNEX', 'Mga Form at Sanggunian', 'new'),
   p('Ang mga form sa mga Annex na ito ang pamantayang form ng Human Resources Department. Puwede itong kopyahin at sagutan nang sulat-kamay o elektroniko. Hindi opsyonal ang paggamit nito: ang aksyong disiplinaryong itinala sa iba ay mas mahirap ipagtanggol, at ang Notice to Explain na kulang sa alinman sa nasa Annex A ay may depekto sa mata ng batas.', { keepNext: true }),
-  p('Magkakasunod ang paggamit nila. Ang Annex A ang unang lumalabas; ang Annex B ang sagot ng empleyado; ang Annex C ay ibinibigay lamang kung magkakaroon ng pagdinig; ang Annex D ay papel na ginagamit ng Panel at hindi kailanman ibinibigay sa empleyado; ang Annex E ang nagsasara ng kaso at ibinibigay sa empleyado. Ang Annex F ay checklist sa pagpaplano para sa HRD at hindi form ng kaso, at ang Annex G ay pipirmahan nang minsan lamang, sa pagtanggap ng Code na ito, at isasampa sa 201 file.'),
+  p(L.pick(
+    'Magkakasunod ang paggamit nila. Ang Annex A ang unang lumalabas; ang Annex B ang sagot ng empleyado; ang Annex C ay ibinibigay lamang kung magkakaroon ng pagdinig; ang Annex D ay papel na ginagamit ng Panel at hindi kailanman ibinibigay sa empleyado; ang Annex E ang nagsasara ng kaso at ibinibigay sa empleyado. Ang Annex F ay checklist sa pagpaplano para sa HRD at hindi form ng kaso, at ang Annex G ay pipirmahan nang minsan lamang, sa pagtanggap ng Code na ito, at isasampa sa 201 file.',
+    'Magkakasunod ang paggamit nila. Ang Annex A ang unang lumalabas; ang Annex B ang nakasulat mong paliwanag at galing sa iyo; ang Annex C ay ibinibigay lamang kung magkakaroon ng pagdinig; ang Annex D ay papel na ginagamit ng Panel at hindi kailanman ibinibigay sa empleyado; ang Annex E ang nagsasara ng kaso at ibinibigay sa iyo. Ang Annex G ay pipirmahan nang minsan lamang, sa pagtanggap ng Code na ito, at isasampa sa 201 file mo.')),
 
   // ------------------------------------------------------------ ANNEX A
   ...formHead('Annex A  —  Notice to Explain', 'CD-01'),
@@ -223,50 +225,55 @@ const annexes = () => [
   ...signBlock('Inaprubahan ng (May-ari / General Manager)', 'Tinanggap ng (Empleyado) — Pirma at petsa'),
 
   // ------------------------------------------------------------ ANNEX F
-  ...formHead('Annex F  —  Checklist sa Pagsunod Habang Lumalaki ang Bilang ng Tauhan', 'CD-06'),
-  p('May mga obligasyong legal na nabubuksan ayon sa bilang ng tauhan, at inaasahang lalago ang kompanya mula sa mga dalawampu (20) tungo sa mga isandaan (100) sa loob ng susunod na taon. Checklist ito para sa pagpaplano ng HRD. Buod ito at hindi kapalit ng mismong mga kautusan; kumpirmahin ang kasalukuyang hangganan sa DOLE Regional Office bago ang bawat milestone.', { after: 100 }),
-  ...(() => {
-    const CW = [1500, 4400, 3846];
-    const PAD = { top: 26, bottom: 26, left: 80, right: 80 };
-    const rows = [
-      ['Kahit ilan', 'Irehistro ang establisimyento sa DOLE (Rule 1020); magkaroon ng OSH program; magbigay ng libreng PPE; magtago ng logbook ng aksidente; i-report ang aksidente at sakit.', 'RA 11058 / DO 198-18'],
-      ['Kahit ilan', 'Bumuo ng Committee on Decorum and Investigation; ipaskil nang hayag ang patakaran laban sa sexual harassment; magsagawa ng gender sensitivity orientation.', 'RA 7877 / RA 11313'],
-      ['Kahit ilan', 'Gumawa at ipaskil ang patakaran at programa sa HIV at AIDS, tuberculosis, Hepatitis B, lugar na walang droga, at mental health.', 'RA 11166, DO 73-05, DO 05-10, DO 53-03, RA 11036'],
-      ['Kahit ilan', 'Magbigay ng lactation station at lactation break; magpanatili ng kinakailangang first aid kit.', 'RA 10028'],
-      ['Kahit ilan', 'Magparehistro sa SSS, PhilHealth, at Pag-IBIG; ipasa ang kontribusyon sa oras; magbigay ng payslip na may detalye.', 'Batas ng SSS, PhilHealth, HDMF'],
-      ['10 pataas', 'Magtalaga ng kahit isang sertipikadong first-aider at sanay na Safety Officer 1; kumpletuhin ng lahat ng manggagawa ang sapilitang 8-oras na OSH seminar.', 'DO 198-18'],
-      ['10 pataas', 'Ipaskil ang Kodigo ng Disiplina at iba pang alituntunin kung saan mababasa ng mga empleyado; itago ang record ng trabaho sa lugar ng trabaho.', 'Labor Code, Rule X'],
-      ['11 hanggang 50', 'Bumuo ng Health and Safety Committee; magtalaga ng Safety Officer 2 kung mataas ang panganib sa lugar ng trabaho (kuryente, mataas na lugar, confined space — saklaw nito ang karamihan ng trabaho natin sa field).', 'DO 198-18'],
-      ['21 pataas', 'Kumuha ng part-time na occupational health physician at nurse, o ayusin ang kinakailangang retainer at referral kung mababa ang panganib.', 'OSHS Rule 1960'],
-      ['50 pataas', 'Kumuha ng full-time na Safety Officer 2 (o mas mataas, ayon sa panganib); palakihin ang Health and Safety Committee; magpanatili ng treatment room o klinika ayon sa uri ng panganib.', 'DO 198-18 / OSHS Rule 1960'],
-      ['51 pataas', 'Isaalang-alang ang pormal na grievance machinery at nakasulat na istruktura ng sahod; suriin kung may unyon ng rank-and-file na maaaring humingi ng pagkilala at ihanda ang HR dito.', 'Labor Code, Book V'],
-      ['100 pataas', 'Kumuha ng full-time na safety officer at, ayon sa uri ng panganib, full-time na occupational health nurse; magpanatili ng emergency clinic; palawakin ang Family Welfare Program.', 'DO 198-18 / OSHS'],
-      ['200 pataas', 'Magtatag ng Family Welfare Program na may itinalagang coordinator; suriin ang pangangailangan ng full-time na doktor at dentista.', 'DOLE Family Welfare Program'],
-    ];
-    return [table([
-      new d.TableRow({
-        cantSplit: true, tableHeader: true,
-        children: [
-          tCell('BILANG', { w: CW[0], bold: true, color: 'FFFFFF', fill: C.blue, size: 17, align: d.AlignmentType.CENTER }),
-          tCell('ANO ANG DAPAT MERON', { w: CW[1], bold: true, color: 'FFFFFF', fill: C.blue, size: 17 }),
-          tCell('BATAYAN', { w: CW[2], bold: true, color: 'FFFFFF', fill: C.blue, size: 17 }),
-        ],
-      }),
-      ...rows.map((r) => new d.TableRow({
-        cantSplit: true,
-        children: [
-          tCell(r[0], { w: CW[0], bold: true, color: C.navy, align: d.AlignmentType.CENTER, va: d.VerticalAlign.TOP, size: 17, pad: PAD, line: 215 }),
-          tCell(r[1], { w: CW[1], va: d.VerticalAlign.TOP, size: 17, pad: PAD, line: 215 }),
-          tCell(r[2], { w: CW[2], va: d.VerticalAlign.TOP, size: 16, italics: true, pad: PAD, line: 215 }),
-        ],
-      })),
-    ], CW)];
-  })(),
-  gap(120),
-  note('Dalawang bagay bago umabot sa limampu ang bilang', [
-    'Una, magtalaga at magsanay ng Safety Officer ngayon pa lang at huwag hintayin ang hangganan. Matagal ang sertipikasyon, at mataas ang panganib ng trabaho natin sa field — kuryente, refrigerant na may presyon, at trabaho sa bubong at mataas na lugar — anuman ang bilang ng tauhan.',
-    'Pangalawa, ayusin nang maayos ang Administrative Review Panel. Sa dalawampung empleyado, madalas na iisang tatlong tao ang Panel. Sa isandaan, kailangang posibleng bumuo ng Panel na walang sinumang may interes sa kaso. Tukuyin at sanayin ang pool ng kahit anim na posibleng miyembro.',
-  ], { edge: C.blue, fill: 'EEF3FB', labelColor: C.navy }),
+  // Materyal sa pagpaplano ng HR -- hangganan ayon sa bilang ng tauhan. Hindi ito
+  // form ng kaso at walang gamit ito sa empleyado, kaya inaalis sa kopya ng
+  // empleyado. Inaalis din doon ang pagtukoy dito sa Seksyon 5.7.
+  ...L.hrOnly(
+    ...formHead('Annex F  —  Checklist sa Pagsunod Habang Lumalaki ang Bilang ng Tauhan', 'CD-06'),
+    p('May mga obligasyong legal na nabubuksan ayon sa bilang ng tauhan, at inaasahang lalago ang kompanya mula sa mga dalawampu (20) tungo sa mga isandaan (100) sa loob ng susunod na taon. Checklist ito para sa pagpaplano ng HRD. Buod ito at hindi kapalit ng mismong mga kautusan; kumpirmahin ang kasalukuyang hangganan sa DOLE Regional Office bago ang bawat milestone.', { after: 100 }),
+    ...(() => {
+      const CW = [1500, 4400, 3846];
+      const PAD = { top: 26, bottom: 26, left: 80, right: 80 };
+      const rows = [
+        ['Kahit ilan', 'Irehistro ang establisimyento sa DOLE (Rule 1020); magkaroon ng OSH program; magbigay ng libreng PPE; magtago ng logbook ng aksidente; i-report ang aksidente at sakit.', 'RA 11058 / DO 198-18'],
+        ['Kahit ilan', 'Bumuo ng Committee on Decorum and Investigation; ipaskil nang hayag ang patakaran laban sa sexual harassment; magsagawa ng gender sensitivity orientation.', 'RA 7877 / RA 11313'],
+        ['Kahit ilan', 'Gumawa at ipaskil ang patakaran at programa sa HIV at AIDS, tuberculosis, Hepatitis B, lugar na walang droga, at mental health.', 'RA 11166, DO 73-05, DO 05-10, DO 53-03, RA 11036'],
+        ['Kahit ilan', 'Magbigay ng lactation station at lactation break; magpanatili ng kinakailangang first aid kit.', 'RA 10028'],
+        ['Kahit ilan', 'Magparehistro sa SSS, PhilHealth, at Pag-IBIG; ipasa ang kontribusyon sa oras; magbigay ng payslip na may detalye.', 'Batas ng SSS, PhilHealth, HDMF'],
+        ['10 pataas', 'Magtalaga ng kahit isang sertipikadong first-aider at sanay na Safety Officer 1; kumpletuhin ng lahat ng manggagawa ang sapilitang 8-oras na OSH seminar.', 'DO 198-18'],
+        ['10 pataas', 'Ipaskil ang Kodigo ng Disiplina at iba pang alituntunin kung saan mababasa ng mga empleyado; itago ang record ng trabaho sa lugar ng trabaho.', 'Labor Code, Rule X'],
+        ['11 hanggang 50', 'Bumuo ng Health and Safety Committee; magtalaga ng Safety Officer 2 kung mataas ang panganib sa lugar ng trabaho (kuryente, mataas na lugar, confined space — saklaw nito ang karamihan ng trabaho natin sa field).', 'DO 198-18'],
+        ['21 pataas', 'Kumuha ng part-time na occupational health physician at nurse, o ayusin ang kinakailangang retainer at referral kung mababa ang panganib.', 'OSHS Rule 1960'],
+        ['50 pataas', 'Kumuha ng full-time na Safety Officer 2 (o mas mataas, ayon sa panganib); palakihin ang Health and Safety Committee; magpanatili ng treatment room o klinika ayon sa uri ng panganib.', 'DO 198-18 / OSHS Rule 1960'],
+        ['51 pataas', 'Isaalang-alang ang pormal na grievance machinery at nakasulat na istruktura ng sahod; suriin kung may unyon ng rank-and-file na maaaring humingi ng pagkilala at ihanda ang HR dito.', 'Labor Code, Book V'],
+        ['100 pataas', 'Kumuha ng full-time na safety officer at, ayon sa uri ng panganib, full-time na occupational health nurse; magpanatili ng emergency clinic; palawakin ang Family Welfare Program.', 'DO 198-18 / OSHS'],
+        ['200 pataas', 'Magtatag ng Family Welfare Program na may itinalagang coordinator; suriin ang pangangailangan ng full-time na doktor at dentista.', 'DOLE Family Welfare Program'],
+      ];
+      return [table([
+        new d.TableRow({
+          cantSplit: true, tableHeader: true,
+          children: [
+            tCell('BILANG', { w: CW[0], bold: true, color: 'FFFFFF', fill: C.blue, size: 17, align: d.AlignmentType.CENTER }),
+            tCell('ANO ANG DAPAT MERON', { w: CW[1], bold: true, color: 'FFFFFF', fill: C.blue, size: 17 }),
+            tCell('BATAYAN', { w: CW[2], bold: true, color: 'FFFFFF', fill: C.blue, size: 17 }),
+          ],
+        }),
+        ...rows.map((r) => new d.TableRow({
+          cantSplit: true,
+          children: [
+            tCell(r[0], { w: CW[0], bold: true, color: C.navy, align: d.AlignmentType.CENTER, va: d.VerticalAlign.TOP, size: 17, pad: PAD, line: 215 }),
+            tCell(r[1], { w: CW[1], va: d.VerticalAlign.TOP, size: 17, pad: PAD, line: 215 }),
+            tCell(r[2], { w: CW[2], va: d.VerticalAlign.TOP, size: 16, italics: true, pad: PAD, line: 215 }),
+          ],
+        })),
+      ], CW)];
+    })(),
+    gap(120),
+    note('Dalawang bagay bago umabot sa limampu ang bilang', [
+      'Una, magtalaga at magsanay ng Safety Officer ngayon pa lang at huwag hintayin ang hangganan. Matagal ang sertipikasyon, at mataas ang panganib ng trabaho natin sa field — kuryente, refrigerant na may presyon, at trabaho sa bubong at mataas na lugar — anuman ang bilang ng tauhan.',
+      'Pangalawa, ayusin nang maayos ang Administrative Review Panel. Sa dalawampung empleyado, madalas na iisang tatlong tao ang Panel. Sa isandaan, kailangang posibleng bumuo ng Panel na walang sinumang may interes sa kaso. Tukuyin at sanayin ang pool ng kahit anim na posibleng miyembro.',
+    ], { edge: C.blue, fill: 'EEF3FB', labelColor: C.navy }),
+  ),
 
   // ------------------------------------------------------------ ANNEX G
   ...formHead('Annex G  —  Pagkilala at Pagsang-ayon ng Empleyado', 'CD-07'),

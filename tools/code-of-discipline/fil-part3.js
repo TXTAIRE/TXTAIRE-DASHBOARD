@@ -43,7 +43,9 @@ const part3 = () => [
   })(),
   gap(160),
   note('Hindi kailanman lalagpas sa labinlimang araw ang suspensyon', [
-    'Sa dating edisyon, pinapayagan ang tatlumpung (30) araw na suspensyon bilang karaniwang parusa. Mahirap ipagtanggol ang ganoon kahabang suspensyon bilang parusa, at may panganib itong ituring na constructive dismissal. Sa edisyong ito, labinlimang (15) araw ng trabaho ang pinakamahabang parusa bago ang pagtanggal.',
+    L.pick(
+      'Sa dating edisyon, pinapayagan ang tatlumpung (30) araw na suspensyon bilang karaniwang parusa. Mahirap ipagtanggol ang ganoon kahabang suspensyon bilang parusa, at may panganib itong ituring na constructive dismissal. Sa edisyong ito, labinlimang (15) araw ng trabaho ang pinakamahabang parusa bago ang pagtanggal.',
+      'Labinlimang (15) araw ng trabaho ang pinakamahabang parusa bago ang pagtanggal. Walang suspensyong mas mahaba pa rito ang ipapataw ng kompanya bilang parusa.'),
     'Hiwalay ito sa PREVENTIVE na suspensyon sa Seksyon 3.8, na hindi parusa at hiwalay na nilimitahan ng batas sa tatlumpung (30) araw.',
   ]),
 
@@ -205,7 +207,9 @@ const part3 = () => [
   ], { edge: C.blue, fill: 'EEF3FB', labelColor: C.navy }),
 
   secHead('3.7  Ang Administrative Review Panel', 'rev'),
-  p('Sa dating edisyon, kailangan ang panel na tatlong manager sa bawat kaso. Hindi kayang gawin iyon sa kasalukuyang laki ng kompanya, at nagpapabagal ito sa simpleng kaso. Ito ang gagamitin, at kasama na rito ang paglaki ng kompanya:'),
+  p(L.pick(
+    'Sa dating edisyon, kailangan ang panel na tatlong manager sa bawat kaso. Hindi kayang gawin iyon sa kasalukuyang laki ng kompanya, at nagpapabagal ito sa simpleng kaso. Ito ang gagamitin, at kasama na rito ang paglaki ng kompanya:',
+    'Nakadepende sa bigat ng kaso kung sino ang susuri nito. Ito ang gagamitin, at kasama na rito ang paglaki ng kompanya:')),
   ...(() => {
     const RW = [2400, 3400, 3946];
     const rows = [
@@ -267,9 +271,14 @@ const part3 = () => [
   p('Epekto sa benepisyo at promotion. Ang nalinis na parusa ay hindi gagamiting dahilan para tanggihan ang promotion, transfer, training, o kahit anong benepisyo.'),
 
   secHead('3.12  Pagbabayad ng Pinsala at ang Bawal na Multa', 'new'),
-  note('Pinapalitan ng Seksyong ito ang mga probisyon ng dating edisyon na labag sa batas', [
-    ['Hindi magpapataw ng multa ang kompanya. Sa dating edisyon, may "₱500 multa / kukunin ang unit". Ang multang ibinabawas sa sahod ay wala sa mga bawas na pinapayagan ng Artikulo 113 ng Labor Code at hindi na ipapataw.'],
-    ['Hindi ipagkakait ng kompanya ang bayad sa oras na talagang pinasukan. Sa dating edisyon, ang empleyadong nakalimot mag-punch ay "ituturing na absent at walang sahod sa araw na iyon". Ang empleyadong talagang nagtrabaho ay dapat bayaran. Ang nakaligtaang time entry ay itinatama sa Time Correction Form na pipirmahan ng supervisor, at tatratuhin, kung mayroon man, bilang paglabag na Magaan sa ilalim ng Seksyon 4.2.'],
+  note(L.pick('Pinapalitan ng Seksyong ito ang mga probisyon ng dating edisyon na labag sa batas',
+              'Bawal ang multa at ang pagpigil sa sahod na kinita mo na'), [
+    [L.pick(
+      'Hindi magpapataw ng multa ang kompanya. Sa dating edisyon, may "₱500 multa / kukunin ang unit". Ang multang ibinabawas sa sahod ay wala sa mga bawas na pinapayagan ng Artikulo 113 ng Labor Code at hindi na ipapataw.',
+      'Hindi magpapataw ng multa ang kompanya. Ang multang ibinabawas sa sahod ay wala sa mga bawas na pinapayagan ng Artikulo 113 ng Labor Code, at walang unit o kagamitan mo ang kukunin bilang parusa.')],
+    [L.pick(
+      'Hindi ipagkakait ng kompanya ang bayad sa oras na talagang pinasukan. Sa dating edisyon, ang empleyadong nakalimot mag-punch ay "ituturing na absent at walang sahod sa araw na iyon". Ang empleyadong talagang nagtrabaho ay dapat bayaran. Ang nakaligtaang time entry ay itinatama sa Time Correction Form na pipirmahan ng supervisor, at tatratuhin, kung mayroon man, bilang paglabag na Magaan sa ilalim ng Seksyon 4.2.',
+      'Hindi ipagkakait ng kompanya ang bayad sa oras na talagang pinasukan. Kung talagang nagtrabaho ka, dapat kang bayaran, kahit nakalimutan mong mag-punch. Ang nakaligtaang time entry ay itinatama sa Time Correction Form na pipirmahan ng supervisor mo, at tatratuhin, kung mayroon man, bilang paglabag na Magaan sa ilalim ng Seksyon 4.2.')],
     ['Hindi magpapataw ang kompanya ng liquidated damages na katumbas ng dalawang buwang sahod dahil sa hindi pagbibigay ng abiso ng resignation. Tingnan ang Seksyon 6.4.'],
   ], { edge: C.Dtxt, fill: 'FDF0F0', labelColor: C.Dtxt }),
   gap(160),

@@ -1,6 +1,6 @@
 # Code of Discipline — document build
 
-Builds the three PDFs served by the portal and handed to employees. See **Current
+Builds the four PDFs served by the portal and handed to employees. See **Current
 baseline** below for the page counts and where each one ships.
 
 All three are the same Code: 8 categories, 102 offenses, identical
@@ -33,10 +33,11 @@ python pagemap.py out.pdf              # must now report no change = converged
 ```
 
 The Filipino edition is the same sequence with `make-fil.js`, `topdf-fil.ps1`,
-`pagemap-fil.py` and `out-fil.*`. The employee copy is the same again with `make-emp.js`,
-`pagemap-emp.py` and `out-emp.*` (it uses `topdf.ps1`).
+`pagemap-fil.py` and `out-fil.*`. The employee copies are the same again with
+`make-emp.js` / `pagemap-emp.py` / `out-emp.*` and `make-fil-emp.js` /
+`pagemap-fil-emp.py` / `out-fil-emp.*` (both use their language's `topdf` script).
 
-`lib.js` is shared by all three, so **rebuild and re-verify all three whenever you touch
+`lib.js` is shared by all four, so **rebuild and re-verify all four whenever you touch
 it** — a change made for one silently repaginates the others.
 
 `topdf.ps1` throws a COM exception on `Quit` after a successful export. It is
@@ -56,9 +57,10 @@ reviewer who was eyeballing the document instead of measuring it.
 | `dropcheck.py` | paragraphs the modules produce that never reached the document |
 | `pv.py` | renders pages to PNG for a visual pass |
 
-Use the `fil-` prefixed copies for the Filipino edition and the `emp-` prefixed copies
-for the employee copy. `dropcheck.py` takes the edition as an argument:
-`python dropcheck.py out-fil.docx fil`, `python dropcheck.py out-emp.docx employee`.
+Use the `fil-` prefixed copies for the Filipino edition, `emp-` for the English employee
+copy and `fil-emp-` for the Filipino employee copy. `dropcheck.py` takes the edition as an argument:
+`python dropcheck.py out-fil.docx fil`, `python dropcheck.py out-emp.docx employee`,
+`python dropcheck.py out-fil-emp.docx fil-employee`.
 
 ## Gotchas
 
@@ -120,6 +122,10 @@ should appear above ASCII.
 | English, full | `make.js` | 46 | `assets/docs/code-of-discipline-2026-en.pdf` |
 | Filipino, full | `make-fil.js` | 47 | `assets/docs/code-of-discipline-2026-fil.pdf` |
 | English, employee copy | `make-emp.js` | 41 | `assets/docs/code-of-discipline-2026-en-employee.pdf` |
+| Filipino, employee copy | `make-fil-emp.js` | 43 | `assets/docs/code-of-discipline-2026-fil-employee.pdf` |
+
+**My Portal links the employee copies; the full editions are HR's.** Both remain on the
+server — the portal simply does not link them.
 
 The employee copy is the same Code with the edition apparatus removed: no NEW / REVISED /
 WITHDRAWN markers, no Summary of Changes, no passages comparing this edition with the

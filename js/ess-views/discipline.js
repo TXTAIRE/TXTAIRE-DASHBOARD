@@ -30,13 +30,13 @@ window.EssViews.discipline = (function () {
   // it on first open and it stays readable offline afterwards (js/../sw.js) -- it is
   // deliberately NOT in PRECACHE_URLS, which would add ~800KB to every install.
   //
-  // English employees get the EMPLOYEE COPY: the same Code without the edition apparatus
-  // (no NEW/REVISED markers, no Summary of Changes, no Annex F headcount checklist), which
-  // is 41 pages against the full 46. There is no Filipino employee copy yet, so Filipino
-  // still opens the full edition -- correct, just longer.
+  // Both languages serve the EMPLOYEE COPY: the same Code without the edition apparatus
+  // (no NEW/REVISED markers, no Summary of Changes, no Annex F headcount checklist) --
+  // 41 pages against the full 46 in English, 43 against 47 in Filipino. The full editions
+  // stay on the server for HR; they are simply not what My Portal links to.
   const PDF = {
     en: 'assets/docs/code-of-discipline-2026-en-employee.pdf',
-    fil: 'assets/docs/code-of-discipline-2026-fil.pdf',
+    fil: 'assets/docs/code-of-discipline-2026-fil-employee.pdf',
   };
 
   const TEXT = {
@@ -103,7 +103,7 @@ window.EssViews.discipline = (function () {
       intro: 'Ang parusa ay nakadepende sa uri ng paglabag, at tumataas kada ulit ng parehong uri sa loob ng 12 buwan. Kapag malinis ang record mo sa loob ng 12 buwan, hindi na bibilangin ang mga nakaraang paglabag.',
 
       openPdf: 'Buksan ang buong Code (PDF)',
-      openPdfSub: 'Ang buong 47-pahinang dokumento — kasama ang mga karapatan mo, ang buong proseso, at lahat ng form.',
+      openPdfSub: 'Ang kumpletong 43-pahinang kopya ng empleyado — ang mga karapatan mo, ang buong proseso, at ang mga form.',
       pdfMissing: 'Wala pang Filipino na bersyon — bubuksan ang English.',
 
       classNames: { A: 'MAGAAN', B: 'KATAMTAMAN', C: 'MABIGAT', D: 'NAPAKABIGAT' },

@@ -24,17 +24,23 @@ const NOTES = {
   'prohibited-drugs': 'Susundin ang proseso at proteksyon sa Seksyon 5.8, kasama ang referral sa gamutan kung nararapat.',
   'conviction-crime': 'Ang nakabinbing kaso ay hindi pa hatol. Kung ang mismong gawa ay paglabag na rin sa Code na ito, puwedeng kumilos ang kompanya sa batayang iyon.',
   'phone-unreachable': 'Tingnan ang Seksyon 3.12.',
-  'negligence-minor-loss': 'Sa dating edisyon, ₱200 ang simula ng hangganang ito. Hindi na makabuluhang halaga iyon ngayon.',
+  'negligence-minor-loss': L.pick('Sa dating edisyon, ₱200 ang simula ng hangganang ito. Hindi na makabuluhang halaga iyon ngayon.', null),
   'gross-habitual-neglect': 'Sa ilalim ng Artikulo 297(b) ng Labor Code, kailangang MALUBHA at PAULIT-ULIT ang kapabayaan bago ito maging dahilan ng pagtanggal. Ang minsanang kapabayaan, gaano man kamahal, ay karaniwang sasailalim sa mas magaang hangganan sa itaas maliban kung sobrang pagpapabaya na ito.',
   insubordination: 'Tatlong bagay ang kailangang mapatunayan: legal at makatuwiran ang utos, ipinaalam ito sa iyo, at may kinalaman ito sa trabahong pinasok mo. Ang pagtanggi sa iligal na utos, o sa trabahong may agarang panganib, ay hindi pagsuway.',
   'undeclared-sideline': 'Ang pagdeklara ay nasa Seksyon 2.3.',
   bullying: 'Ang minsanang malubhang insidente ay puwedeng ituring na pambu-bully kung ganoon din ang bigat ng epekto. Ang tamang pamamahala sa performance, pagwawasto, at disiplina ay hindi pambu-bully.',
-  'fighting-on-premises': 'Sa dating edisyon, tanggal agad sa unang beses. Sa edisyong ito, nakalaan ang pagtanggal sa mas mabibigat na anyo sa ibaba. Kung nagtatanggol ka lang talaga sa sarili, walang parusa.',
+  'fighting-on-premises': L.pick(
+    'Sa dating edisyon, tanggal agad sa unang beses. Sa edisyong ito, nakalaan ang pagtanggal sa mas mabibigat na anyo sa ibaba. Kung nagtatanggol ka lang talaga sa sarili, walang parusa.',
+    // Ang panuntunan sa pagtatanggol sa sarili ay nasa mismong teksto ng paglabag
+    // (labelFil), kaya walang mawawala kapag inalis ang tala rito.
+    null),
   'physical-injury-work-related': 'Kung magaan ang sugat, minsanan lang ang pangyayari, at may malaking pang-uudyok, puwedeng isaalang-alang ng Panel ang pagpapagaan sa ilalim ng Seksyon 3.5.',
   'immoral-conduct': 'Ang Committee on Decorum and Investigation sa Seksyon 5.9 ang humahawak nito, hindi ang karaniwang Panel. Ang mas magagaang gender-based na gawi sa ilalim ng RA 11313 ay may sariling hagdan ng parusa na nagsisimula sa Katamtaman.',
-  gambling: 'Sa dating edisyon, tanggal agad sa unang beses.',
-  'soliciting-from-subordinates': 'Sa dating edisyon, tanggal agad sa unang beses. Mabigat pa rin ito ngunit naitatama, maliban kung may pamimilit o pang-aabuso ng kapangyarihan — Seksyon 4.8 na ang gagamitin doon.',
-  intrigues: 'Sa dating edisyon, 15-araw na suspensyon sa unang beses at tanggal sa ikalawa. Hindi katimbang iyon ng karaniwang pangyayari.',
+  gambling: L.pick('Sa dating edisyon, tanggal agad sa unang beses.', null),
+  'soliciting-from-subordinates': L.pick(
+    'Sa dating edisyon, tanggal agad sa unang beses. Mabigat pa rin ito ngunit naitatama, maliban kung may pamimilit o pang-aabuso ng kapangyarihan — Seksyon 4.8 na ang gagamitin doon.',
+    'Kung may pamimilit o pang-aabuso ng kapangyarihan, Seksyon 4.8 na ang gagamitin.'),
+  intrigues: L.pick('Sa dating edisyon, 15-araw na suspensyon sa unang beses at tanggal sa ikalawa. Hindi katimbang iyon ng karaniwang pangyayari.', null),
   'gross-discourtesy': 'Ang malubha o paulit-ulit na kawalang-galang na ikinawala ng account ng kliyente ay hiwalay na paglabag sa ibaba.',
 };
 
@@ -75,7 +81,7 @@ const part4 = () => [
   gap(160),
   note('Tungkol sa grace period at pagiging huli', [
     'Ginawang labinlimang (15) minuto ang grace period mula sa dating sampu (10), bilang pagkilala sa trapiko na hinaharap ng mga empleyadong pumapasok sa Laguna, Maynila, at sa mga site ng kliyente. Ang grace period ay pabor, hindi karapatang mahuli araw-araw. Ang bilang ng pagiging huli ay mula sa opisyal na simula ng shift, hindi mula sa katapusan ng grace period.',
-    'Sa dating edisyon, 260 minuto sa isang buwan ang sobrang late, at ang paglagpas sa apat na beses ay parusahan ngunit hindi sinasabi kung ano ang parusa. Sinasabi na ng edisyong ito ang parehong hangganan at ang uri.',
+    ...L.hrOnly('Sa dating edisyon, 260 minuto sa isang buwan ang sobrang late, at ang paglagpas sa apat na beses ay parusahan ngunit hindi sinasabi kung ano ang parusa. Sinasabi na ng edisyong ito ang parehong hangganan at ang uri.'),
   ]),
 
   // ---------------------------------------------------------------- 4.2

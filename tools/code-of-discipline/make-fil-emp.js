@@ -1,19 +1,19 @@
 const fs = require('fs');
 const path = require('path');
 const L = require('./lib.js');
-L.setLang('fil');                 // must run before any content module is required
+L.setLang('fil');
+L.setAudience('employee');        // both must run before any content module is required
 
 const { d, C, W, run } = L;
 
 const front = require('./fil-front.js');
-const chg = require('./fil-changes.js');
 const p12 = require('./fil-parts13.js');
 const p3 = require('./fil-part3.js');
 const p4 = require('./fil-part4.js');
 const p56 = require('./fil-parts56.js');
 const anx = require('./fil-annex.js');
 
-const OUT = process.argv[2] || path.join(__dirname, 'out-fil.docx');
+const OUT = process.argv[2] || path.join(__dirname, 'out-fil-emp.docx');
 const PAGEMAP = process.argv[3] && fs.existsSync(process.argv[3])
   ? JSON.parse(fs.readFileSync(process.argv[3], 'utf8')) : {};
 
@@ -166,7 +166,7 @@ const footer = new d.Footer({
     // page number jammed against the strap. A real tab stop lands the same every time.
     tabStops: [{ type: d.TabStopType.RIGHT, position: W }],
     children: [
-      new d.TextRun({ text: 'TXTAIRE OPC  |  Kodigo ng Disiplina  |  Series 2, 2026', font: 'Arial', size: 14, color: '7A7A7A' }),
+      new d.TextRun({ text: 'TXTAIRE OPC  |  Kodigo ng Disiplina  |  Series 2, 2026  |  Kopya ng Empleyado', font: 'Arial', size: 14, color: '7A7A7A' }),
       new d.TextRun({ children: [new d.Tab()] }),
       new d.TextRun({ children: [d.PageNumber.CURRENT], font: 'Arial', size: 17, bold: true, color: C.navy }),
       new d.TextRun({ text: ' | Pahina', font: 'Arial', size: 15, color: '7A7A7A' }),
@@ -233,7 +233,6 @@ const doc = new d.Document({
     section([
       ...front.controlSheet(),
       ...toc(PAGEMAP),
-      ...chg.summaryOfChanges(),
       ...p12.part1(),
       ...p12.part2(),
       ...p3.part3(),
