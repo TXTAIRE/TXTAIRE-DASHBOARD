@@ -35,6 +35,7 @@ var TITLES = {
   safety_incident_resolved: 'Safety Incident Resolved',
   relations_case_updated: 'Employee Relations Case Update',
   announcement: '📢 New Announcement',
+  new_device_login: '🔔 New Device Sign-In',
 };
 
 Deno.serve(async (req) => {

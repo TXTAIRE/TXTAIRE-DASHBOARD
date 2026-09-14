@@ -1009,6 +1009,7 @@ const Store = (function () {
     adminCodiMembers: 'adminCodiMembers',
     announcements: 'announcements',
     disciplineOffenses: 'disciplineOffenses',
+    employeeDevices: 'employeeDevices',
   };
 
   const state = {
@@ -1025,6 +1026,7 @@ const Store = (function () {
     sssContributionBrackets: [], contributionRates: [], regionalMinimumWage: [],
     safetyIncidents: [], employeeRelationsCases: [], adminCodiMembers: [],
     announcements: [], disciplineOffenses: [],
+    employeeDevices: [],
   };
 
   let remoteChangeCallback = null;
@@ -2104,6 +2106,34 @@ const Store = (function () {
     await deleteRow('notifications', id);
   }
 
+  // ---- Known devices for My Portal (js/ess-app.js checkDeviceAndAlert, "My Devices" in
+  // js/ess-views/profile.js) ----
+  function listEmployeeDevices(employeeId) {
+    return state.employeeDevices.filter(d => d.employeeId === employeeId).sort((a, b) => String(b.lastSeenAt || '').localeCompare(String(a.lastSeenAt || '')));
+  }
+  // Upserts this (employeeId, deviceId) pair and reports whether it was new -- an insert
+  // conflict on the ("employeeId","deviceId") unique constraint means this exact device is
+  // already known, so that path just bumps lastSeenAt instead. Also reports whether this
+  // employee had ANY device registered before this call, so the caller can skip alerting
+  // on someone's very first-ever login (nothing suspicious about setting up your first
+  // device) and only flag genuinely additional ones.
+  async function registerOrTouchDevice(employeeId, deviceId, deviceLabel) {
+    const existing = state.employeeDevices.find(d => d.employeeId === employeeId && d.deviceId === deviceId);
+    const hadAnyDeviceBefore = state.employeeDevices.some(d => d.employeeId === employeeId);
+    if (existing) {
+      await updateRow('employeeDevices', existing.id, { lastSeenAt: new Date().toISOString() });
+      return { isNew: false, hadAnyDeviceBefore: true };
+    }
+    await insertRow('employeeDevices', {
+      id: genId('dev'), employeeId, deviceId, deviceLabel: deviceLabel || 'Unknown device',
+      firstSeenAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(),
+    });
+    return { isNew: true, hadAnyDeviceBefore };
+  }
+  async function deleteEmployeeDevice(id) {
+    await deleteRow('employeeDevices', id);
+  }
+
   // ---- Payroll Releases (marks a pay-group cutoff as actually paid) ----
   function getPayrollRelease(payCycle, cutoffFrom) {
     return state.payrollReleases.find(r => r.payCycle === payCycle && r.cutoffFrom === cutoffFrom);
@@ -2697,6 +2727,7 @@ const Store = (function () {
     listScheduleChangeRequests, getScheduleChangeRequest, scheduleChangeRequestsForEmployee, addScheduleChangeRequest, reviewScheduleChangeRequest, updateScheduleChangeRequestNotes, deleteScheduleChangeRequest,
     listAuditLog, purgeOldAuditLog,
     createNotification, listNotificationsForEmployee, unreadNotificationCount, markNotificationRead, markAllNotificationsRead, deleteNotification,
+    listEmployeeDevices, registerOrTouchDevice, deleteEmployeeDevice,
     getPayrollRelease, releasePayroll, unreleasePayroll, updatePayrollRelease,
     getAppSetting, setAppSetting,
     listExpenses, getExpense, expensesInRange, addExpense, updateExpense, deleteExpense, refetchExpenses,

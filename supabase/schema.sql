@@ -3199,3 +3199,53 @@ alter publication supabase_realtime add table "billingInvoices";
 -- own contact and bank info" policy already covers any column not explicitly locked by
 -- enforce_employee_profile_update(), and this was never added to that lock list.
 alter table employees add column if not exists "qrLoginToken" text unique;
+
+-- Known-device tracking for My Portal (js/ess-app.js checkDeviceAndAlert, "My Devices" in
+-- js/ess-views/profile.js) -- a random id an employee's browser/phone generates for itself
+-- on first login and keeps in localStorage from then on. A login carrying a deviceId this
+-- table has never seen for that employee (and this isn't their very first device ever) is
+-- an "unfamiliar device" -- registered automatically either way, but flagged with a
+-- 'new_device_login' notification the first time, which reaches their OTHER already-
+-- registered devices too via the same push pipeline every other notification type here
+-- already uses. Deliberately alert-and-register, not block-and-confirm: this app has no
+-- out-of-band channel (real email, SMS) to confirm an unrecognized device through.
+create table if not exists "employeeDevices" (
+  id text primary key,
+  "employeeId" text not null references employees(id) on delete cascade,
+  "deviceId" text not null,
+  "deviceLabel" text not null default '',
+  "firstSeenAt" timestamptz not null default now(),
+  "lastSeenAt" timestamptz not null default now(),
+  unique ("employeeId", "deviceId")
+);
+
+alter table "employeeDevices" enable row level security;
+
+drop policy if exists "admin full access" on "employeeDevices";
+create policy "admin full access" on "employeeDevices"
+  for all to authenticated using (is_admin()) with check (is_admin());
+drop policy if exists "employee manages own devices" on "employeeDevices";
+create policy "employee manages own devices" on "employeeDevices"
+  for all to authenticated using ("employeeId" = my_employee_id()) with check ("employeeId" = my_employee_id());
+
+alter publication supabase_realtime add table "employeeDevices";
+
+-- Adds 'new_device_login' to the allowed push types -- see "employeeDevices" above.
+create or replace function notify_employee_push() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if NEW.type not in (
+    'leave_approved', 'correction_approved', 'nsd_approved', 'ot_approved', 'holiday_approved', 'payroll_released', 'nte_issued',
+    'thirteenth_month_released', 'final_pay_released', 'coe_issued', 'safety_incident_resolved', 'relations_case_updated',
+    'announcement', 'new_device_login'
+  ) then
+    return NEW;
+  end if;
+  perform net.http_post(
+    url := 'https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/employee-notification-push',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', '5f24f19fdf651e99db5d397158bda6a8a4c48f59c06df3cc'),
+    body := jsonb_build_object('employeeId', NEW."employeeId", 'type', NEW.type, 'message', NEW.message)
+  );
+  return NEW;
+end;
+$$;

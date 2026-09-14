@@ -63,6 +63,68 @@ function essEmailFor(employeeCode) {
   return employeeCode.trim().toLowerCase() + '@employees.txtaire.local';
 }
 
+// ---- Unfamiliar-device detection for My Portal (employeeDevices, js/store.js
+// registerOrTouchDevice) ----
+// A persistent random id this specific browser/device generates for itself once and keeps
+// in localStorage from then on -- not tied to any account, so switching which employee
+// signs in on a shared device still recognizes it as the same device for whichever
+// employee used it before, while a genuinely different device always gets a new id.
+const ESS_DEVICE_ID_KEY = 'essDeviceId';
+function essDeviceId() {
+  try {
+    let id = localStorage.getItem(ESS_DEVICE_ID_KEY);
+    if (!id) {
+      id = generateQrLoginToken();
+      localStorage.setItem(ESS_DEVICE_ID_KEY, id);
+    }
+    return id;
+  } catch (err) {
+    // localStorage unavailable (private browsing, disabled storage) -- fall back to a
+    // one-off id that won't persist, so this device just looks "new" every single visit
+    // rather than the device check failing outright.
+    return generateQrLoginToken();
+  }
+}
+
+// Best-effort, readable label only -- never used for anything security-sensitive, purely
+// so "My Devices" and the new-device alert read as "Chrome on Windows" instead of a raw
+// user-agent string. Deliberately simple pattern matching, not a full UA parser.
+function essDeviceLabel() {
+  const ua = navigator.userAgent || '';
+  let os = 'Unknown device';
+  if (/iPhone|iPad|iPod/.test(ua)) os = 'iPhone/iPad';
+  else if (/Android/.test(ua)) os = 'Android';
+  else if (/Mac OS X/.test(ua)) os = 'Mac';
+  else if (/Windows/.test(ua)) os = 'Windows';
+  else if (/Linux/.test(ua)) os = 'Linux';
+  let browser = 'a browser';
+  if (/Edg\//.test(ua)) browser = 'Edge';
+  else if (/OPR\//.test(ua)) browser = 'Opera';
+  else if (/Chrome\//.test(ua)) browser = 'Chrome';
+  else if (/CriOS\//.test(ua)) browser = 'Chrome';
+  else if (/Firefox\//.test(ua)) browser = 'Firefox';
+  else if (/Safari\//.test(ua)) browser = 'Safari';
+  return browser + ' on ' + os;
+}
+
+// Registers this device against the employee's account, and -- only past their very
+// first-ever device (nothing suspicious about setting up device #1) -- flags a genuinely
+// new one with a toast here plus a 'new_device_login' notification, which reaches their
+// OTHER already-registered devices through the exact same push pipeline every other
+// notification type in this app already uses.
+async function checkDeviceAndAlert(emp) {
+  const result = await Store.registerOrTouchDevice(emp.id, essDeviceId(), essDeviceLabel());
+  if (!result.isNew || !result.hadAnyDeviceBefore) return;
+  toast('🔔 New device detected — first time signing in from this device.');
+  try {
+    await Store.createNotification({
+      employeeId: emp.id,
+      type: 'new_device_login',
+      message: 'Your account was just signed in from a new device (' + essDeviceLabel() + '). If this wasn\'t you, change your password and contact HR right away.',
+    });
+  } catch (err) { /* best-effort -- the toast above already told this device */ }
+}
+
 // ---- Push notifications outside the portal (approvals, payroll released, NTE issued) ----
 // Mirrors js/app.js's admin-side equivalents exactly -- duplicated rather than shared
 // since ess.html and index.html are deliberately separate script bundles that don't load
@@ -1069,6 +1131,13 @@ async function startEss(session) {
   essStarted = true;
   essOffline = initResult.offline;
   essOfflineCachedAt = initResult.cachedAt || null;
+
+  // Best-effort, online only -- can't register a device against a table it can't reach,
+  // and a device already flagged unfamiliar once this session doesn't need re-flagging on
+  // every re-render, just once per login.
+  if (!essOffline) {
+    checkDeviceAndAlert(myEmployee).catch(() => { /* best-effort -- never blocks login */ });
+  }
 
   // Auto-resyncs the moment connectivity returns -- matches the same "queue now, sync
   // automatically once you're back online" promise the attendance photo capture flow

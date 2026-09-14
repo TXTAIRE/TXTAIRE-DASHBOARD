@@ -180,6 +180,7 @@ window.EssViews.profile = (function () {
     const history = Store.employmentHistoryForEmployee(emp.id);
     const docs = Store.employeeDocumentsForEmployee(emp.id);
     const scheduleRequests = Store.scheduleChangeRequestsForEmployee(emp.id).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    const devices = Store.listEmployeeDevices(emp.id);
 
     main.innerHTML = `
       <div class="ess-section-title" style="margin-top:0;">${t('title_profile')}</div>
@@ -228,6 +229,16 @@ window.EssViews.profile = (function () {
         <div class="ess-card-label">🔐 QR Login</div>
         <div class="ess-sub" style="margin-bottom:8px;">Scan this with your phone's camera to sign in instantly next time — no typing your Employee ID or password.</div>
         <button type="button" class="btn btn-ghost btn-sm" id="btn-qr-login" style="width:100%; justify-content:center;">${emp.qrLoginToken ? '📱 Show My QR Code' : '📱 Set Up QR Login'}</button>
+      </div>
+      <div class="ess-card">
+        <div class="ess-card-label">📱 My Devices</div>
+        <div class="ess-sub" style="margin-bottom:8px;">Devices that have signed into My Portal. Signing in from a device not on this list sends you a new-device alert.</div>
+        ${devices.length ? devices.map(d => `
+          <div class="ess-row">
+            <span class="label">${escapeHtml(d.deviceLabel)}<br/><span style="font-size:11px;">Last used ${fmtDate((d.lastSeenAt || '').slice(0, 10))}</span></span>
+            <button type="button" class="link-btn" data-remove-device="${d.id}" style="color:var(--red, #dc2626);">Remove</button>
+          </div>
+        `).join('') : '<div class="ess-sub">No devices recorded yet.</div>'}
       </div>
       <button type="button" class="btn btn-ghost btn-sm" id="btn-edit-profile" style="width:100%; justify-content:center; margin-bottom:6px;">✏️ Edit Profile</button>
       <div class="ess-sub" style="text-align:center; margin-bottom:14px;">Employee ID, category, status, and pay details can only be changed by HR.</div>
@@ -316,6 +327,12 @@ window.EssViews.profile = (function () {
 
     qs('#btn-edit-profile', main).addEventListener('click', () => openEditProfile(main, emp));
     qs('#btn-qr-login', main).addEventListener('click', () => openQrLoginModal(main, emp));
+    qsa('[data-remove-device]', main).forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('Remove this device? Signing in from it again will be treated as a new device.')) return;
+      await Store.deleteEmployeeDevice(b.dataset.removeDevice);
+      toast('✔ Device removed.');
+      render(main, emp);
+    }));
     qs('#btn-request-schedule', main).addEventListener('click', () => openRequestScheduleModal(main, emp));
     qs('#btn-add-history', main).addEventListener('click', () => openEmploymentHistoryForm(main, emp));
     qsa('[data-edit-history]', main).forEach(b => b.addEventListener('click', () => {
