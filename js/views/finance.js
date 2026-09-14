@@ -1074,6 +1074,24 @@ window.Views.finance = (function () {
       payInOrderOf: letterheadFor('TXTAIRE OPC').payInOrderOf,
       preparedBy: '', preparedByTitle: '', approvedBy: '', approvedByTitle: '',
     };
+    // A client billed before shouldn't have to be re-typed -- keep the most recent
+    // TIN/address/contact on file per client name, keyed case-insensitively so
+    // "Sample Client Corp." and "sample client corp." are treated as the same client.
+    const knownClients = {};
+    Store.listBillingInvoices()
+      .slice()
+      .sort((a, b) => (a.date < b.date ? -1 : 1))
+      .forEach((inv) => {
+        const name = (inv.clientName || '').trim();
+        if (!name) return;
+        knownClients[name.toLowerCase()] = {
+          clientName: name,
+          clientTin: inv.clientTin || '',
+          clientAddress: inv.clientAddress || '',
+          contactPerson: inv.contactPerson || '',
+          contactNumber: inv.contactNumber || '',
+        };
+      });
     // Working copy of the itemized line items -- always at least one row so the editor
     // never renders empty, same convention as the voucher's particulars editor. Amount is
     // derived (qty * unitPrice), not directly typed, matching the real form's math.
@@ -1090,7 +1108,11 @@ window.Views.finance = (function () {
             <select name="entity" id="billing-invoice-entity">${ENTITY_OPTIONS.map(e => `<option ${e === v.entity ? 'selected' : ''}>${e}</option>`).join('')}</select>
           </div>
           <div class="field"><label>Date</label><input type="date" name="date" value="${v.date}" required /></div>
-          <div class="field full"><label>Client Name</label><input name="clientName" value="${escapeHtml(v.clientName)}" required /></div>
+          <div class="field full"><label>Client Name</label>
+            <input name="clientName" id="billing-invoice-client-name" list="billing-known-clients" value="${escapeHtml(v.clientName)}" autocomplete="off" required />
+            <datalist id="billing-known-clients">${Object.values(knownClients).map(c => `<option value="${escapeHtml(c.clientName)}">`).join('')}</datalist>
+            <div class="dim" style="margin-top:4px;">Pick a name already on file to fill in their TIN, address, and contact details.</div>
+          </div>
           <div class="field"><label>Client TIN</label><input name="clientTin" value="${escapeHtml(v.clientTin || '')}" placeholder="e.g. 000-000-000-000" /></div>
           <div class="field"><label>Client Address</label><input name="clientAddress" value="${escapeHtml(v.clientAddress || '')}" /></div>
           <div class="field"><label>Purchase Order No.</label><input name="purchaseOrderNo" value="${escapeHtml(v.purchaseOrderNo || '')}" /></div>
@@ -1170,6 +1192,21 @@ window.Views.finance = (function () {
         items.push({ qty: 1, unit: 'lot', description: '', unitPrice: '' });
         renderItemRows();
         renderTotals();
+      });
+      // Typing/picking a client name already on file fills in their TIN, address, and
+      // contact details -- only into fields still blank, so it never overwrites something
+      // the user is deliberately correcting for this particular invoice.
+      qs('#billing-invoice-client-name', bd).addEventListener('input', (ev) => {
+        const known = knownClients[ev.target.value.trim().toLowerCase()];
+        if (!known) return;
+        const setIfBlank = (fieldName, value) => {
+          const el = qs(`[name="${fieldName}"]`, bd);
+          if (el && !el.value.trim() && value) el.value = value;
+        };
+        setIfBlank('clientTin', known.clientTin);
+        setIfBlank('clientAddress', known.clientAddress);
+        setIfBlank('contactPerson', known.contactPerson);
+        setIfBlank('contactNumber', known.contactNumber);
       });
       // Switching the issuing entity mid-form re-defaults Pay In Order Of to that
       // entity's own name, unless the user already typed something else in for this field.
