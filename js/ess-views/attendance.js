@@ -67,7 +67,9 @@ window.EssViews.attendance = (function () {
         </div>
         ${rec ? `
         <div class="ess-row"><span class="label">Time In</span><span class="value">${to12Hour(rec.timeIn)} ✅</span></div>
+        ${rec.timeInLocation ? `<div class="ess-row" style="align-items:flex-start;"><span class="label">Time In Location</span><span class="value" style="text-align:right; max-width:65%; font-size:12px; font-weight:400;">${escapeHtml(rec.timeInLocation)}</span></div>` : ''}
         <div class="ess-row"><span class="label">Time Out</span><span class="value">${rec.timeOut ? to12Hour(rec.timeOut) : '—'}</span></div>
+        ${rec.timeOutLocation ? `<div class="ess-row" style="align-items:flex-start;"><span class="label">Time Out Location</span><span class="value" style="text-align:right; max-width:65%; font-size:12px; font-weight:400;">${escapeHtml(rec.timeOutLocation)}</span></div>` : ''}
         ${photosRowHtml(rec, editable)}
         <div class="ess-row"><span class="label">Hours</span><span class="value">${rec.hours}</span></div>
         <div class="ess-row"><span class="label">Status</span><span class="value">${escapeHtml(rec.status)}</span></div>
