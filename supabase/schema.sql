@@ -3189,3 +3189,13 @@ create policy "admin full access" on "billingInvoices"
   for all to authenticated using (is_admin()) with check (is_admin());
 
 alter publication supabase_realtime add table "billingInvoices";
+
+-- QR login for My Portal (js/ess-views/profile.js "My QR Login Code", ess-app.js's
+-- ?qrlogin= handling, supabase/functions/qr-login) -- a long random secret, generated
+-- client-side, that a QR code encodes as "<ess.html url>?qrlogin=<token>" so scanning it
+-- with a phone's own camera app opens straight into a signed-in session, no typing
+-- required. Unique so the qr-login function's lookup always resolves to at most one
+-- employee. No RLS change needed for reading/writing it -- the existing "employee updates
+-- own contact and bank info" policy already covers any column not explicitly locked by
+-- enforce_employee_profile_update(), and this was never added to that lock list.
+alter table employees add column if not exists "qrLoginToken" text unique;

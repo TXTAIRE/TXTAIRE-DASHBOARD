@@ -257,6 +257,18 @@ function generateStrongPassword() {
   return pw;
 }
 
+// The QR login token itself (employees."qrLoginToken") -- meant to be embedded in a QR
+// code and scanned, never typed, so entropy/length matter far more than readability here.
+// 32 random bytes, base64url-encoded (URL-safe, no padding) so it drops cleanly into
+// "...ess.html?qrlogin=<token>" with no escaping needed.
+function generateQrLoginToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let bin = '';
+  bytes.forEach(b => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 function pad2(n) { return String(n).padStart(2, '0'); }
 
 function daysInMonth(year, month) { return new Date(year, month, 0).getDate(); }

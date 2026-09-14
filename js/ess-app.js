@@ -1168,21 +1168,55 @@ function readStoredEssAuthUserId() {
   return null;
 }
 
+// Exchanges a scanned QR login token (js/ess-views/profile.js "My QR Login Code",
+// employees."qrLoginToken") for a real signed-in session via the qr-login Edge Function --
+// the token is the credential here, same trust model as a password, so it's stripped from
+// the URL immediately (before even making the network call) rather than sitting visible in
+// the address bar/history a moment longer than necessary. Returns the resulting session, or
+// null on any failure (invalid/reused token, network error, revoked account, etc.).
+async function tryQrLogin() {
+  const params = new URLSearchParams(location.search);
+  const token = params.get('qrlogin');
+  if (!token) return null;
+  params.delete('qrlogin');
+  const cleanUrl = location.pathname + (params.toString() ? '?' + params.toString() : '') + location.hash;
+  history.replaceState(null, '', cleanUrl);
+
+  try {
+    const res = await fetch('https://fmgqqrmsxleyeiadnhyd.supabase.co/functions/v1/qr-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) return null;
+    const verifyResult = await sb.auth.verifyOtp({ email: json.email, token: json.hashedToken, type: 'magiclink' });
+    if (verifyResult.error || !verifyResult.data || !verifyResult.data.session) return null;
+    return verifyResult.data.session;
+  } catch (err) {
+    return null;
+  }
+}
+
 async function bootEss() {
+  let session = await tryQrLogin();
+  let timedOut = false;
+
   // Race sb.auth.getSession() against a hard timeout -- see readStoredEssAuthUserId above
   // for why this can't be trusted to always resolve on its own when offline. Deliberately
   // NOT gated on navigator.onLine anywhere below: Safari (especially iOS) is well known to
   // report that flag inaccurately -- it can read `true` with zero actual connectivity --
   // so whether the real network call actually completed in time is the only signal this
-  // trusts, on either Safari or Chrome.
-  let session = null;
-  let timedOut = false;
-  try {
-    const timeoutMarker = new Promise((resolve) => setTimeout(() => resolve('__timeout__'), 5000));
-    const result = await Promise.race([sb.auth.getSession(), timeoutMarker]);
-    if (result === '__timeout__') timedOut = true;
-    else session = result.data.session;
-  } catch (err) { timedOut = true; }
+  // trusts, on either Safari or Chrome. Skipped entirely when the QR login above already
+  // produced a session -- no need to ask again.
+  if (!session) {
+    try {
+      const timeoutMarker = new Promise((resolve) => setTimeout(() => resolve('__timeout__'), 5000));
+      const result = await Promise.race([sb.auth.getSession(), timeoutMarker]);
+      if (result === '__timeout__') timedOut = true;
+      else session = result.data.session;
+    } catch (err) { timedOut = true; }
+  }
 
   if (session) {
     await startEss(session);
