@@ -111,8 +111,11 @@ window.Views.disciplinary = (function () {
       <div class="page-sub" style="margin-bottom:10px;">${escapeHtml(c.violation)}</div>
       <div style="margin-bottom:14px;">${caseStatusBadge(c.status)}</div>
       <div class="page-sub">Issued: ${fmtDate(c.dateIssued)} by ${escapeHtml(c.issuedBy)}<br/>Response due: ${fmtDate(c.responseDueDate)}${c.dateDiscovered ? `<br/>Offense became known: ${fmtDate(c.dateDiscovered)} (prescriptive period ${c.longPrescription ? '1 year' : Store.PRESCRIPTION_DAYS + ' calendar days'})` : ''}</div>
-      <div class="section-title">Notice</div>
-      <div class="page-sub">${escapeHtml(c.noticeText)}</div>
+      <div class="section-title" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <span>Notice</span>
+        ${c.noticeText ? '<button type="button" class="btn btn-ghost btn-sm" id="btn-print-nte">Print NTE</button>' : ''}
+      </div>
+      <div class="page-sub" style="white-space:pre-wrap; max-height:320px; overflow:auto; background:var(--bg-soft,#f6f7f9); border:1px solid var(--border-soft); border-radius:8px; padding:10px 12px;">${escapeHtml(c.noticeText)}</div>
       ${c.employeeResponse ? `<div class="section-title">Employee Response</div><div class="page-sub">${escapeHtml(c.employeeResponse)} <span style="color:var(--text-faint);">(${fmtDate(c.employeeResponseDate)})</span></div>` : ''}
       ${c.investigationNotes ? `<div class="section-title">Investigation Notes</div><div class="page-sub">${escapeHtml(c.investigationNotes)}</div>` : ''}
       ${c.terminationTrack && c.hearingDate ? `<div class="section-title">Hearing</div><div class="page-sub">${fmtDate(c.hearingDate)}${c.hearingNotes ? ' — ' + escapeHtml(c.hearingNotes) : ''}</div>` : ''}
@@ -135,6 +138,8 @@ window.Views.disciplinary = (function () {
         <button class="btn btn-ghost btn-sm" id="btn-del-case">Delete case</button>
       </div>
     `, (dr) => {
+      const printBtn = qs('#btn-print-nte', dr);
+      if (printBtn) printBtn.addEventListener('click', () => printStoredNotice(c));
       const respBtn = qs('#btn-log-response', dr);
       if (respBtn) respBtn.addEventListener('click', async () => {
         const text = qs('#resp-text', dr).value.trim();
@@ -207,7 +212,64 @@ window.Views.disciplinary = (function () {
     });
   }
 
-  // Ordinal suffix for a suggested-penalty occurrence count (1st, 2nd, 3rd, 4th...).
+  // ---------------------------------------------------------------- printing
+  // Opens the notice in its own window and prints it, so it comes out alone on A4 with its
+  // own letterhead rather than as a screenshot of the dashboard.
+  function printHtml(html) {
+    const w = window.open('', '_blank');
+    if (!w) { toast('Allow pop-ups for this site to print the notice.'); return; }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => { try { w.print(); } catch (e) { /* the page is open; the user can print it */ } }, 350);
+  }
+
+  // Reprints a notice from the text stored on the case -- exactly what was filed and served,
+  // not a letter rebuilt from today's catalog or today's record, either of which may have
+  // changed since. Headings and the dismissal warning are picked out for readability; the
+  // words are left exactly as recorded. Older notices, written before the letter was
+  // generated, print the same way.
+  function printStoredNotice(c) {
+    const lines = String(c.noticeText || '').split('\n');
+    const bodyHtml = lines.map((ln) => {
+      if (!ln.trim()) return '<div class="gap"></div>';
+      const e = escapeHtml(ln);
+      if (/^\d\.\s{2}[A-Z][A-Z ,/()-]+$/.test(ln)) return '<h3>' + e + '</h3>';
+      if (/^DISMISSAL IS BEING CONSIDERED/.test(ln)) return '<p class="strong">' + e + '</p>';
+      if (/^NOTICE TO EXPLAIN/.test(ln)) return '<h1>' + e.replace(/\s{2,}Form CD-01/, '') + '</h1>';
+      if (/_{6,}/.test(ln)) return '<p class="sig">' + e + '</p>';
+      return '<p>' + e + '</p>';
+    }).join('');
+    printHtml('<!doctype html><html><head><meta charset="utf-8"><title>Notice to Explain</title><style>' +
+      '@page{size:A4;margin:18mm}' +
+      'body{font:10.5pt/1.5 Arial,Helvetica,sans-serif;color:#1a1a1a;margin:0}' +
+      'h1{font-size:15pt;letter-spacing:.06em;color:#fff;background:#1f4e9c;padding:7px 12px;margin:6px 0 10px;border-bottom:3px solid #e8a317}' +
+      'h3{font-size:10.5pt;color:#16386e;margin:10px 0 3px;border-bottom:1px solid #bfcfe8}' +
+      'p{margin:0 0 4px;text-align:justify}p.sig{margin-top:18px}' +
+      'p.strong{font-weight:700;background:#fdf0f0;border-left:3px solid #9c1c1c;padding:5px 8px}' +
+      '.gap{height:4px}' +
+      '.foot{margin-top:14px;font-size:8pt;color:#777;border-top:1px solid #ddd;padding-top:4px}' +
+      '@media screen{body{max-width:190mm;margin:14px auto;padding:0 12px}}' +
+      '</style></head><body>' + bodyHtml +
+      '<div class="foot">Printed from the case record. Notice issued ' + escapeHtml(fmtDate(c.dateIssued)) + '.</div>' +
+      '</body></html>');
+  }
+
+  // ---------------------------------------------------------------- issue NTE
+  // Class colours, identical to the printed Code, My Portal and the Code editor, so an
+  // offense looks the same everywhere HR or an employee meets it.
+  const CLASS_TINT = {
+    A: { bg: '#e2f0d9', fg: '#375623', bar: '#7aa661', name: 'Light' },
+    B: { bg: '#fff2cc', fg: '#7f6000', bar: '#d4b02a', name: 'Less Grave' },
+    C: { bg: '#fbe5d6', fg: '#974706', bar: '#d98b4a', name: 'Grave' },
+    D: { bg: '#f8cbcb', fg: '#9c1c1c', bar: '#d05a5a', name: 'Serious' },
+  };
+  function classChip(k) {
+    const t = CLASS_TINT[k];
+    return t ? `<span class="badge" style="background:${t.bg}; color:${t.fg}; font-weight:700; white-space:nowrap;">${k} · ${t.name}</span>` : '';
+  }
+
   function ordinal(n) {
     if (n % 10 === 1 && n % 100 !== 11) return n + 'st';
     if (n % 10 === 2 && n % 100 !== 12) return n + 'nd';
@@ -215,192 +277,461 @@ window.Views.disciplinary = (function () {
     return n + 'th';
   }
 
+  function findOffense(code) {
+    for (const cat of Store.disciplineCatalog()) {
+      const o = cat.offenses.find(x => x.code === code);
+      if (o) return Object.assign({ category: cat.category }, o);
+    }
+    return null;
+  }
+
+  function sectionOf(category) {
+    const s = window.NteLetter && NteLetter.SECTIONS[category];
+    return s ? 'Section ' + s[0] : 'Part IV';
+  }
+
+  function superiorNameFor(emp) {
+    if (!emp || !emp.reportsTo) return '';
+    const sup = Store.getEmployee(emp.reportsTo);
+    return sup ? sup.name : '';
+  }
+
+  // A reference that is unique enough to find the paper copy by, and readable aloud.
+  function newRefNo(dateIso) {
+    return 'NTE-' + String(dateIso || todayISO()).replace(/-/g, '') + '-' +
+      Math.random().toString(36).slice(2, 6).toUpperCase();
+  }
+
   function openNteForm(main) {
+    const today = todayISO();
+    const minDue = (issued) => addDays(issued || today, Store.NTE_MIN_ANSWER_DAYS);
+    const s = {
+      offenseCode: '',
+      manual: false,
+      analogous: false,
+      unlistedReason: '',
+      dismissal: false,
+      dismissalTouched: false,
+      longPrescription: false,
+      longTouched: false,
+      refNo: '',
+    };
+
     openModal(`
       <h2>Issue Notice to Explain</h2>
-      <div class="modal-sub">Creates a new disciplinary case with status "Notice Issued".</div>
-      <form id="nte-form">
+      <div class="modal-sub">Describe what happened in your own words. The system suggests the matching offense from the Code of Discipline and drafts the notice in the Annex A format. You confirm the offense, and read the letter, before anything is issued.</div>
+      <form id="nte-form" novalidate>
+        <div class="section-title" style="margin-top:0;">1 · Employee</div>
         <div class="modal-grid">
-          <div class="field full"><label>Employee</label><select name="employeeId" id="nte-employee">${employeeOptions()}</select></div>
-          <div class="field"><label>Date issued</label><input type="date" name="dateIssued" id="nte-date-issued" value="${todayISO()}" /></div>
-          <div class="field"><label>Response due date</label><input type="date" name="responseDueDate" id="nte-response-due" value="${addDays(todayISO(), Store.NTE_MIN_ANSWER_DAYS)}" min="${addDays(todayISO(), Store.NTE_MIN_ANSWER_DAYS)}" /></div>
-          <div class="field full"><div class="page-sub" style="margin:0;">The employee gets at least ${Store.NTE_MIN_ANSWER_DAYS} calendar days to answer (Code of Discipline Sec. 3.6).</div></div>
+          <div class="field full"><label>Employee</label><select id="nte-employee">${employeeOptions()}</select></div>
+          <div class="field"><label>Date issued</label><input type="date" id="nte-date-issued" value="${today}" /></div>
+          <div class="field"><label>Issued by (HRD)</label><input id="nte-issued-by" placeholder="HR officer who signs the notice" /></div>
+        </div>
+
+        <div class="section-title">2 · What happened</div>
+        <div class="page-sub" style="margin:-4px 0 10px;">Section 3.6 requires the specific act, with its date, time and place. Say what was done — not which rule it breaks. Where it matters, give the number: days absent, times late, the peso amount of a loss, whether notice was given.</div>
+        <div class="modal-grid">
+          <div class="field"><label>Date of incident</label><input type="date" id="nte-inc-date" value="${today}" max="${today}" /></div>
+          <div class="field"><label>Time</label><input id="nte-inc-time" placeholder="e.g. around 2:00 PM" /></div>
+          <div class="field full"><label>Place</label><input id="nte-inc-place" placeholder="e.g. Client jobsite, Ayala Avenue, Makati City" /></div>
           <div class="field full"><label>Date the offense became known to the supervisor or HR</label>
-            <input type="date" name="dateDiscovered" id="nte-date-discovered" max="${todayISO()}" required />
-            <div class="page-sub" style="margin:4px 0 0;">Whichever learned of it first. Starts the prescriptive period in Sec. 3.11.</div>
+            <input type="date" id="nte-date-discovered" max="${today}" />
+            <div class="page-sub" style="margin:4px 0 0;">Whichever of them learned of it first. Section 3.11 runs the prescriptive period from this date.</div>
           </div>
-          <div class="field full"><label>Issued by</label><input name="issuedBy" placeholder="e.g. HR Officer name" /></div>
-          <div class="field full"><label>Category</label>
-            <select id="nte-category">
-              <option value="">Select a category…</option>
-              ${Store.disciplineCatalog().map(cat => `<option value="${escapeHtml(cat.category)}">${escapeHtml(cat.category)}</option>`).join('')}
-              <option value="__other">Other / not listed in the Code of Discipline</option>
-            </select>
-          </div>
-          <div class="field full" id="nte-offense-wrap">
-            <label>Offense (Code of Discipline)</label>
-            <select name="offenseCode" id="nte-offense"><option value="">Select a category first…</option></select>
-          </div>
-          <div class="field full" id="nte-custom-wrap" style="display:none;">
-            <label>Describe the violation</label>
-            <input name="violationCustom" id="nte-violation-custom" placeholder="e.g. Habitual Tardiness" />
-          </div>
-          <div class="field full" style="padding-top:4px;">
-            <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer;">
-              <input type="checkbox" name="longPrescription" id="nte-long-prescription" style="width:auto;" />
-              Involves fraud, dishonesty, theft, falsification, sexual harassment or violence (1-year prescriptive period)
-            </label>
-          </div>
-          <div class="field full" id="nte-prescription" style="display:none;"></div>
-          <div class="field full" id="nte-suggestion" style="display:none;"></div>
-          <div class="field full"><label>Notice details</label><textarea name="noticeText" rows="3" required placeholder="Describe the incident/violation..."></textarea></div>
-          <div class="field full" style="padding-top:4px;">
-            <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer;">
-              <input type="checkbox" name="terminationTrack" style="width:auto;" />
-              May result in termination (enables the Art. 297 twin-notice hearing/second-notice steps)
-            </label>
+          <div class="field full"><label>Incident details</label>
+            <textarea id="nte-narrative" rows="4" placeholder="e.g. Did not report for work on 3 September and did not call or message his supervisor. No leave was filed."></textarea>
           </div>
         </div>
-        <div class="modal-actions">
+
+        <div class="section-title">3 · Offense under the Code of Discipline</div>
+        <div id="nte-suggestions"></div>
+        <div id="nte-manual" style="display:none; margin-top:8px;">
+          <div class="modal-grid" style="margin-bottom:6px;">
+            <div class="field full"><label>Category</label>
+              <select id="nte-category">
+                <option value="">Select a category…</option>
+                ${Store.disciplineCatalog().map(cat => `<option value="${escapeHtml(cat.category)}">${escapeHtml(cat.category)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field full"><label>Offense</label><select id="nte-offense"><option value="">Select a category first…</option></select></div>
+          </div>
+        </div>
+        <div id="nte-charge"></div>
+
+        <div class="section-title">4 · Deadline for the written explanation</div>
+        <div class="modal-grid">
+          <div class="field"><label>Explanation due</label><input type="date" id="nte-due" value="${minDue(today)}" min="${minDue(today)}" /></div>
+          <div class="field" style="align-self:end;"><div class="page-sub" style="margin:0;">At least ${Store.NTE_MIN_ANSWER_DAYS} calendar days from receipt — Section 3.6 and DOLE D.O. 147-15. A shorter period invalidates the notice.</div></div>
+        </div>
+
+        <div id="nte-problems"></div>
+        <div id="nte-review" style="display:none;"></div>
+
+        <div class="modal-actions" id="nte-actions">
           <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
-          <button type="submit" class="btn btn-primary">Issue NTE</button>
+          <button type="button" class="btn btn-primary" id="nte-review-btn">Review notice</button>
         </div>
       </form>
     `, (bd) => {
-      const categorySelect = qs('#nte-category', bd);
-      const offenseSelect = qs('#nte-offense', bd);
-      const offenseWrap = qs('#nte-offense-wrap', bd);
-      const customWrap = qs('#nte-custom-wrap', bd);
-      const suggestionEl = qs('#nte-suggestion', bd);
+      const modal = qs('.modal', bd);
+      if (modal) modal.classList.add('modal-wide');
+      const $ = (sel) => qs(sel, bd);
 
-      // Suggested penalty is purely informational (Store.suggestedPenaltyFor never writes
-      // anything) -- HR still fills in the actual resolution/second-notice decision by hand
-      // once the case reaches that stage, exactly as before.
-      function updateSuggestion() {
-        const offenseCode = offenseSelect.value;
-        const employeeId = qs('#nte-employee', bd).value;
-        const dateIssued = qs('#nte-date-issued', bd).value;
-        if (!offenseCode || !employeeId) { suggestionEl.style.display = 'none'; return; }
-        const suggestion = Store.suggestedPenaltyFor(employeeId, offenseCode, dateIssued);
-        if (!suggestion) { suggestionEl.style.display = 'none'; return; }
-        suggestionEl.style.display = '';
-        const what = suggestion.klass
-          ? `<strong>${ordinal(suggestion.occurrence)}</strong> Class ${escapeHtml(suggestion.klass)} (${escapeHtml(suggestion.classLabel)}) offense in the current 12-month period`
-          : `<strong>${ordinal(suggestion.occurrence)}</strong> time for this offense in the current 12-month period`;
-        suggestionEl.innerHTML = `<div class="page-sub" style="background:var(--bg-soft,#f4f4f5); padding:8px 10px; border-radius:6px;">This will be their ${what} → Code of Discipline suggested penalty: <strong>${escapeHtml(suggestion.label)}</strong>.</div>`;
-      }
+      const narrativeEl = $('#nte-narrative');
+      const dateIssuedEl = $('#nte-date-issued');
+      const dueEl = $('#nte-due');
+      const incDateEl = $('#nte-inc-date');
+      const employeeEl = $('#nte-employee');
 
-      // Sec. 3.6: never less than NTE_MIN_ANSWER_DAYS calendar days to answer. Moving the
-      // issue date moves the earliest allowed deadline with it.
-      const issuedInput = qs('#nte-date-issued', bd);
-      const dueInput = qs('#nte-response-due', bd);
-      const discoveredInput = qs('#nte-date-discovered', bd);
-      const longBox = qs('#nte-long-prescription', bd);
-      const prescriptionEl = qs('#nte-prescription', bd);
+      const val = (sel) => ($(sel).value || '').trim();
 
-      function earliestDue() { return addDays(issuedInput.value || todayISO(), Store.NTE_MIN_ANSWER_DAYS); }
+      // ---- suggestions
+      let suggestTimer = null;
+      function renderSuggestions() {
+        const box = $('#nte-suggestions');
+        const text = narrativeEl.value;
+        const manualLink = `<button type="button" class="link-btn" data-manual>${s.manual ? 'Hide the manual list' : 'Choose the offense manually'}</button>`;
 
-      function updateDueMin() {
-        const min = earliestDue();
-        dueInput.min = min;
-        if (!dueInput.value || dueInput.value < min) dueInput.value = min;
-        discoveredInput.max = issuedInput.value || todayISO();
-      }
-
-      // Sec. 3.11: returns the deadline and whether this NTE is still inside it, or null
-      // while there's no discovery date to measure from.
-      function prescriptionCheck() {
-        if (!discoveredInput.value || !issuedInput.value) return null;
-        const deadline = Store.prescriptionDeadline(discoveredInput.value, longBox.checked);
-        return { deadline, lapsed: issuedInput.value > deadline };
-      }
-
-      function updatePrescription() {
-        const check = prescriptionCheck();
-        if (!check) { prescriptionEl.style.display = 'none'; return; }
-        const period = longBox.checked ? '1 year' : Store.PRESCRIPTION_DAYS + ' calendar days';
-        prescriptionEl.style.display = '';
-        prescriptionEl.innerHTML = check.lapsed
-          ? `<div class="page-sub" style="background:rgba(248,113,113,0.12); color:var(--red); padding:8px 10px; border-radius:6px;"><strong>This offense has prescribed.</strong> The ${period} period ended on ${fmtDate(check.deadline)}, so no NTE may be issued for it (Sec. 3.11).</div>`
-          : `<div class="page-sub" style="background:var(--bg-soft,#f4f4f5); padding:8px 10px; border-radius:6px;">Prescriptive period: ${period}. An NTE may be issued until <strong>${fmtDate(check.deadline)}</strong>.</div>`;
-      }
-
-      function updateOffenseOptions() {
-        const cat = categorySelect.value;
-        if (cat === '__other') {
-          offenseWrap.style.display = 'none';
-          customWrap.style.display = '';
-          offenseSelect.innerHTML = '';
-          updateSuggestion();
+        if (text.trim().length < 12) {
+          box.innerHTML = `<div class="page-sub">Offenses that match the incident details will appear here as you type. Or ${manualLink}.</div>`;
+          wireSuggestionButtons(box);
           return;
         }
-        offenseWrap.style.display = '';
-        customWrap.style.display = 'none';
-        const catEntry = Store.disciplineCatalog().find(c => c.category === cat);
-        offenseSelect.innerHTML = '<option value="">Select an offense…</option>' +
-          (catEntry ? catEntry.offenses.map(o => `<option value="${o.code}">${escapeHtml(o.label)}</option>`).join('') : '');
-        updateSuggestion();
-      }
 
-      // Picking a catalog offense sets the period the Code gives it; HR can still change the
-      // box, e.g. for an offense they added to the catalog themselves.
-      function onOffenseChange() {
-        if (offenseSelect.value) longBox.checked = Store.prescriptionFor(offenseSelect.value).long;
-        updateSuggestion();
-        updatePrescription();
-      }
-
-      categorySelect.addEventListener('change', () => { updateOffenseOptions(); updatePrescription(); });
-      offenseSelect.addEventListener('change', onOffenseChange);
-      qs('#nte-employee', bd).addEventListener('change', updateSuggestion);
-      issuedInput.addEventListener('change', () => { updateDueMin(); updateSuggestion(); updatePrescription(); });
-      discoveredInput.addEventListener('change', updatePrescription);
-      longBox.addEventListener('change', updatePrescription);
-
-      qs('#nte-form', bd).addEventListener('submit', async (ev) => {
-        ev.preventDefault();
-        const fd = new FormData(ev.target);
-        let violation = '', offenseCode = null;
-        if (categorySelect.value === '__other') {
-          violation = (fd.get('violationCustom') || '').trim();
-        } else {
-          offenseCode = offenseSelect.value || null;
-          const catEntry = Store.disciplineCatalog().find(c => c.category === categorySelect.value);
-          const offense = catEntry && catEntry.offenses.find(o => o.code === offenseCode);
-          violation = offense ? offense.label : '';
-        }
-        if (!violation) { toast('Select an offense, or choose "Other" and describe the violation.'); return; }
-        const dateIssued = fd.get('dateIssued');
-        if (!dateIssued) { toast('Enter the date the NTE is issued.'); return; }
-        if (!fd.get('responseDueDate') || fd.get('responseDueDate') < earliestDue()) {
-          toast(`The employee must get at least ${Store.NTE_MIN_ANSWER_DAYS} calendar days to answer. Set the response due date to ${fmtDate(earliestDue())} or later.`);
+        const r = OffenseMatcher.suggest(Store.disciplineCatalog(), text, { limit: 4 });
+        if (!r.suggestions.length) {
+          box.innerHTML = `<div class="page-sub">No offense in the Code matches these details. Add more about what was done, or ${manualLink}.</div>`;
+          wireSuggestionButtons(box);
           return;
         }
-        const dateDiscovered = fd.get('dateDiscovered');
-        if (!dateDiscovered) { toast('Enter the date the offense became known to the supervisor or HR.'); return; }
-        if (dateDiscovered > dateIssued) { toast('The offense cannot become known after the NTE is issued. Check both dates.'); return; }
-        const check = prescriptionCheck();
-        if (check && check.lapsed) {
-          toast(`This offense prescribed on ${fmtDate(check.deadline)}. Under Sec. 3.11 no NTE may be issued for it.`);
-          return;
-        }
-        await Store.addCase({
-          employeeId: fd.get('employeeId'),
-          dateIssued,
-          responseDueDate: fd.get('responseDueDate'),
-          dateDiscovered,
-          longPrescription: longBox.checked,
-          issuedBy: fd.get('issuedBy').trim() || 'HR',
-          violation, offenseCode,
-          noticeText: fd.get('noticeText').trim(),
-          employeeResponse: '', employeeResponseDate: null,
-          investigationNotes: '', resolution: '', resolvedDate: null,
-          terminationTrack: fd.get('terminationTrack') === 'on',
-        });
-        toast('NTE issued.');
-        closeModal();
-        renderList(main);
+
+        const cards = r.suggestions.map((sg) => {
+          const t = CLASS_TINT[sg.klass] || { bar: 'var(--border)' };
+          const selected = s.offenseCode === sg.code;
+          const weak = sg.confidence === 'low';
+          const below = !!sg.belowThreshold;
+          return `
+            <div style="border:1px solid var(--border-soft); border-left:4px solid ${t.bar}; border-radius:9px; padding:9px 11px; margin-bottom:7px;
+                        ${weak && !selected ? 'opacity:.7;' : ''} ${selected ? 'box-shadow:0 0 0 2px var(--blue,#2563eb);' : ''}">
+              <div style="display:flex; gap:10px; align-items:flex-start; justify-content:space-between;">
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:13px; line-height:1.4;">${escapeHtml(sg.label)}</div>
+                  <div class="page-sub" style="margin:4px 0 0;">${classChip(sg.klass)} &nbsp;${escapeHtml(sectionOf(sg.category))} · ${escapeHtml(sg.category)}${weak ? ' · <em>weak match</em>' : ''}</div>
+                </div>
+                <button type="button" class="btn ${selected ? 'btn-primary' : 'btn-ghost'} btn-sm" data-use="${escapeHtml(sg.code)}" ${below ? 'disabled title="Below the Code’s threshold"' : ''}>${selected ? 'Selected' : 'Use'}</button>
+              </div>
+              ${sg.matched.length ? `<div class="page-sub" style="margin:5px 0 0; font-size:11.5px;">Matched on: ${sg.matched.map(w => '“' + escapeHtml(w) + '”').join(', ')}</div>` : ''}
+              ${sg.tierReason ? `<div style="margin-top:6px; font-size:12px; padding:5px 8px; border-radius:6px; background:rgba(34,139,34,.08);">${escapeHtml(sg.tierReason)}</div>` : ''}
+              ${sg.needsFact ? `<div style="margin-top:6px; font-size:12px; padding:5px 8px; border-radius:6px; background:rgba(212,176,42,.16);"><strong>Add to the incident details:</strong> ${escapeHtml(sg.needsFact)}</div>` : ''}
+              ${below ? `<div style="margin-top:6px; font-size:12px; padding:5px 8px; border-radius:6px; background:rgba(208,90,90,.12);"><strong>No offense yet.</strong> ${escapeHtml(sg.belowThreshold)}</div>` : ''}
+              ${sg.classNote ? `<div class="page-sub" style="margin:6px 0 0; font-size:12px;">${escapeHtml(sg.classNote)}</div>` : ''}
+            </div>`;
+        }).join('');
+
+        box.innerHTML = `
+          <div class="page-sub" style="margin:0 0 8px;">Suggested from the words in the incident details — check each against what actually happened before using it.</div>
+          ${r.multiple ? `<div class="page-sub" style="margin:0 0 8px; padding:6px 9px; border-radius:7px; background:var(--bg-soft,#f4f4f5);">These details may describe more than one offense. Under Section 3.4, where one act violates more than one provision, only the highest applicable penalty is imposed — charge the most serious one that the facts support.</div>` : ''}
+          ${cards}
+          <div class="page-sub" style="margin-top:4px;">None of these fits? ${manualLink}.</div>`;
+        wireSuggestionButtons(box);
+      }
+
+      function wireSuggestionButtons(box) {
+        qsa('[data-use]', box).forEach(b => b.addEventListener('click', () => chooseOffense(b.dataset.use)));
+        qsa('[data-manual]', box).forEach(b => b.addEventListener('click', () => {
+          s.manual = !s.manual;
+          $('#nte-manual').style.display = s.manual ? '' : 'none';
+          renderSuggestions();
+        }));
+      }
+
+      function chooseOffense(code) {
+        s.offenseCode = code;
+        s.dismissalTouched = false;
+        s.longTouched = false;
+        s.refNo = '';
+        renderSuggestions();
+        renderCharge();
+        invalidateReview();
+      }
+
+      // ---- manual picker (the previous form's category -> offense lists)
+      $('#nte-category').addEventListener('change', () => {
+        const cat = Store.disciplineCatalog().find(c => c.category === $('#nte-category').value);
+        $('#nte-offense').innerHTML = '<option value="">Select an offense…</option>' +
+          (cat ? cat.offenses.map(o => `<option value="${escapeHtml(o.code)}">${o.klass} · ${escapeHtml(o.label)}</option>`).join('') : '');
       });
+      $('#nte-offense').addEventListener('change', () => { if ($('#nte-offense').value) chooseOffense($('#nte-offense').value); });
+
+      // ---- the charge: class, penalty step, dismissal, unlisted act
+      // Store.suggestedPenaltyFor counts same-class offenses within the Sec. 3.4 period. The
+      // dismissal and habitual-delinquency flags are derived here from what it returns.
+      function penaltyFor(empId, code, dateIssued) {
+        if (!code || !empId) return null;
+        const pen = Store.suggestedPenaltyFor(empId, code, dateIssued || today);
+        if (!pen) return null;
+        // Sec. 3.4: a fifth Class A offense in the same period goes to Section 3.10 (Habitual
+        // Delinquency). The Class A schedule has four steps, so without this the fifth would
+        // silently clamp to the fourth step's penalty instead of pointing HR at Sec. 3.10.
+        return Object.assign({}, pen, {
+          isDismissal: pen.code === 'D',
+          habitual: pen.klass === 'A' && pen.occurrence >= 5,
+        });
+      }
+      function penaltyNow() { return penaltyFor(employeeEl.value, s.offenseCode, dateIssuedEl.value); }
+
+      // Sec. 3.11: the last date to issue, and whether it has passed. Null until there is both
+      // a discovery date and an offense to take the period from.
+      function prescriptionCheck() {
+        const disc = $('#nte-date-discovered').value;
+        const issued = dateIssuedEl.value;
+        if (!disc || !issued || !s.offenseCode) return null;
+        const deadline = Store.prescriptionDeadline(disc, s.longPrescription);
+        return { deadline: deadline, lapsed: issued > deadline, period: s.longPrescription ? '1 year' : Store.PRESCRIPTION_DAYS + ' calendar days' };
+      }
+      function renderPrescription() {
+        const el = $('#nte-prescription-status');
+        if (!el) return;
+        const c = prescriptionCheck();
+        if (!c) { el.innerHTML = '<div class="page-sub" style="margin:6px 0 0;">Enter the date the offense became known (step 2) to see the last date this notice may issue.</div>'; return; }
+        el.innerHTML = c.lapsed
+          ? `<div style="margin-top:6px; font-size:12px; padding:6px 9px; border-radius:7px; background:rgba(208,90,90,.12);"><strong>This offense has prescribed.</strong> The ${escapeHtml(c.period)} period ended on ${escapeHtml(fmtDate(c.deadline))}, so no NTE may be issued for it (Section 3.11).</div>`
+          : `<div class="page-sub" style="margin:6px 0 0;">Prescriptive period: ${escapeHtml(c.period)}. This notice may issue until <strong>${escapeHtml(fmtDate(c.deadline))}</strong>.</div>`;
+      }
+
+      function renderCharge() {
+        const box = $('#nte-charge');
+        const off = s.offenseCode ? findOffense(s.offenseCode) : null;
+        if (!off) { box.innerHTML = ''; return; }
+        const pen = penaltyNow();
+        if (pen && !s.dismissalTouched) s.dismissal = !!pen.isDismissal;
+        if (!s.longTouched) s.longPrescription = Store.prescriptionFor(off.code).long;
+
+        box.innerHTML = `
+          <div style="margin-top:10px; border:1px solid var(--border-soft); border-radius:10px; padding:11px 13px; background:var(--bg-soft,#f7f8fa);">
+            <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+              <div style="flex:1; min-width:0;">
+                <div class="page-sub" style="margin:0 0 3px; text-transform:uppercase; letter-spacing:.04em; font-size:10.5px;">Charged offense</div>
+                <div style="font-size:13.5px; line-height:1.4; font-weight:600;">${escapeHtml(off.label)}</div>
+                <div class="page-sub" style="margin:4px 0 0;">${classChip(off.klass)} &nbsp;${escapeHtml(sectionOf(off.category))} · ${escapeHtml(off.category)}</div>
+              </div>
+              <button type="button" class="link-btn" id="nte-clear-offense">Change</button>
+            </div>
+
+            ${pen ? `
+              <div class="page-sub" style="margin:10px 0 0;">
+                ${pen.klass
+                  ? `This would be the employee’s <strong>${ordinal(pen.occurrence)}</strong> Class ${escapeHtml(pen.klass)} offense in the current 12-month period`
+                  : `This would be the employee’s <strong>${ordinal(pen.occurrence)}</strong> time for this offense in the current 12-month period`}
+                — the normal penalty under Section 3.4 is <strong>${escapeHtml(pen.label)}</strong>.
+              </div>` : `<div class="page-sub" style="margin:10px 0 0;">Choose the employee to see which step of the penalty schedule applies.</div>`}
+
+            ${pen && pen.habitual ? `
+              <div style="margin-top:8px; font-size:12px; padding:6px 9px; border-radius:7px; background:rgba(208,90,90,.12);">
+                This would be a <strong>fifth Class A offense</strong> within 12 months. Section 3.4 sends that to Section 3.10 (Habitual Delinquency), which is a Grave offense with its own notice.
+              </div>` : ''}
+
+            <label style="display:flex; gap:8px; align-items:flex-start; margin:12px 0 0; cursor:pointer; font-weight:400;">
+              <input type="checkbox" id="nte-dismissal" ${s.dismissal ? 'checked' : ''} style="width:auto; margin-top:3px;" />
+              <span>Dismissal is being considered
+                <span class="page-sub" style="display:block; margin:2px 0 0;">Section 3.6 requires the notice to say so. It also opens the hearing and second-notice steps on the case.</span>
+              </span>
+            </label>
+            ${pen && pen.isDismissal && !s.dismissal ? `
+              <div style="margin-top:6px; font-size:12px; padding:6px 9px; border-radius:7px; background:rgba(212,176,42,.18);">
+                The normal penalty at this step is dismissal. If the notice does not say dismissal is being considered, dismissal will not be available as the penalty in this case.
+              </div>` : ''}
+
+            <label style="display:flex; gap:8px; align-items:flex-start; margin:12px 0 0; cursor:pointer; font-weight:400;">
+              <input type="checkbox" id="nte-analogous" ${s.analogous ? 'checked' : ''} style="width:auto; margin-top:3px;" />
+              <span>The act is not listed in Part IV — charge it under Section 3.13, using this offense as the most closely analogous
+                <span class="page-sub" style="display:block; margin:2px 0 0;">Only for an act grossly prejudicial to the Company. The class of this offense is applied.</span>
+              </span>
+            </label>
+            <label style="display:flex; gap:8px; align-items:flex-start; margin:12px 0 0; cursor:pointer; font-weight:400;">
+              <input type="checkbox" id="nte-long" ${s.longPrescription ? 'checked' : ''} style="width:auto; margin-top:3px;" />
+              <span>Involves fraud, dishonesty, theft, falsification, sexual harassment or violence — 1-year prescriptive period
+                <span class="page-sub" style="display:block; margin:2px 0 0;">Set from the offense chosen. Change it only for an offense added to the catalog (Section 3.11).</span>
+              </span>
+            </label>
+            <div id="nte-prescription-status"></div>
+
+            ${s.analogous ? `
+              <div class="field full" style="margin-top:8px;">
+                <label>Why the act is grossly prejudicial to the Company</label>
+                <textarea id="nte-unlisted-reason" rows="2" placeholder="State the actual harm or risk to the Company.">${escapeHtml(s.unlistedReason)}</textarea>
+              </div>` : ''}
+          </div>`;
+
+        $('#nte-clear-offense').addEventListener('click', () => {
+          s.offenseCode = ''; s.analogous = false; s.unlistedReason = '';
+          renderSuggestions(); renderCharge(); invalidateReview();
+        });
+        $('#nte-dismissal').addEventListener('change', (e) => {
+          s.dismissal = e.target.checked; s.dismissalTouched = true;
+          renderCharge(); invalidateReview();
+        });
+        $('#nte-analogous').addEventListener('change', (e) => {
+          s.analogous = e.target.checked;
+          renderCharge(); invalidateReview();
+        });
+        const reason = $('#nte-unlisted-reason');
+        if (reason) reason.addEventListener('input', (e) => { s.unlistedReason = e.target.value; invalidateReview(); });
+        $('#nte-long').addEventListener('change', (e) => {
+          s.longPrescription = e.target.checked; s.longTouched = true;
+          renderPrescription(); invalidateReview();
+        });
+        renderPrescription();
+      }
+
+      // ---- the letter
+      function buildLetter() {
+        const empId = employeeEl.value;
+        const emp = empId ? Store.getEmployee(empId) : null;
+        const dateIssued = dateIssuedEl.value;
+        const off = s.offenseCode ? findOffense(s.offenseCode) : null;
+        if (!s.refNo) s.refNo = newRefNo(dateIssued);
+        const r = NteLetter.buildNte({
+          refNo: s.refNo,
+          dateIssued: dateIssued,
+          dueDate: dueEl.value,
+          employee: emp ? { name: emp.name, position: emp.position, category: emp.category } : {},
+          superiorName: superiorNameFor(emp),
+          issuedBy: val('#nte-issued-by'),
+          incident: { narrative: narrativeEl.value, date: incDateEl.value, time: val('#nte-inc-time'), place: val('#nte-inc-place') },
+          offense: off ? { code: off.code, label: off.label, category: off.category, klass: off.klass } : {},
+          analogous: s.analogous,
+          unlistedReason: s.unlistedReason,
+          penalty: off ? penaltyFor(empId, off.code, dateIssued) : null,
+          dismissalConsidered: s.dismissal,
+          minDays: Store.NTE_MIN_ANSWER_DAYS,
+        });
+        // The suggestion card says when facts are under the Code's threshold. If HR has
+        // nonetheless picked that offense through the manual list, stop here too: there
+        // is no offense on the facts as written.
+        if (off) {
+          const check = OffenseMatcher.suggest(Store.disciplineCatalog(), narrativeEl.value, { limit: 8 })
+            .suggestions.find(x => x.code === off.code && x.belowThreshold);
+          if (check) { r.ok = false; r.problems.unshift('No offense yet on these facts. ' + check.belowThreshold); }
+        }
+        // Sec. 3.11, and the order of events it depends on. Listed first: a prescribed
+        // offense cannot be charged however well the notice is written.
+        const procedural = [];
+        const disc = $('#nte-date-discovered').value;
+        if (!disc) {
+          procedural.push('Give the date the offense became known to the supervisor or HR. Section 3.11 runs the prescriptive period from it.');
+        } else {
+          if (dateIssued && disc > dateIssued) procedural.push('The offense cannot have become known after the notice is issued. Check both dates.');
+          if (incDateEl.value && incDateEl.value > disc) procedural.push('The incident is dated after the date it became known. Check both dates.');
+          const pc = prescriptionCheck();
+          if (pc && pc.lapsed) procedural.push('This offense has prescribed. The ' + pc.period + ' period under Section 3.11 ended on ' + fmtDate(pc.deadline) + ', so no NTE may be issued for it.');
+        }
+        if (procedural.length) { r.ok = false; r.problems = procedural.concat(r.problems); }
+        return r;
+      }
+
+      function showProblems(list) {
+        $('#nte-problems').innerHTML = list.length ? `
+          <div style="margin:4px 0 10px; padding:9px 12px; border-radius:9px; background:rgba(208,90,90,.10); border:1px solid rgba(208,90,90,.35);">
+            <div style="font-weight:700; font-size:13px; margin-bottom:4px;">The notice can’t be issued yet</div>
+            <ul style="margin:0; padding-left:18px;">${list.map(p => `<li class="page-sub" style="margin:2px 0;">${escapeHtml(p)}</li>`).join('')}</ul>
+          </div>` : '';
+      }
+
+      // Any edit after reviewing hides the review, so the letter that gets issued is always
+      // the letter that was read.
+      function invalidateReview() {
+        const rv = $('#nte-review');
+        if (rv.style.display !== 'none') {
+          rv.style.display = 'none';
+          rv.innerHTML = '';
+          $('#nte-actions').style.display = '';
+        }
+      }
+
+      $('#nte-review-btn').addEventListener('click', () => {
+        const r = buildLetter();
+        showProblems(r.problems);
+        if (!r.ok) { $('#nte-problems').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+
+        const rv = $('#nte-review');
+        rv.innerHTML = `
+          <div class="section-title">5 · Read the notice</div>
+          <div class="page-sub" style="margin:-4px 0 8px;">This is the letter that will be filed on the case and served on the employee. Nothing has been issued yet.</div>
+          <iframe id="nte-frame" title="Notice to Explain" style="width:100%; height:560px; border:1px solid var(--border-soft); border-radius:8px; background:#fff;"></iframe>
+          <div class="modal-actions" style="margin-top:10px;">
+            <button type="button" class="btn btn-ghost" id="nte-back">Back to editing</button>
+            <button type="button" class="btn btn-primary" id="nte-issue">Issue this notice</button>
+          </div>`;
+        rv.style.display = '';
+        $('#nte-actions').style.display = 'none';
+        $('#nte-frame').srcdoc = r.html;
+        rv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        $('#nte-back').addEventListener('click', invalidateReview);
+        $('#nte-issue').addEventListener('click', async () => {
+          const final = buildLetter();
+          if (!final.ok || final.text !== r.text) { showProblems(final.problems); invalidateReview(); return; }
+          const off = findOffense(s.offenseCode);
+          const btn = $('#nte-issue');
+          btn.disabled = true;
+          btn.textContent = 'Issuing…';
+          const empId = employeeEl.value;
+          try {
+            await Store.addCase({
+              employeeId: empId,
+              dateIssued: dateIssuedEl.value,
+              responseDueDate: dueEl.value,
+              dateDiscovered: $('#nte-date-discovered').value,
+              longPrescription: !!s.longPrescription,
+              issuedBy: val('#nte-issued-by'),
+              violation: s.analogous ? off.label + ' (applied by analogy, Sec. 3.13)' : off.label,
+              offenseCode: off.code,
+              noticeText: final.text,
+              employeeResponse: '', employeeResponseDate: null,
+              investigationNotes: '', resolution: '', resolvedDate: null,
+              terminationTrack: !!s.dismissal,
+            });
+          } catch (e) {
+            btn.disabled = false;
+            btn.textContent = 'Issue this notice';
+            return;   // Store.addCase has already said what went wrong
+          }
+          toast('NTE issued. Print it from the case for the employee to sign.');
+          closeModal();
+          renderList(main);
+          const created = Store.listCases()
+            .filter(c => c.employeeId === empId && c.noticeText === final.text)
+            .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
+          if (created) openCaseDetail(main, created.id);
+        });
+      });
+
+      // ---- keeping things in step
+      narrativeEl.addEventListener('input', () => {
+        clearTimeout(suggestTimer);
+        suggestTimer = setTimeout(renderSuggestions, 220);
+        invalidateReview();
+      });
+      employeeEl.addEventListener('change', () => { s.refNo = ''; renderCharge(); invalidateReview(); });
+      dateIssuedEl.addEventListener('change', () => {
+        const issued = dateIssuedEl.value || today;
+        const min = minDue(issued);
+        dueEl.min = min;
+        if (!dueEl.value || dueEl.value < min) dueEl.value = min;
+        incDateEl.max = issued;
+        $('#nte-date-discovered').max = issued;
+        s.refNo = '';
+        renderCharge();
+        invalidateReview();
+      });
+      $('#nte-date-discovered').addEventListener('change', () => { renderPrescription(); invalidateReview(); });
+      ['#nte-inc-date', '#nte-inc-time', '#nte-inc-place', '#nte-issued-by', '#nte-due'].forEach((sel) => {
+        $(sel).addEventListener('input', invalidateReview);
+        $(sel).addEventListener('change', invalidateReview);
+      });
+
+      renderSuggestions();
     });
   }
 

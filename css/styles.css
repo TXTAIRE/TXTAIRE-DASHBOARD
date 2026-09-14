@@ -533,6 +533,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   padding: 22px 24px 24px 24px;
   box-shadow: 0 8px 30px rgba(16,24,40,0.14);
 }
+/* The NTE form carries a full A4 letter preview, which 560px would squeeze unreadably. */
+.modal.modal-wide { max-width: 880px; }
 .modal h2 { margin: 0 0 4px 0; font-size: 18px; }
 .modal .modal-sub { color: var(--text-dim); font-size: 12.5px; margin-bottom: 16px; }
 .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
