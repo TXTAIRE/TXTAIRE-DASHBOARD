@@ -198,7 +198,8 @@ window.Views.staff = (function () {
       <div class="modal-actions" style="margin-top:8px; justify-content:flex-start;">
         ${e.authUserId
           ? `<button class="btn btn-ghost btn-sm" id="btn-reset-ess-password">Reset portal password</button>
-             <button class="btn btn-ghost btn-sm" id="btn-revoke-ess">Revoke portal access</button>`
+             <button class="btn btn-ghost btn-sm" id="btn-revoke-ess">Revoke portal access</button>
+             <button class="btn btn-ghost btn-sm" id="btn-view-qr-login">View QR login code</button>`
           : `<button class="btn btn-ghost btn-sm" id="btn-grant-ess">Grant portal access</button>`}
       </div>
       <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
@@ -263,6 +264,8 @@ window.Views.staff = (function () {
       if (grantBtn) grantBtn.addEventListener('click', () => openGrantEssAccess(main, e));
       const resetPwBtn = qs('#btn-reset-ess-password', dr);
       if (resetPwBtn) resetPwBtn.addEventListener('click', () => openResetEssPasswordModal(main, e));
+      const viewQrLoginBtn = qs('#btn-view-qr-login', dr);
+      if (viewQrLoginBtn) viewQrLoginBtn.addEventListener('click', () => openQrLoginViewModal(e));
       const revokeBtn = qs('#btn-revoke-ess', dr);
       if (revokeBtn) revokeBtn.addEventListener('click', async () => {
         if (confirm(`Revoke ${e.name}'s Employee Self-Service login? They will no longer be able to sign into the portal.`)) {
@@ -520,6 +523,113 @@ window.Views.staff = (function () {
   // Edge Function (server-side, using the service role key -- only Supabase's Admin API
   // can set another user's password; that key can never be exposed to client-side code,
   // which is why this can't just be a Store.* call like everything else on this page).
+  // Lazy-loaded from the same jsdelivr CDN already allow-listed in this dashboard's CSP
+  // script-src -- only fetched the first time HR actually opens this modal. Same library
+  // and pinned commit as js/ess-views/profile.js's own "My QR Login Code" (davidshimjs/
+  // qrcodejs has no npm/tagged release, so it's pinned by exact commit hash instead).
+  // Exposes a global QRCode constructor: new QRCode(containerEl, { text, width, height }).
+  let staffQrLibLoadPromise = null;
+  function loadStaffQrCodeLib() {
+    if (window.QRCode) return Promise.resolve(window.QRCode);
+    if (staffQrLibLoadPromise) return staffQrLibLoadPromise;
+    staffQrLibLoadPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs@04f46c6a0708418cb7b96fc563eacae0fbf77674/qrcode.min.js';
+      script.onload = () => resolve(window.QRCode);
+      script.onerror = () => { staffQrLibLoadPromise = null; reject(new Error('load failed')); };
+      document.head.appendChild(script);
+    });
+    return staffQrLibLoadPromise;
+  }
+
+  // Same URL shape as js/ess-views/profile.js's own qrLoginUrl -- scanning it with a
+  // phone's camera app opens straight into ess.html already signed in as this employee.
+  // Points at ess.html specifically (not wherever this admin page happens to be hosted),
+  // since My Portal and the admin dashboard are deliberately separate pages.
+  function qrLoginUrlFor(token) {
+    const essUrl = new URL('ess.html', location.href);
+    essUrl.searchParams.set('qrlogin', token);
+    return essUrl.toString();
+  }
+
+  // HR can view an employee's existing QR login code, or generate/regenerate one for them
+  // (e.g. to print a physical badge) -- the same trust level this app already gives HR
+  // over an employee's portal password (openResetEssPasswordModal above), not a new one.
+  function openQrLoginViewModal(e) {
+    openModal(`
+      <h2>QR Login Code — ${escapeHtml(e.name)}</h2>
+      <div id="qr-login-view-body"><div class="page-sub">Loading…</div></div>
+    `, (bd) => {
+      renderQrLoginViewBody(bd, e);
+    });
+  }
+
+  function renderQrLoginViewBody(bd, e) {
+    const body = qs('#qr-login-view-body', bd);
+    if (!e.qrLoginToken) {
+      body.innerHTML = `
+        <div class="page-sub" style="margin-bottom:14px;">${escapeHtml(e.name)} hasn't set up QR login yet. Generate one now if you'd like to print a badge for them, or let them set it up themselves on My Portal.</div>
+        <button type="button" class="btn btn-primary" id="btn-staff-qr-generate" style="width:100%; justify-content:center;">Generate QR Code</button>
+      `;
+      qs('#btn-staff-qr-generate', body).addEventListener('click', async () => {
+        const btn = qs('#btn-staff-qr-generate', body);
+        btn.disabled = true;
+        btn.textContent = 'Generating…';
+        try {
+          const token = generateQrLoginToken();
+          await Store.updateEmployee(e.id, { qrLoginToken: token });
+          e.qrLoginToken = token;
+          renderQrLoginViewBody(bd, e);
+        } catch (err) {
+          toast('Could not generate a QR code — try again.');
+          btn.disabled = false;
+          btn.textContent = 'Generate QR Code';
+        }
+      });
+      return;
+    }
+
+    body.innerHTML = `
+      <div class="page-sub" style="margin-bottom:12px;">Scan this with a phone's camera app to sign ${escapeHtml(e.name)} straight into My Portal.</div>
+      <div id="staff-qr-canvas-wrap" style="display:flex; justify-content:center; margin-bottom:14px; min-height:220px; align-items:center;"><span class="page-sub">Loading QR code…</span></div>
+      <div class="page-sub" style="margin-bottom:14px; color:var(--red);">⚠️ Anyone who has this QR code (or a photo/screenshot of it) can sign in as ${escapeHtml(e.name)}. Treat it as carefully as a password — don't post it publicly.</div>
+      <div class="modal-actions" style="justify-content:space-between;">
+        <button type="button" class="btn btn-ghost" id="btn-staff-qr-turnoff" style="color:var(--red);">Turn Off</button>
+        <button type="button" class="btn btn-ghost" id="btn-staff-qr-regenerate">Regenerate</button>
+      </div>
+    `;
+    loadStaffQrCodeLib().then((QRCode) => {
+      const wrap = qs('#staff-qr-canvas-wrap', bd);
+      if (!wrap) return;
+      wrap.innerHTML = '';
+      new QRCode(wrap, { text: qrLoginUrlFor(e.qrLoginToken), width: 220, height: 220 });
+    }).catch(() => toast('Could not load the QR code generator — check your connection.'));
+
+    qs('#btn-staff-qr-regenerate', body).addEventListener('click', async () => {
+      if (!confirm(`Regenerate ${e.name}'s QR code? Their old one will stop working immediately.`)) return;
+      try {
+        const token = generateQrLoginToken();
+        await Store.updateEmployee(e.id, { qrLoginToken: token });
+        e.qrLoginToken = token;
+        renderQrLoginViewBody(bd, e);
+        toast('✔ New QR code generated.');
+      } catch (err) {
+        toast('Could not regenerate — try again.');
+      }
+    });
+    qs('#btn-staff-qr-turnoff', body).addEventListener('click', async () => {
+      if (!confirm(`Turn off QR login for ${e.name}? They'll need their Employee ID and password to sign in until it's set up again.`)) return;
+      try {
+        await Store.updateEmployee(e.id, { qrLoginToken: null });
+        e.qrLoginToken = null;
+        renderQrLoginViewBody(bd, e);
+        toast('✔ QR login turned off.');
+      } catch (err) {
+        toast('Could not turn off QR login — try again.');
+      }
+    });
+  }
+
   // The new password only ever exists in plain text here, briefly, between being
   // generated and sent -- shown once on a confirmation screen afterward so HR can copy it
   // to give the employee, then never retrievable again by anyone, including this app.
