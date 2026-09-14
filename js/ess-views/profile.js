@@ -513,6 +513,7 @@ window.EssViews.profile = (function () {
           </div>
           <div class="field full"><label>Phone</label><input name="phone" value="${escapeHtml(emp.phone || '')}" /></div>
           <div class="field full"><label>Email</label><input type="email" name="email" value="${escapeHtml(emp.email || '')}" /></div>
+          <div class="field full"><label>Birthday <span class="dim">(so My Portal can celebrate it with you)</span></label><input type="date" name="birthDate" value="${escapeHtml(emp.birthDate || '')}" /></div>
           <div class="field full"><label>Bank Account Number</label><input name="bankAccountNumber" value="${escapeHtml(emp.bankAccountNumber || '')}" placeholder="e.g. GCash / bank account number" /></div>
           <div class="field full">
             <label>Bank QR Code</label>
@@ -570,6 +571,7 @@ window.EssViews.profile = (function () {
           const patch = {
             phone: fd.get('phone').trim(),
             email: fd.get('email').trim(),
+            birthDate: fd.get('birthDate') || null,
             bankAccountNumber: fd.get('bankAccountNumber').trim(),
           };
           const oldPhotoPath = emp.photoPath;

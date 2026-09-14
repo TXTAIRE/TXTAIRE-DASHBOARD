@@ -271,7 +271,11 @@ function renderEssRoute() {
   // Landing tab only (My Attendance is the first thing an employee sees after signing
   // in) -- runs after the view's own render since every view's render() replaces
   // main.innerHTML wholesale, so this has to prepend rather than render first.
-  if (essRoute === 'attendance') renderHomeAnnouncementBanner(main);
+  if (essRoute === 'attendance') {
+    renderHomeAnnouncementBanner(main);
+    renderCoworkerBirthdayBanner(main, myEmployee);
+    renderMissingBirthdateNudge(main, myEmployee);
+  }
   updateEssBellBadge();
 }
 
@@ -310,6 +314,62 @@ function renderHomeAnnouncementBanner(main) {
     const card = btn.closest('[data-announcement-id]');
     if (card) card.remove();
   }));
+}
+
+// Lets every OTHER employee know it's someone's birthday today too, not just the birthday
+// person themselves (see showEssBirthdayCelebration below for that side) -- reuses
+// isEmployeeBirthdayToday/todayISO, same plain client-side date comparison against
+// Store.listEmployees(), already loaded for everyone (RLS lets any authenticated employee
+// read the employees table). No push/notification row involved, same as the announcement
+// banner above -- this only ever shows while My Portal is actually open that day.
+function renderCoworkerBirthdayBanner(main, emp) {
+  if (!emp) return;
+  const celebrants = Store.listEmployees().filter(e => e.id !== emp.id && isEmployeeBirthdayToday(e));
+  if (!celebrants.length) return;
+  const names = celebrants.map(e => (e.name || '').trim().split(' ')[0] || e.name);
+  const namesText = names.length === 1 ? names[0]
+    : names.length === 2 ? names[0] + ' and ' + names[1]
+    : names.slice(0, -1).join(', ') + ', and ' + names[names.length - 1];
+  const html = `
+    <div class="ess-card" style="text-align:left; background:linear-gradient(135deg, rgba(255,209,102,0.12), rgba(255,94,126,0.12));">
+      <div class="ess-card-label" style="margin-bottom:6px;">🎂 Birthday${celebrants.length > 1 ? 's' : ''} Today</div>
+      <div class="ess-sub">It's ${escapeHtml(namesText)}'s birthday today — don't forget to greet ${celebrants.length > 1 ? 'them' : 'them'}! 🎉</div>
+    </div>
+  `;
+  main.insertAdjacentHTML('afterbegin', html);
+}
+
+// Nudges an employee who has no Birthday on file yet to add one -- otherwise they'd never
+// get the celebration above (showEssBirthdayCelebration) and their co-workers would never
+// see them in the banner above either. Dismissible per-day (same pattern as the
+// announcement banner), not per-forever, so it keeps reappearing until actually acted on
+// rather than being dismissed once and forgotten.
+const BIRTHDATE_NUDGE_DISMISS_KEY = 'essBirthdateNudgeDismissedOn';
+function renderMissingBirthdateNudge(main, emp) {
+  if (!emp || emp.birthDate) return;
+  try {
+    if (localStorage.getItem(BIRTHDATE_NUDGE_DISMISS_KEY) === todayISO()) return;
+  } catch (err) { /* ignore -- just show it */ }
+  const html = `
+    <div class="ess-card" id="birthdate-nudge-card" style="text-align:left;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+        <div class="ess-card-label" style="margin-bottom:6px;">🎈 Add Your Birthday</div>
+        <button type="button" class="link-btn" id="btn-dismiss-birthdate-nudge" title="Dismiss for today" style="flex-shrink:0;">&times;</button>
+      </div>
+      <div class="ess-sub" style="margin-bottom:8px;">We don't have your birthday on file yet, so My Portal can't celebrate it with you (or let your co-workers know). Add it in My Profile.</div>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-goto-profile-birthdate">Go to My Profile</button>
+    </div>
+  `;
+  main.insertAdjacentHTML('afterbegin', html);
+  qs('#btn-dismiss-birthdate-nudge', main).addEventListener('click', () => {
+    try { localStorage.setItem(BIRTHDATE_NUDGE_DISMISS_KEY, todayISO()); } catch (err) { /* ignore */ }
+    const card = qs('#birthdate-nudge-card', main);
+    if (card) card.remove();
+  });
+  qs('#btn-goto-profile-birthdate', main).addEventListener('click', () => {
+    essRoute = 'profile';
+    renderEssRoute();
+  });
 }
 
 function updateEssBellBadge() {
