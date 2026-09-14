@@ -50,7 +50,7 @@ const cover = () => [
   new d.Paragraph({
     alignment: d.AlignmentType.CENTER, spacing: { after: 300 },
     // Dapat matukoy agad ang pagkakaiba ng dalawang dokumento, kahit nakalimbag lang.
-    children: [run(L.pick('Salin sa Filipino', 'Salin sa Filipino  ·  Kopya ng Empleyado'), { size: 22, color: '5A5A5A' })],
+    children: [run(L.pick('Salin sa Filipino  ·  Kopya ng HR', 'Salin sa Filipino  ·  Kopya ng Empleyado'), { size: 22, color: '5A5A5A' })],
   }),
 
   img('cover.jpg', 470, 314),

@@ -39,7 +39,7 @@ const footer = new d.Footer({
       // every time. make-fil.js carries the identical fix.
       tabStops: [{ type: d.TabStopType.RIGHT, position: W }],
       children: [
-        new d.TextRun({ text: 'TXTAIRE OPC  |  Code of Discipline  |  Series 2, 2026 Edition', font: 'Arial', size: 15, color: '7A7A7A' }),
+        new d.TextRun({ text: 'TXTAIRE OPC  |  Code of Discipline  |  Series 2, 2026  |  HR Copy', font: 'Arial', size: 15, color: '7A7A7A' }),
         new d.TextRun({ children: [new d.Tab()] }),
         new d.TextRun({ children: [d.PageNumber.CURRENT], font: 'Arial', size: 17, bold: true, color: C.navy }),
         new d.TextRun({ text: ' | Page', font: 'Arial', size: 15, color: '7A7A7A' }),

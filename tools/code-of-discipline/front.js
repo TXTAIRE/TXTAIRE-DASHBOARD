@@ -50,14 +50,15 @@ const cover = () => [
     children: [run('DISCIPLINE', { size: 84, bold: true, color: '2E7D32' })],
   }),
   new d.Paragraph({
-    alignment: d.AlignmentType.CENTER, spacing: { after: L.forEmployee() ? 40 : 320 },
+    alignment: d.AlignmentType.CENTER, spacing: { after: 40 },
     children: [run('Series 2, 2026 Edition', { size: 26, bold: true, color: '1A1A1A' })],
   }),
-  // The two documents must be tellable apart at a glance, on paper, from across a desk.
-  ...(L.forEmployee() ? [new d.Paragraph({
+  // The two documents must be tellable apart at a glance, on paper, from across a desk --
+  // so each names itself, rather than the employee copy being the only one labelled.
+  new d.Paragraph({
     alignment: d.AlignmentType.CENTER, spacing: { after: 300 },
-    children: [run('Employee Copy', { size: 22, color: '595959' })],
-  })] : []),
+    children: [run(L.pick('HR Copy', 'Employee Copy'), { size: 22, color: '595959' })],
+  }),
 
   img('cover.jpg', 470, 314),
   pageBreak(),

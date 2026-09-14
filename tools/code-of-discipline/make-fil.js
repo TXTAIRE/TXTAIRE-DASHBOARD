@@ -166,7 +166,7 @@ const footer = new d.Footer({
     // page number jammed against the strap. A real tab stop lands the same every time.
     tabStops: [{ type: d.TabStopType.RIGHT, position: W }],
     children: [
-      new d.TextRun({ text: 'TXTAIRE OPC  |  Kodigo ng Disiplina  |  Series 2, 2026', font: 'Arial', size: 14, color: '7A7A7A' }),
+      new d.TextRun({ text: 'TXTAIRE OPC  |  Kodigo ng Disiplina  |  Series 2, 2026  |  Kopya ng HR', font: 'Arial', size: 14, color: '7A7A7A' }),
       new d.TextRun({ children: [new d.Tab()] }),
       new d.TextRun({ children: [d.PageNumber.CURRENT], font: 'Arial', size: 17, bold: true, color: C.navy }),
       new d.TextRun({ text: ' | Pahina', font: 'Arial', size: 15, color: '7A7A7A' }),

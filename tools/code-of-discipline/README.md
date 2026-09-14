@@ -119,13 +119,16 @@ should appear above ASCII.
 
 | Edition | Build | Pages | Delivered file |
 | --- | --- | --- | --- |
-| English, full | `make.js` | 46 | `assets/docs/code-of-discipline-2026-en.pdf` |
-| Filipino, full | `make-fil.js` | 47 | `assets/docs/code-of-discipline-2026-fil.pdf` |
+| English, HR copy | `make.js` | 46 | `assets/docs/code-of-discipline-2026-en.pdf` |
+| Filipino, HR copy | `make-fil.js` | 47 | `assets/docs/code-of-discipline-2026-fil.pdf` |
 | English, employee copy | `make-emp.js` | 41 | `assets/docs/code-of-discipline-2026-en-employee.pdf` |
 | Filipino, employee copy | `make-fil-emp.js` | 43 | `assets/docs/code-of-discipline-2026-fil-employee.pdf` |
 
-**My Portal links the employee copies; the full editions are HR's.** Both remain on the
+**My Portal links the employee copies; the HR copies are HR's.** Both remain on the
 server — the portal simply does not link them.
+
+Each copy names itself on the cover and in every footer -- "HR Copy" / "Kopya ng HR" and
+"Employee Copy" / "Kopya ng Empleyado" -- so the two can be told apart on paper.
 
 The employee copy is the same Code with the edition apparatus removed: no NEW / REVISED /
 WITHDRAWN markers, no Summary of Changes, no passages comparing this edition with the
