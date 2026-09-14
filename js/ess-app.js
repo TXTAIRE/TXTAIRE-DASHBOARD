@@ -1149,21 +1149,62 @@ async function startEss(session) {
   }, 1200);
 }
 
+// Best-effort direct read of Supabase's own persisted session token from localStorage,
+// bypassing sb.auth.getSession() entirely -- that call can hang indefinitely with no
+// connectivity in some SDK versions (it may try to refresh a near-expiry token first),
+// which previously left the whole page stuck on neither #ess-login nor #ess-app ever
+// being un-hidden: a blank white screen with nothing visibly wrong to report. This reads
+// the exact same storage key the SDK itself writes to, so it works even when the SDK's
+// own async call never resolves.
+function readStoredEssAuthUserId() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) {
+        const raw = JSON.parse(localStorage.getItem(k));
+        if (raw && raw.user && raw.user.id) return raw.user.id;
+      }
+    }
+  } catch (err) { /* ignore -- treat as no stored session */ }
+  return null;
+}
+
 async function bootEss() {
-  const { data: { session } } = await sb.auth.getSession();
+  // Race sb.auth.getSession() against a hard timeout -- see readStoredEssAuthUserId
+  // above for why this can't be trusted to always resolve on its own when offline.
+  let session = null;
+  try {
+    const timedOut = new Promise((resolve) => setTimeout(() => resolve('timeout'), 5000));
+    const result = await Promise.race([sb.auth.getSession(), timedOut]);
+    if (result !== 'timeout') session = result.data.session;
+  } catch (err) { session = null; }
+
   if (session) {
     await startEss(session);
+  } else if (!navigator.onLine) {
+    // getSession() either timed out or genuinely has nothing while offline -- fall back
+    // to whatever auth user id Supabase last persisted locally, so a device that's
+    // already been signed in here before can still open My Portal (Store.initForEss then
+    // serves its own cached data for that user) instead of being stuck on a blank screen.
+    const authUserId = readStoredEssAuthUserId();
+    if (authUserId) {
+      await startEss({ user: { id: authUserId } });
+    } else {
+      showEssLogin('You appear to be offline, and this device has no saved My Portal login yet. Connect to the internet once to sign in.');
+    }
   } else {
     showEssLogin();
   }
 
-  sb.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN' && session) {
-      await startEss(session);
-    } else if (event === 'SIGNED_OUT') {
-      location.reload();
-    }
-  });
+  try {
+    sb.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        await startEss(session);
+      } else if (event === 'SIGNED_OUT') {
+        location.reload();
+      }
+    });
+  } catch (err) { /* best-effort -- the boot path above already ran regardless */ }
 }
 
 document.addEventListener('DOMContentLoaded', bootEss);
