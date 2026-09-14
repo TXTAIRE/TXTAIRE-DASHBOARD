@@ -110,7 +110,7 @@ window.Views.disciplinary = (function () {
       <h2>${escapeHtml(employeeName(c.employeeId))}</h2>
       <div class="page-sub" style="margin-bottom:10px;">${escapeHtml(c.violation)}</div>
       <div style="margin-bottom:14px;">${caseStatusBadge(c.status)}</div>
-      <div class="page-sub">Issued: ${fmtDate(c.dateIssued)} by ${escapeHtml(c.issuedBy)}<br/>Response due: ${fmtDate(c.responseDueDate)}</div>
+      <div class="page-sub">Issued: ${fmtDate(c.dateIssued)} by ${escapeHtml(c.issuedBy)}<br/>Response due: ${fmtDate(c.responseDueDate)}${c.dateDiscovered ? `<br/>Offense became known: ${fmtDate(c.dateDiscovered)} (prescriptive period ${c.longPrescription ? '1 year' : Store.PRESCRIPTION_DAYS + ' calendar days'})` : ''}</div>
       <div class="section-title">Notice</div>
       <div class="page-sub">${escapeHtml(c.noticeText)}</div>
       ${c.employeeResponse ? `<div class="section-title">Employee Response</div><div class="page-sub">${escapeHtml(c.employeeResponse)} <span style="color:var(--text-faint);">(${fmtDate(c.employeeResponseDate)})</span></div>` : ''}
@@ -223,7 +223,12 @@ window.Views.disciplinary = (function () {
         <div class="modal-grid">
           <div class="field full"><label>Employee</label><select name="employeeId" id="nte-employee">${employeeOptions()}</select></div>
           <div class="field"><label>Date issued</label><input type="date" name="dateIssued" id="nte-date-issued" value="${todayISO()}" /></div>
-          <div class="field"><label>Response due date</label><input type="date" name="responseDueDate" value="${addDays(todayISO(), 3)}" /></div>
+          <div class="field"><label>Response due date</label><input type="date" name="responseDueDate" id="nte-response-due" value="${addDays(todayISO(), Store.NTE_MIN_ANSWER_DAYS)}" min="${addDays(todayISO(), Store.NTE_MIN_ANSWER_DAYS)}" /></div>
+          <div class="field full"><div class="page-sub" style="margin:0;">The employee gets at least ${Store.NTE_MIN_ANSWER_DAYS} calendar days to answer (Code of Discipline Sec. 3.6).</div></div>
+          <div class="field full"><label>Date the offense became known to the supervisor or HR</label>
+            <input type="date" name="dateDiscovered" id="nte-date-discovered" max="${todayISO()}" required />
+            <div class="page-sub" style="margin:4px 0 0;">Whichever learned of it first. Starts the prescriptive period in Sec. 3.11.</div>
+          </div>
           <div class="field full"><label>Issued by</label><input name="issuedBy" placeholder="e.g. HR Officer name" /></div>
           <div class="field full"><label>Category</label>
             <select id="nte-category">
@@ -240,6 +245,13 @@ window.Views.disciplinary = (function () {
             <label>Describe the violation</label>
             <input name="violationCustom" id="nte-violation-custom" placeholder="e.g. Habitual Tardiness" />
           </div>
+          <div class="field full" style="padding-top:4px;">
+            <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer;">
+              <input type="checkbox" name="longPrescription" id="nte-long-prescription" style="width:auto;" />
+              Involves fraud, dishonesty, theft, falsification, sexual harassment or violence (1-year prescriptive period)
+            </label>
+          </div>
+          <div class="field full" id="nte-prescription" style="display:none;"></div>
           <div class="field full" id="nte-suggestion" style="display:none;"></div>
           <div class="field full"><label>Notice details</label><textarea name="noticeText" rows="3" required placeholder="Describe the incident/violation..."></textarea></div>
           <div class="field full" style="padding-top:4px;">
@@ -272,7 +284,45 @@ window.Views.disciplinary = (function () {
         const suggestion = Store.suggestedPenaltyFor(employeeId, offenseCode, dateIssued);
         if (!suggestion) { suggestionEl.style.display = 'none'; return; }
         suggestionEl.style.display = '';
-        suggestionEl.innerHTML = `<div class="page-sub" style="background:var(--bg-soft,#f4f4f5); padding:8px 10px; border-radius:6px;">This will be their <strong>${ordinal(suggestion.occurrence)}</strong> time for this offense in the past 12 months → Code of Discipline suggested penalty: <strong>${escapeHtml(suggestion.label)}</strong>.</div>`;
+        const what = suggestion.klass
+          ? `<strong>${ordinal(suggestion.occurrence)}</strong> Class ${escapeHtml(suggestion.klass)} (${escapeHtml(suggestion.classLabel)}) offense in the current 12-month period`
+          : `<strong>${ordinal(suggestion.occurrence)}</strong> time for this offense in the current 12-month period`;
+        suggestionEl.innerHTML = `<div class="page-sub" style="background:var(--bg-soft,#f4f4f5); padding:8px 10px; border-radius:6px;">This will be their ${what} → Code of Discipline suggested penalty: <strong>${escapeHtml(suggestion.label)}</strong>.</div>`;
+      }
+
+      // Sec. 3.6: never less than NTE_MIN_ANSWER_DAYS calendar days to answer. Moving the
+      // issue date moves the earliest allowed deadline with it.
+      const issuedInput = qs('#nte-date-issued', bd);
+      const dueInput = qs('#nte-response-due', bd);
+      const discoveredInput = qs('#nte-date-discovered', bd);
+      const longBox = qs('#nte-long-prescription', bd);
+      const prescriptionEl = qs('#nte-prescription', bd);
+
+      function earliestDue() { return addDays(issuedInput.value || todayISO(), Store.NTE_MIN_ANSWER_DAYS); }
+
+      function updateDueMin() {
+        const min = earliestDue();
+        dueInput.min = min;
+        if (!dueInput.value || dueInput.value < min) dueInput.value = min;
+        discoveredInput.max = issuedInput.value || todayISO();
+      }
+
+      // Sec. 3.11: returns the deadline and whether this NTE is still inside it, or null
+      // while there's no discovery date to measure from.
+      function prescriptionCheck() {
+        if (!discoveredInput.value || !issuedInput.value) return null;
+        const deadline = Store.prescriptionDeadline(discoveredInput.value, longBox.checked);
+        return { deadline, lapsed: issuedInput.value > deadline };
+      }
+
+      function updatePrescription() {
+        const check = prescriptionCheck();
+        if (!check) { prescriptionEl.style.display = 'none'; return; }
+        const period = longBox.checked ? '1 year' : Store.PRESCRIPTION_DAYS + ' calendar days';
+        prescriptionEl.style.display = '';
+        prescriptionEl.innerHTML = check.lapsed
+          ? `<div class="page-sub" style="background:rgba(248,113,113,0.12); color:var(--red); padding:8px 10px; border-radius:6px;"><strong>This offense has prescribed.</strong> The ${period} period ended on ${fmtDate(check.deadline)}, so no NTE may be issued for it (Sec. 3.11).</div>`
+          : `<div class="page-sub" style="background:var(--bg-soft,#f4f4f5); padding:8px 10px; border-radius:6px;">Prescriptive period: ${period}. An NTE may be issued until <strong>${fmtDate(check.deadline)}</strong>.</div>`;
       }
 
       function updateOffenseOptions() {
@@ -292,10 +342,20 @@ window.Views.disciplinary = (function () {
         updateSuggestion();
       }
 
-      categorySelect.addEventListener('change', updateOffenseOptions);
-      offenseSelect.addEventListener('change', updateSuggestion);
+      // Picking a catalog offense sets the period the Code gives it; HR can still change the
+      // box, e.g. for an offense they added to the catalog themselves.
+      function onOffenseChange() {
+        if (offenseSelect.value) longBox.checked = Store.prescriptionFor(offenseSelect.value).long;
+        updateSuggestion();
+        updatePrescription();
+      }
+
+      categorySelect.addEventListener('change', () => { updateOffenseOptions(); updatePrescription(); });
+      offenseSelect.addEventListener('change', onOffenseChange);
       qs('#nte-employee', bd).addEventListener('change', updateSuggestion);
-      qs('#nte-date-issued', bd).addEventListener('change', updateSuggestion);
+      issuedInput.addEventListener('change', () => { updateDueMin(); updateSuggestion(); updatePrescription(); });
+      discoveredInput.addEventListener('change', updatePrescription);
+      longBox.addEventListener('change', updatePrescription);
 
       qs('#nte-form', bd).addEventListener('submit', async (ev) => {
         ev.preventDefault();
@@ -310,10 +370,26 @@ window.Views.disciplinary = (function () {
           violation = offense ? offense.label : '';
         }
         if (!violation) { toast('Select an offense, or choose "Other" and describe the violation.'); return; }
+        const dateIssued = fd.get('dateIssued');
+        if (!dateIssued) { toast('Enter the date the NTE is issued.'); return; }
+        if (!fd.get('responseDueDate') || fd.get('responseDueDate') < earliestDue()) {
+          toast(`The employee must get at least ${Store.NTE_MIN_ANSWER_DAYS} calendar days to answer. Set the response due date to ${fmtDate(earliestDue())} or later.`);
+          return;
+        }
+        const dateDiscovered = fd.get('dateDiscovered');
+        if (!dateDiscovered) { toast('Enter the date the offense became known to the supervisor or HR.'); return; }
+        if (dateDiscovered > dateIssued) { toast('The offense cannot become known after the NTE is issued. Check both dates.'); return; }
+        const check = prescriptionCheck();
+        if (check && check.lapsed) {
+          toast(`This offense prescribed on ${fmtDate(check.deadline)}. Under Sec. 3.11 no NTE may be issued for it.`);
+          return;
+        }
         await Store.addCase({
           employeeId: fd.get('employeeId'),
-          dateIssued: fd.get('dateIssued'),
+          dateIssued,
           responseDueDate: fd.get('responseDueDate'),
+          dateDiscovered,
+          longPrescription: longBox.checked,
           issuedBy: fd.get('issuedBy').trim() || 'HR',
           violation, offenseCode,
           noticeText: fd.get('noticeText').trim(),

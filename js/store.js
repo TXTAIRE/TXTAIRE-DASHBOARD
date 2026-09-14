@@ -50,6 +50,14 @@ function addDays(isoDate, n) {
   return localISO(d);
 }
 
+// Calendar years, not 365 days -- the Code of Discipline states its periods in months and
+// years. A Feb 29 start rolls over to Mar 1, which only ever lengthens the period by a day.
+function addYears(isoDate, n) {
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setFullYear(d.getFullYear() + n);
+  return localISO(d);
+}
+
 // Inclusive calendar-day count between two ISO dates (same-day = 1) -- used for tallying
 // leave request length, same convention the leave request form itself uses (a single
 // start/end date pair, no separate "number of days" field).
@@ -607,6 +615,43 @@ const RETIRED_OFFENSE_CODES = [
   'unauthorized-use-minor', 'unauthorized-use-major', 'malversation',
   'fighting-work-related', 'fighting-not-work-related',
   'physical-injury-minor', 'physical-injury-major', 'physical-injury-any-person',
+];
+
+// Sec. 3.6 of the Code, and DOLE D.O. 147-15: the employee has at least five (5) calendar
+// days from receipt of the NTE to submit a written explanation. The Issue NTE form will
+// not save a shorter deadline.
+const NTE_MIN_ANSWER_DAYS = 5;
+
+// Sec. 3.11, prescription of offenses: no disciplinary proceeding may be commenced more
+// than sixty (60) calendar days after the offense came to the knowledge of the immediate
+// superior or of HRD, whichever is earlier -- except offenses involving fraud, dishonesty,
+// theft, falsification, sexual harassment or violence, for which it is one (1) year.
+const PRESCRIPTION_DAYS = 60;
+
+// The catalog offenses whose substance is one of those six, so they get the one-year
+// period by default. Picked offense by offense rather than by category, because the
+// categories cut across them ("Timekeeping and Records" holds both a forgotten punch and
+// a falsified time record). An offense HR adds to the catalog is not in this list; the
+// Issue NTE form lets HR tick the one-year period for it, and records that they did.
+const LONG_PRESCRIPTION_OFFENSE_CODES = [
+  // falsification / fraud / dishonesty in time records
+  'false-reason-absent-late', 'punching-others-timecard', 'falsifying-timecards',
+  'benefiting-falsified-timecards', 'tampering-timekeeping',
+  // dishonesty in the performance of duties
+  'gross-misconduct-bribery', 'espionage',
+  // theft
+  'attempted-removal-no-loss', 'attempted-removal-with-loss', 'theft-pilferage',
+  // Honesty and Integrity -- the whole section
+  'misappropriation', 'unauthorized-use-funds', 'falsification-records', 'withholding-funds',
+  'non-issuance-invoice', 'forgery', 'competing-business', 'undeclared-sideline',
+  'undeclared-conflict', 'false-application-statement', 'conspiring',
+  // violence
+  'threat-of-harm', 'threat-with-weapon', 'fighting-on-premises', 'fighting-aggravated',
+  'physical-injury-work-related',
+  // sexual harassment
+  'immoral-conduct',
+  // fabricated evidence and false testimony
+  'planting-evidence',
 ];
 
 // Fill each offense's occurrence-by-occurrence penalty schedule in from its class, so the
@@ -1243,11 +1288,63 @@ const Store = (function () {
   // a 12-month period" schedules, and its Habitual Delinquency note that a clean record for
   // a full year erases past offenses -- anything issued more than 12 months before asOfDate
   // simply isn't counted, so it naturally rolls off.
+  function findCatalogOffense(offenseCode) {
+    if (!offenseCode) return null;
+    for (const cat of disciplineCatalog()) {
+      const found = cat.offenses.find(o => o.code === offenseCode);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  // How many earlier offenses count toward the progression for an employee's next offense.
+  //
+  // Sec. 3.4 of the Code: offenses of the same CLASS are counted together, within a rolling
+  // twelve (12) month period reckoned from the date of the first offense. So a Class A
+  // uniform violation after a Class A tardiness is a second Class A offense, even though
+  // the two offenses differ. The period opens at the first offense; an offense more than
+  // twelve months after the period opened starts a new one, and the count restarts.
+  //
+  // Sec. 3.11's clearing rule (a penalty stops counting twelve months after it was served)
+  // never reaches further back than this period does, so applying Sec. 3.4 applies both.
+  //
+  // An offense with no class -- a legacy row, one HR added, or a case recorded against a
+  // retired Series 1 code -- has nothing to be grouped with, so it counts by its own code.
   function offenseOccurrenceCount(employeeId, offenseCode, asOfDate) {
-    const cutoff = addDays(asOfDate || todayISO(), -365);
-    return state.disciplinaryCases.filter(c =>
-      c.employeeId === employeeId && c.offenseCode === offenseCode && c.dateIssued >= cutoff && c.dateIssued < (asOfDate || todayISO())
-    ).length;
+    const asOf = asOfDate || todayISO();
+    const klass = (findCatalogOffense(offenseCode) || {}).klass || '';
+    const sameGroup = (c) => {
+      if (!klass) return c.offenseCode === offenseCode;
+      return ((findCatalogOffense(c.offenseCode) || {}).klass || '') === klass;
+    };
+    const prior = state.disciplinaryCases
+      .filter(c => c.employeeId === employeeId && c.offenseCode && c.dateIssued < asOf && sameGroup(c))
+      .sort((a, b) => a.dateIssued.localeCompare(b.dateIssued));
+
+    let periodStart = null;
+    let count = 0;
+    prior.forEach((c) => {
+      if (periodStart === null || c.dateIssued > addYears(periodStart, 1)) {
+        periodStart = c.dateIssued;
+        count = 1;
+      } else {
+        count++;
+      }
+    });
+    if (periodStart === null || asOf > addYears(periodStart, 1)) return 0;
+    return count;
+  }
+
+  // The Sec. 3.11 prescriptive period that applies to an offense: one year for the offenses
+  // in LONG_PRESCRIPTION_OFFENSE_CODES, sixty days for everything else.
+  function prescriptionFor(offenseCode) {
+    const long = LONG_PRESCRIPTION_OFFENSE_CODES.includes(offenseCode);
+    return { long, label: long ? '1 year' : PRESCRIPTION_DAYS + ' calendar days' };
+  }
+
+  // Last date an NTE may be issued for an offense that became known on dateDiscovered.
+  function prescriptionDeadline(dateDiscovered, long) {
+    return long ? addYears(dateDiscovered, 1) : addDays(dateDiscovered, PRESCRIPTION_DAYS);
   }
 
   // ---- Code of Discipline (HR-editable, supabase/schema.sql "disciplineOffenses") ----
@@ -1412,21 +1509,21 @@ const Store = (function () {
     };
   }
 
-  // Looks up the Code of Discipline's suggested penalty for an employee's NEXT occurrence
-  // of a given offense (their past-12-month count + 1), clamped to the offense's last
-  // defined tier if they've exceeded the schedule's length. Informational only -- HR still
-  // records the actual resolution/penalty manually; this never auto-applies anything.
+  // Looks up the Code of Discipline's suggested penalty for an employee's NEXT offense of
+  // the same class (see offenseOccurrenceCount), clamped to the schedule's last tier once
+  // they've exceeded its length. Informational only -- HR still records the actual
+  // resolution/penalty manually; this never auto-applies anything.
   function suggestedPenaltyFor(employeeId, offenseCode, asOfDate) {
-    let entry = null;
-    for (const cat of disciplineCatalog()) {
-      const found = cat.offenses.find(o => o.code === offenseCode);
-      if (found) { entry = found; break; }
-    }
-    if (!entry) return null;
+    const entry = findCatalogOffense(offenseCode);
+    if (!entry || !entry.schedule.length) return null;
     const priorCount = offenseOccurrenceCount(employeeId, offenseCode, asOfDate);
     const occurrence = priorCount + 1;
     const code = entry.schedule[Math.min(occurrence, entry.schedule.length) - 1];
-    return { occurrence, code, label: penaltyLabel(code) };
+    const cls = PENALTY_CLASSES[entry.klass];
+    return {
+      occurrence, code, label: penaltyLabel(code),
+      klass: entry.klass || '', classLabel: cls ? cls.label : '',
+    };
   }
   async function addCase(nte) {
     nte.id = genId('d');
@@ -2710,6 +2807,7 @@ const Store = (function () {
     listEmployees, getEmployee, addEmployee, updateEmployee, deleteEmployee,
     listCandidates, getCandidate, addCandidate, moveCandidateStage, decideCandidate, deleteCandidate,
     listCases, getCase, addCase, updateCase, deleteCase, offenseOccurrenceCount, suggestedPenaltyFor,
+    findCatalogOffense, prescriptionFor, prescriptionDeadline, NTE_MIN_ANSWER_DAYS, PRESCRIPTION_DAYS,
     listComplaints, getComplaint, addComplaint, updateComplaint, deleteComplaint,
     listAttendance, attendanceForDate, attendanceInRange, addAttendance, updateAttendance, deleteAttendance,
     uploadAttendancePhoto, getSignedPhotoUrl, deleteAttendancePhoto,

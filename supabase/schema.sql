@@ -2593,6 +2593,15 @@ alter table "disciplinaryCases" add column if not exists "secondNoticeDecision" 
 -- "violation" column is unaffected and still holds the human-readable description either way.
 alter table "disciplinaryCases" add column if not exists "offenseCode" text;
 
+-- Prescription of offenses (Code of Discipline, Series 2, Sec. 3.11). "dateDiscovered" is
+-- when the offense became known to the immediate superior or HRD, whichever is earlier;
+-- the Issue NTE form refuses an NTE issued after the prescriptive period from that date.
+-- "longPrescription" records whether the one-year period (fraud, dishonesty, theft,
+-- falsification, sexual harassment, violence) applied instead of sixty days.
+-- See migrations/20260914120000_nte_prescription.sql.
+alter table "disciplinaryCases" add column if not exists "dateDiscovered" date;
+alter table "disciplinaryCases" add column if not exists "longPrescription" boolean not null default false;
+
 -- ---------- 6. Contribution tables (SSS / PhilHealth / Pag-IBIG) ----------
 -- HR-editable reference data used only to PRE-FILL (never silently auto-apply) the
 -- amount field when adding a matching deduction on the existing Payroll tab.
