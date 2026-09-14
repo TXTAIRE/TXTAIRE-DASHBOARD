@@ -268,6 +268,10 @@ function renderEssRoute() {
   applyEssNavLang();
   const view = window.EssViews[essRoute];
   if (view && view.render) view.render(main, myEmployee);
+  // Shown on every tab, not just the landing one -- an employee browsing Payroll or Leave
+  // offline needs to know just as much that what they're looking at is a saved snapshot,
+  // not this second's real data.
+  renderOfflineBanner(main);
   // Landing tab only (My Attendance is the first thing an employee sees after signing
   // in) -- runs after the view's own render since every view's render() replaces
   // main.innerHTML wholesale, so this has to prepend rather than render first.
@@ -277,6 +281,21 @@ function renderEssRoute() {
     renderMissingBirthdateNudge(main, myEmployee);
   }
   updateEssBellBadge();
+}
+
+// Tells the employee outright when what they're looking at is a saved snapshot rather
+// than this second's real data (see Store.initForEss/refreshEssData) -- an unlabeled
+// offline view of stale data would be actively misleading for something like My Payroll.
+function renderOfflineBanner(main) {
+  if (!essOffline) return;
+  const asOf = essOfflineCachedAt
+    ? ' as of ' + new Date(essOfflineCachedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : '';
+  main.insertAdjacentHTML('afterbegin', `
+    <div class="ess-card" style="background:#fff8e1; border-color:#f2c14e; text-align:left;">
+      📴 You're offline — showing your last saved data${asOf}. It'll sync automatically once you're back online.
+    </div>
+  `);
 }
 
 const ANNOUNCEMENT_DISMISS_KEY = 'essDismissedAnnouncements';
@@ -1019,21 +1038,60 @@ function showEssBirthdayCelebration(emp) {
 }
 
 let essStarted = false;
+let essOffline = false;
+let essOfflineCachedAt = null;
+let essOnlineSyncAttached = false;
 async function startEss(session) {
   if (essStarted) return;
 
-  await Store.init();
+  // Store.initForEss (not the admin dashboard's plain Store.init()) falls back to this
+  // device's last-saved snapshot for this exact employee when the live fetch fails --
+  // lets My Portal actually open with no connectivity at all, instead of just going blank.
+  const initResult = await Store.initForEss(session.user.id);
   const employees = Store.listEmployees();
   // RLS already restricts a linked employee's session to their own row; if it comes back
-  // empty, this account isn't linked to an employee (e.g. an admin login, or access was
-  // revoked) — the ESS portal isn't for them.
+  // empty AND we know this was a genuine online fetch (not a network failure with no
+  // cache to fall back to), this account isn't linked to an employee (e.g. an admin
+  // login, or access was revoked) — the ESS portal isn't for them. An empty result while
+  // offline with nothing cached yet is a completely different situation -- this device
+  // has simply never loaded My Portal before and needs one real connection first -- so it
+  // must never be treated as "not linked" and sign the employee out over it.
   if (!employees.length) {
+    if (initResult.offline) {
+      showEssLogin('You\'re offline, and this device hasn\'t loaded My Portal before. Connect to the internet once to set it up here, then it\'ll keep working offline afterward.');
+      return;
+    }
     await sb.auth.signOut();
     showEssLogin('This login isn\'t linked to an employee portal account. Contact HR.');
     return;
   }
   myEmployee = employees[0];
   essStarted = true;
+  essOffline = initResult.offline;
+  essOfflineCachedAt = initResult.cachedAt || null;
+
+  // Auto-resyncs the moment connectivity returns -- matches the same "queue now, sync
+  // automatically once you're back online" promise the attendance photo capture flow
+  // already makes, just for the rest of My Portal's data too. Only ever attached once
+  // (essOnlineSyncAttached), since startEss itself only ever runs once per login.
+  if (!essOnlineSyncAttached) {
+    essOnlineSyncAttached = true;
+    window.addEventListener('online', async () => {
+      const result = await Store.refreshEssData(session.user.id);
+      essOffline = result.offline;
+      if (!result.offline) {
+        essOfflineCachedAt = null;
+        toast('✔ Back online — synced.');
+      }
+      // Re-renders the current tab regardless of which one it is -- Payroll, Leave, etc.
+      // can all be showing stale cached data just as much as Attendance can, not only the
+      // landing tab. Skipped while a modal is open, same courtesy Store.onRemoteChange
+      // already gives any other background update -- a bell-badge refresh instead of
+      // yanking the screen out from under whatever the employee is mid-typing into.
+      if (qs('.modal-backdrop')) updateEssBellBadge();
+      else renderEssRoute();
+    });
+  }
 
   qs('#ess-login').classList.add('hidden');
   qs('#ess-app').classList.remove('hidden');

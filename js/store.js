@@ -1047,6 +1047,89 @@ const Store = (function () {
     });
   }
 
+  // ---- My Portal offline access (js/ess-app.js only -- the admin dashboard always calls
+  // the plain init() above and always requires a live connection) ----
+  // Persists the exact same RLS-scoped data an employee's session just fetched (their own
+  // attendance/leave/notifications/etc. -- nothing an admin-only table would leak, since
+  // this only ever mirrors what the live fetch already returned) so a later offline open
+  // still has something real to show instead of a blank app. Keyed by auth user id, which
+  // is known before the employees table even loads -- unlike employee id, which the
+  // employees row itself would have to succeed in fetching first.
+  const ESS_CACHE_KEY = 'txtaireEssDataCache';
+  function saveEssCache(authUserId) {
+    try {
+      localStorage.setItem(ESS_CACHE_KEY, JSON.stringify({ authUserId, savedAt: Date.now(), state }));
+    } catch (err) { /* storage full/unavailable -- offline fallback just won't have a cache */ }
+  }
+  function loadEssCache(authUserId) {
+    try {
+      const raw = JSON.parse(localStorage.getItem(ESS_CACHE_KEY) || 'null');
+      if (raw && raw.authUserId === authUserId) return raw;
+    } catch (err) { /* ignore */ }
+    return null;
+  }
+
+  // Realtime channels only ever need subscribing once per page load -- the underlying
+  // Supabase realtime client reconnects its own WebSocket automatically when connectivity
+  // returns, so there's nothing to redo there; only the table data itself needs a fresh
+  // refetch (see refreshEssData below), not a resubscribe.
+  let essChannelsSubscribed = false;
+  function subscribeEssChannelsOnce() {
+    if (essChannelsSubscribed) return;
+    essChannelsSubscribed = true;
+    Object.keys(TABLES).forEach(key => {
+      sb.channel('public:' + TABLES[key])
+        .on('postgres_changes', { event: '*', schema: 'public', table: TABLES[key] }, async () => {
+          await refetch(key);
+          notifyRemoteChange();
+        })
+        .subscribe();
+    });
+  }
+
+  // Fetches every table once, same as init() above, but reports success/failure instead
+  // of leaving a failed table silently empty with a toast -- the caller decides what
+  // "offline" should look like (fall back to cache on first load, or just leave whatever's
+  // already showing alone on a background resync).
+  async function fetchAllTablesOnce() {
+    const results = await Promise.allSettled(Object.keys(TABLES).map(async (key) => {
+      const { data, error } = await sb.from(TABLES[key]).select('*');
+      if (error) throw error;
+      state[key] = data || [];
+    }));
+    return !results.some(r => r.status === 'rejected');
+  }
+
+  // Called once at ESS boot (js/ess-app.js bootEss/startEss) instead of init(). A network
+  // failure here (no connectivity at all, or the very first login on a device with no
+  // prior cache) falls back to this device's last-saved snapshot for THIS employee rather
+  // than leaving the app entirely blank -- the caller uses the returned `offline` flag to
+  // show that state honestly instead of silently pretending everything is current.
+  async function initForEss(authUserId) {
+    const ok = await fetchAllTablesOnce();
+    if (!ok) {
+      const cached = loadEssCache(authUserId);
+      if (cached) Object.keys(TABLES).forEach(key => { if (key in cached.state) state[key] = cached.state[key]; });
+      return { offline: true, cachedAt: cached ? cached.savedAt : null };
+    }
+    subscribeEssChannelsOnce();
+    saveEssCache(authUserId);
+    return { offline: false };
+  }
+
+  // Re-run when connectivity returns (js/ess-app.js's 'online' listener) so a device that
+  // opened My Portal offline automatically catches up the moment it's back, matching the
+  // same "queue now, sync automatically later" promise the attendance photo capture flow
+  // already makes for Time In/Out specifically -- this is the same idea for everything else
+  // in My Portal.
+  async function refreshEssData(authUserId) {
+    const ok = await fetchAllTablesOnce();
+    if (!ok) return { offline: true };
+    subscribeEssChannelsOnce();
+    saveEssCache(authUserId);
+    return { offline: false };
+  }
+
   async function mutate(promise, errMsgPrefix) {
     const { error } = await promise;
     if (error) {
@@ -2581,7 +2664,7 @@ const Store = (function () {
   function exportAllData() { return JSON.parse(JSON.stringify(state)); }
 
   return {
-    init, onRemoteChange,
+    init, initForEss, refreshEssData, onRemoteChange,
     listEmployees, getEmployee, addEmployee, updateEmployee, deleteEmployee,
     listCandidates, getCandidate, addCandidate, moveCandidateStage, decideCandidate, deleteCandidate,
     listCases, getCase, addCase, updateCase, deleteCase, offenseOccurrenceCount, suggestedPenaltyFor,
