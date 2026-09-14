@@ -1158,39 +1158,47 @@ async function startEss(session) {
 // own async call never resolves.
 function readStoredEssAuthUserId() {
   try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) {
-        const raw = JSON.parse(localStorage.getItem(k));
-        if (raw && raw.user && raw.user.id) return raw.user.id;
-      }
-    }
+    // js/supabase-config.js gives ess.html its own fixed storageKey ('txtaire-ess-auth',
+    // not Supabase's own default 'sb-<project-ref>-auth-token' pattern) specifically so an
+    // admin's session on a shared office PC never collides with an employee's -- this has
+    // to read that exact same key, not guess at the SDK's default naming.
+    const raw = JSON.parse(localStorage.getItem('txtaire-ess-auth'));
+    if (raw && raw.user && raw.user.id) return raw.user.id;
   } catch (err) { /* ignore -- treat as no stored session */ }
   return null;
 }
 
 async function bootEss() {
-  // Race sb.auth.getSession() against a hard timeout -- see readStoredEssAuthUserId
-  // above for why this can't be trusted to always resolve on its own when offline.
+  // Race sb.auth.getSession() against a hard timeout -- see readStoredEssAuthUserId above
+  // for why this can't be trusted to always resolve on its own when offline. Deliberately
+  // NOT gated on navigator.onLine anywhere below: Safari (especially iOS) is well known to
+  // report that flag inaccurately -- it can read `true` with zero actual connectivity --
+  // so whether the real network call actually completed in time is the only signal this
+  // trusts, on either Safari or Chrome.
   let session = null;
+  let timedOut = false;
   try {
-    const timedOut = new Promise((resolve) => setTimeout(() => resolve('timeout'), 5000));
-    const result = await Promise.race([sb.auth.getSession(), timedOut]);
-    if (result !== 'timeout') session = result.data.session;
-  } catch (err) { session = null; }
+    const timeoutMarker = new Promise((resolve) => setTimeout(() => resolve('__timeout__'), 5000));
+    const result = await Promise.race([sb.auth.getSession(), timeoutMarker]);
+    if (result === '__timeout__') timedOut = true;
+    else session = result.data.session;
+  } catch (err) { timedOut = true; }
 
   if (session) {
     await startEss(session);
-  } else if (!navigator.onLine) {
-    // getSession() either timed out or genuinely has nothing while offline -- fall back
-    // to whatever auth user id Supabase last persisted locally, so a device that's
-    // already been signed in here before can still open My Portal (Store.initForEss then
-    // serves its own cached data for that user) instead of being stuck on a blank screen.
+  } else if (timedOut) {
+    // getSession() never came back at all within 5 seconds -- fall back to whatever auth
+    // user id Supabase last persisted locally, so a device that's already been signed in
+    // here before can still open My Portal (Store.initForEss then serves its own cached
+    // data for that user) instead of being stuck on a blank screen. A genuinely-resolved
+    // "no session" (below) is treated completely differently -- that means an expired or
+    // never-existing login, which always needs a real sign-in regardless of connectivity,
+    // not a silent reuse of a stale identity.
     const authUserId = readStoredEssAuthUserId();
     if (authUserId) {
       await startEss({ user: { id: authUserId } });
     } else {
-      showEssLogin('You appear to be offline, and this device has no saved My Portal login yet. Connect to the internet once to sign in.');
+      showEssLogin('Couldn\'t reach the server, and this device has no saved My Portal login yet. Check your connection and try again.');
     }
   } else {
     showEssLogin();
