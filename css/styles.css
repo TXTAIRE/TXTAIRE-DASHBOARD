@@ -770,22 +770,17 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .billing-items-table th.qty, .billing-items-table td.qty { width: 44px; text-align: center; }
 .billing-items-table th.unit, .billing-items-table td.unit { width: 54px; text-align: center; }
 .billing-items-table th.price, .billing-items-table td.price { width: 92px; text-align: right; }
-.billing-items-table tbody tr:last-child td { border-top: none; }
-.billing-nothing-follows { text-align: center; font-style: italic; color: #666; border-top: none !important; }
-/* A short invoice (few items) still fills most of the page, same "own the space" feel
-   as the real printed form's very tall, mostly-blank items table. */
-.billing-items-table tbody { min-height: 400px; }
-
-.billing-summary-row { display: flex; gap: 16px; margin-top: 8px; align-items: flex-start; }
-/* Tables default to sizing off their own content (and to a min-width derived from that
-   content) even inside a flex container, so without explicit flex-basis/min-width here the
-   totals table was claiming most of the row and squeezing "Amount In Words" down to a
-   sliver. Fixed widths on both sides sidestep that entirely. */
-.billing-words { flex: 1 1 auto; min-width: 0; }
-.billing-totals-table { border-collapse: collapse; font-size: 10.5px; flex: 0 0 240px; width: 240px; min-width: 0; }
-.billing-totals-table td { padding: 3px 8px; }
-.billing-totals-table td.price { text-align: right; font-weight: 600; }
-.billing-totals-table tr.total td { border-top: 1.5px solid #333; font-weight: 700; }
+.billing-nothing-follows { text-align: center; font-style: italic; color: #666; border-top: none !important; border-bottom: none !important; }
+/* Real invoice paper is one tall bordered box: a couple of item lines up top, then blank
+   ruled space, then the amount-in-words/totals as the box's own last rows near the
+   bottom -- not a separate section below it. This fill row is what makes the box tall;
+   its height is tuned so a typical short (1-3 line) invoice reads as filling the page,
+   matching the paper form -- an invoice with many more items will push the totals lower
+   on the page rather than past a second page, which is the safer failure mode. */
+.billing-fill-row td { height: 115mm; border-top: none !important; border-bottom: none !important; }
+.billing-words-cell { vertical-align: top; }
+.billing-total-label { font-weight: 400; }
+.billing-total-final td { font-weight: 700; border-top: 1.5px solid #333 !important; }
 
 .billing-footer { display: flex; border-top: 1px solid #333; margin-top: 14px; padding-top: 10px; }
 .billing-footer > div { flex: 1; padding: 0 8px; text-align: center; font-size: 9.5px; }

@@ -1304,21 +1304,20 @@ window.Views.finance = (function () {
               </tr>
             `).join('')}
             <tr><td colspan="6" class="billing-nothing-follows">** NOTHING FOLLOWS **</td></tr>
+            <tr class="billing-fill-row"><td colspan="6"></td></tr>
+            <tr>
+              <td colspan="4" rowspan="3" class="billing-words-cell">
+                <div class="billing-label">Amount In Words:</div>
+                <div class="billing-value">${escapeHtml(v.amountInWords || amountToWords(total))}</div>
+                <div class="billing-label" style="margin-top:8px;">Pay In Order Of:</div>
+                <div class="billing-value" style="text-decoration:underline;">${escapeHtml(v.payInOrderOf || '')}</div>
+              </td>
+              <td class="billing-total-label">Net of VAT</td><td class="price">${fmtMoney(net)}</td>
+            </tr>
+            <tr><td class="billing-total-label">Add: 12% VAT</td><td class="price">${fmtMoney(vat)}</td></tr>
+            <tr class="billing-total-final"><td class="billing-total-label">Total Amount</td><td class="price">${fmtMoney(total)}</td></tr>
           </tbody>
         </table>
-        <div class="billing-summary-row">
-          <div class="billing-words">
-            <div class="billing-label">Amount In Words:</div>
-            <div class="billing-value">${escapeHtml(v.amountInWords || amountToWords(total))}</div>
-            <div class="billing-label" style="margin-top:8px;">Pay In Order Of:</div>
-            <div class="billing-value" style="text-decoration:underline;">${escapeHtml(v.payInOrderOf || '')}</div>
-          </div>
-          <table class="billing-totals-table">
-            <tr><td>Net of VAT</td><td class="price">${fmtMoney(net)}</td></tr>
-            <tr><td>Add: 12% VAT</td><td class="price">${fmtMoney(vat)}</td></tr>
-            <tr class="total"><td>Total Amount</td><td class="price">${fmtMoney(total)}</td></tr>
-          </table>
-        </div>
         <div class="billing-footer">
           <div><span class="billing-label">Prepared By:</span><div class="billing-sig-blank"></div><span class="billing-value">${escapeHtml(v.preparedBy || '')}</span><br/><span class="billing-sig-title">${escapeHtml(v.preparedByTitle || '')}</span></div>
           <div><span class="billing-label">Approved By:</span><div class="billing-sig-blank"></div><span class="billing-value">${escapeHtml(v.approvedBy || '')}</span><br/><span class="billing-sig-title">${escapeHtml(v.approvedByTitle || '')}</span></div>
