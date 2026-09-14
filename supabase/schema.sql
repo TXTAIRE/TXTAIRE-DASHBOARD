@@ -3142,3 +3142,50 @@ create policy "public reads pinned announcements" on announcements
 -- comparison against today, no cron/Edge Function involved. No RLS change needed: the
 -- existing employees policies already let HR write it and an employee read their own row.
 alter table employees add column if not exists "birthDate" date;
+
+-- =================================================================
+-- Billing Invoices -- new "Billing Invoices" tab on the Office & Finance page, matching
+-- the company's real printed Billing Invoice form (client info, itemized particulars,
+-- Net of VAT / 12% VAT / Total Amount) for whichever of the three entities issued it
+-- (TXTAIRE OPC, TXTAIRE REF, AVISO -- same three used throughout Office & Finance). Same
+-- shape and admin-only access as "paymentVouchers": a jsonb items array (mirrors that
+-- table's particulars column) plus an auto-assigned "biNo" (js/store.js
+-- nextBillingInvoiceNo) matching the numbering already stamped on the company's real
+-- invoices -- <2-digit year><entity prefix><sequence>, e.g. "26R138", "26OPC104",
+-- "26C017" -- sequential per year+entity based on how many rows already carry that
+-- prefix, same non-gap-filling tradeoff nextVoucherRefNo already has. Admin-only, no
+-- employee-facing policy at all -- same pattern as paymentVouchers/expenses/bills.
+-- =================================================================
+
+create table if not exists "billingInvoices" (
+  id text primary key,
+  "biNo" text not null,
+  entity text not null default 'TXTAIRE OPC',   -- 'TXTAIRE OPC' | 'TXTAIRE REF' | 'AVISO'
+  date date not null,
+  "clientName" text not null default '',
+  "clientTin" text default '',
+  "clientAddress" text default '',
+  "purchaseOrderNo" text default '',
+  "contactPerson" text default '',
+  "contactNumber" text default '',
+  "invoiceNo" text default '',                  -- separate manual Sales/Service Invoice No., printed alongside the auto biNo
+  terms text default '30 days upon receipt of invoice',
+  items jsonb default '[]'::jsonb,               -- [{qty, unit, description, unitPrice, amount}]
+  amount numeric(12,2) not null default 0,       -- total, VAT-inclusive -- mirrors paymentVouchers.amount for list/report totals
+  "amountInWords" text default '',
+  "payInOrderOf" text default '',
+  "preparedBy" text default '',
+  "preparedByTitle" text default '',
+  "approvedBy" text default '',
+  "approvedByTitle" text default '',
+  "enteredBy" text,
+  created_at timestamptz not null default now()
+);
+
+alter table "billingInvoices" enable row level security;
+
+drop policy if exists "admin full access" on "billingInvoices";
+create policy "admin full access" on "billingInvoices"
+  for all to authenticated using (is_admin()) with check (is_admin());
+
+alter publication supabase_realtime add table "billingInvoices";

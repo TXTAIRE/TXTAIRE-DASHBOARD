@@ -973,6 +973,7 @@ const Store = (function () {
     attendanceCorrections: 'attendanceCorrections',
     scheduleChangeRequests: 'scheduleChangeRequests',
     paymentVouchers: 'paymentVouchers',
+    billingInvoices: 'billingInvoices',
     auditLog: 'auditLog',
     notifications: 'notifications',
     payrollReleases: 'payrollReleases',
@@ -1002,7 +1003,7 @@ const Store = (function () {
     employees: [], candidates: [], disciplinaryCases: [], complaints: [],
     attendance: [], deductions: [], bonuses: [], probationRecords: [], payrollOverrides: [], holidays: [],
     payCutoffSettings: [],
-    leaveRequests: [], attendanceCorrections: [], scheduleChangeRequests: [], paymentVouchers: [], auditLog: [],
+    leaveRequests: [], attendanceCorrections: [], scheduleChangeRequests: [], paymentVouchers: [], billingInvoices: [], auditLog: [],
     notifications: [], payrollReleases: [], appSettings: [],
     expenses: [], bills: [], officeFiles: [],
     employmentHistory: [], employeeDocuments: [],
@@ -2208,6 +2209,36 @@ const Store = (function () {
     await deleteRow('paymentVouchers', id);
   }
 
+  function listBillingInvoices() { return state.billingInvoices.slice(); }
+  function getBillingInvoice(id) { return state.billingInvoices.find(v => v.id === id); }
+  function billingInvoicesInRange(from, to) { return state.billingInvoices.filter(v => v.date >= from && v.date <= to); }
+  // BI No. matches the company's real invoices: <2-digit year><entity prefix><sequence>,
+  // e.g. "26R138" (TXTAIRE REF), "26OPC104" (TXTAIRE OPC), "26C017" (AVISO) -- sequential
+  // per year+entity based on how many rows already carry that year+prefix, same
+  // non-gap-filling tradeoff as nextVoucherRefNo. Starts fresh from this app's own count,
+  // same as vouchers do -- it does not try to continue the paper trail's historical
+  // numbering, only guarantees no collisions going forward.
+  const BILLING_ENTITY_PREFIX = { 'TXTAIRE REF': 'R', 'TXTAIRE OPC': 'OPC', 'AVISO': 'C' };
+  function nextBillingInvoiceNo(dateStr, entity) {
+    const year = (dateStr || todayISO()).slice(2, 4);
+    const prefix = BILLING_ENTITY_PREFIX[entity] || 'R';
+    const stamp = year + prefix;
+    const countThisYear = state.billingInvoices.filter(v => (v.biNo || '').startsWith(stamp)).length;
+    return stamp + String(countThisYear + 1).padStart(3, '0');
+  }
+  async function addBillingInvoice(v) {
+    v.id = genId('bi');
+    v.biNo = nextBillingInvoiceNo(v.date, v.entity);
+    return insertRow('billingInvoices', v);
+  }
+  async function updateBillingInvoice(id, patch) {
+    await updateRow('billingInvoices', id, patch);
+    return getBillingInvoice(id);
+  }
+  async function deleteBillingInvoice(id) {
+    await deleteRow('billingInvoices', id);
+  }
+
   // ---- 13th Month Pay (PD 851) ----
   // Statutory: total basic salary actually earned within the calendar year, divided by
   // 12. Pure computation over the same computeRow(emp, from, to).basePay used everywhere
@@ -2577,6 +2608,7 @@ const Store = (function () {
     uploadReceiptPhoto, getSignedReceiptUrl, deleteReceiptPhoto,
     listBills, getBill, addBill, updateBill, deleteBill, payBill,
     listPaymentVouchers, getPaymentVoucher, paymentVouchersInRange, addPaymentVoucher, updatePaymentVoucher, deletePaymentVoucher,
+    listBillingInvoices, getBillingInvoice, billingInvoicesInRange, addBillingInvoice, updateBillingInvoice, deleteBillingInvoice,
     listOfficeFiles, uploadOfficeFile, getSignedOfficeFileUrl, deleteOfficeFile, updateOfficeFile, duplicateOfficeFile,
     listMaterialRequests, addMaterialRequest, updateMaterialRequest, deleteMaterialRequest,
     employeeDocumentsForEmployee, uploadEmployeeDocument, getSignedEmployeeDocumentUrl, updateEmployeeDocument, deleteEmployeeDocument,

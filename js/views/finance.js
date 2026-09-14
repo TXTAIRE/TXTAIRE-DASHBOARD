@@ -18,6 +18,7 @@ window.Views.finance = (function () {
   // catch-up session should land in August's report, not get scattered back into May's.
   let expenseFilterBy = 'encoded'; // 'encoded' | 'issued'
   let voucherMonth = todayISO().slice(0, 7); // 'YYYY-MM'
+  let billingInvoiceMonth = todayISO().slice(0, 7); // 'YYYY-MM'
   let thirteenthMonthYear = new Date(todayISO() + 'T00:00:00').getFullYear();
 
   function renderView(main) {
@@ -31,12 +32,14 @@ window.Views.finance = (function () {
         ${activeTab === 'expenses' ? '<button class="btn btn-primary" id="btn-new-expense">+ Add expense</button>' : ''}
         ${activeTab === 'bills' ? '<button class="btn btn-primary" id="btn-new-bill">+ Add bill</button>' : ''}
         ${activeTab === 'vouchers' ? '<button class="btn btn-primary" id="btn-new-voucher">+ Add payment voucher</button>' : ''}
+        ${activeTab === 'billingInvoices' ? '<button class="btn btn-primary" id="btn-new-billing-invoice">+ Add billing invoice</button>' : ''}
       </div>
 
       <div class="tabs">
         <div class="tab ${activeTab === 'expenses' ? 'active' : ''}" data-tab="expenses">Expenses &amp; Receipts</div>
         <div class="tab ${activeTab === 'bills' ? 'active' : ''}" data-tab="bills">Bill Reminders</div>
         <div class="tab ${activeTab === 'vouchers' ? 'active' : ''}" data-tab="vouchers">Payment Vouchers</div>
+        <div class="tab ${activeTab === 'billingInvoices' ? 'active' : ''}" data-tab="billingInvoices">Billing Invoices</div>
         <div class="tab ${activeTab === 'thirteenthMonth' ? 'active' : ''}" data-tab="thirteenthMonth">13th Month Pay</div>
       </div>
 
@@ -50,10 +53,13 @@ window.Views.finance = (function () {
     if (btnNewBill) btnNewBill.addEventListener('click', () => openBillForm(main));
     const btnNewVoucher = qs('#btn-new-voucher', main);
     if (btnNewVoucher) btnNewVoucher.addEventListener('click', () => openVoucherForm(main));
+    const btnNewBillingInvoice = qs('#btn-new-billing-invoice', main);
+    if (btnNewBillingInvoice) btnNewBillingInvoice.addEventListener('click', () => openBillingInvoiceForm(main));
 
     if (activeTab === 'expenses') renderExpensesTab(qs('#tab-body', main), main);
     else if (activeTab === 'bills') renderBillsTab(qs('#tab-body', main), main);
     else if (activeTab === 'vouchers') renderVouchersTab(qs('#tab-body', main), main);
+    else if (activeTab === 'billingInvoices') renderBillingInvoicesTab(qs('#tab-body', main), main);
     else render13thMonthTab(qs('#tab-body', main), main);
   }
 
@@ -608,6 +614,48 @@ window.Views.finance = (function () {
 
   const PAYMENT_METHODS = ['Cash', 'Check'];
 
+  // Letterhead content for the printed Billing Invoice, one per entity -- transcribed
+  // from the company's actual invoice paper stock so a printed invoice from this app
+  // matches the real one exactly. AVISO's logo is a raster export (assets/aviso-logo.png,
+  // cropped from a scanned invoice) since no vector source exists, unlike the other two
+  // entities' shared wave logo (assets/logo.svg).
+  const BILLING_LETTERHEADS = {
+    'TXTAIRE REF': {
+      logo: 'assets/logo.svg', logoHeight: 46,
+      name: 'TXTAIRE REFRIGERATION AND AIRCONDITIONING SERVICES',
+      lines: [
+        'p: (049) 549 2847 / (049) 546 6253&nbsp;&nbsp;&nbsp;m: 0995-550-0300 / 0991-390-5952',
+        'a: 112 Lawin St. San Jose Village, Brgy. Biñan, Biñan City, Laguna 4024',
+        'e: service@txtaire.com',
+      ],
+      vatTin: '902-637-379-00000',
+      payInOrderOf: 'TXTAIRE REFRIGERATION AND AIRCONDITIONING SERVICES',
+    },
+    'TXTAIRE OPC': {
+      logo: 'assets/logo.svg', logoHeight: 46,
+      name: 'TXTAIRE OPC',
+      nameSuffix: '(SEC Company Reg. No.: 2024090170638-11)',
+      tagline: 'Refrigeration and Air-conditioning Solutions',
+      lines: [
+        'Tel No.: (049) 549 2847 / (049) 546 6253&nbsp;&nbsp;&nbsp;Mobile: +63969 647 0000&nbsp;&nbsp;&nbsp;Email: service@txtaire.com',
+        'Main Office: No.112 Lawin St. San Jose Village, Brgy.Biñan, City of Biñan, Laguna 4024',
+        'Field Offices: Unit 301, 141-Q BGC Residence, East Rembo, Makati City',
+      ],
+      vatTin: '902-637-379-00000',
+      payInOrderOf: 'TXTAIRE OPC',
+    },
+    'AVISO': {
+      logo: 'assets/aviso-logo.png', logoHeight: 40,
+      lines: [
+        'No.112 Lawin St. San Jose Village, Brgy. Biñan, Biñan City, Laguna',
+        'Contact Details: +6349 539 2847 / +63917 323 2644',
+        'Email: engr.jmaviso@gmail.com',
+      ],
+      vatTin: '',
+      payInOrderOf: 'JOEL M. AVISO',
+    },
+  };
+
   function voucherSignatoryDefaultsCard(main) {
     const cName = Store.getAppSetting('voucherCertifiedCorrectByDefault', '');
     const aName = Store.getAppSetting('voucherApprovedByDefault', '');
@@ -948,6 +996,357 @@ window.Views.finance = (function () {
     document.body.appendChild(overlay);
     overlay.querySelector('#voucher-close').addEventListener('click', () => overlay.remove());
     overlay.querySelector('#voucher-print-btn').addEventListener('click', () => window.print());
+  }
+
+  // ---------------- Billing Invoices ----------------
+
+  function renderBillingInvoicesTab(body, main) {
+    const from = billingInvoiceMonth + '-01';
+    const to = billingInvoiceMonth + '-31';
+    const rows = Store.billingInvoicesInRange(from, to).slice().sort((a, b) => b.date.localeCompare(a.date));
+    const total = rows.reduce((s, r) => s + Number(r.amount), 0);
+    const monthLabel = new Date(billingInvoiceMonth + '-01T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    body.innerHTML = `
+      <div class="filters">
+        <div class="field"><label>Month</label><input type="month" id="billing-invoice-month-input" value="${billingInvoiceMonth}" /></div>
+        <button class="btn btn-ghost btn-sm" id="btn-print-billing-invoices" style="align-self:flex-end;" ${rows.length ? '' : 'disabled'}>🖨 Print Invoices</button>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-label">Total Billed — ${monthLabel}</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(total)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Entries</div><div class="kpi-value">${rows.length}</div></div>
+      </div>
+
+      <div class="panel">
+        ${rows.length ? `
+        <table>
+          <thead><tr><th>BI No.</th><th>Date</th><th>Entity</th><th>Client</th><th class="num">Amount</th><th>Entered By</th><th></th></tr></thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td class="name">${escapeHtml(r.biNo)}</td>
+                <td class="dim">${fmtDate(r.date)}</td>
+                <td class="dim">${escapeHtml(r.entity)}</td>
+                <td class="dim">${escapeHtml(r.clientName)}</td>
+                <td class="num">${fmtMoney(r.amount)}</td>
+                <td class="dim">${escapeHtml(r.enteredBy || '—')}</td>
+                <td style="white-space:nowrap;">
+                  <button class="link-btn" data-print-billing-invoice="${r.id}">Print</button>
+                  <button class="link-btn" data-edit-billing-invoice="${r.id}">Edit</button>
+                  <button class="link-btn" data-delete-billing-invoice="${r.id}" style="color:var(--red);">Delete</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>` : '<div class="empty">No billing invoices logged for this month.</div>'}
+      </div>
+    `;
+
+    qs('#billing-invoice-month-input', body).addEventListener('change', (ev) => { billingInvoiceMonth = ev.target.value; renderBillingInvoicesTab(body, main); });
+    const printAllBtn = qs('#btn-print-billing-invoices', body);
+    if (printAllBtn && !printAllBtn.disabled) printAllBtn.addEventListener('click', () => openBillingInvoicePrintView(rows));
+    qsa('[data-print-billing-invoice]', body).forEach(b => b.addEventListener('click', () => {
+      const r = Store.getBillingInvoice(b.dataset.printBillingInvoice);
+      if (r) openBillingInvoicePrintView([r]);
+    }));
+    qsa('[data-edit-billing-invoice]', body).forEach(b => b.addEventListener('click', () => {
+      const r = Store.getBillingInvoice(b.dataset.editBillingInvoice);
+      if (r) openBillingInvoiceForm(main, r);
+    }));
+    qsa('[data-delete-billing-invoice]', body).forEach(b => b.addEventListener('click', async () => {
+      const r = Store.getBillingInvoice(b.dataset.deleteBillingInvoice);
+      if (!r) return;
+      if (!confirm(`Delete billing invoice ${r.biNo} (${fmtMoney(r.amount)})? This cannot be undone.`)) return;
+      await Store.deleteBillingInvoice(r.id);
+      toast('✔ Billing invoice deleted.');
+      renderBillingInvoicesTab(body, main);
+    }));
+  }
+
+  function openBillingInvoiceForm(main, editing) {
+    const letterheadFor = (entity) => BILLING_LETTERHEADS[entity] || BILLING_LETTERHEADS['TXTAIRE OPC'];
+    const v = editing || {
+      entity: 'TXTAIRE OPC', date: todayISO(),
+      clientName: '', clientTin: '', clientAddress: '',
+      purchaseOrderNo: '', contactPerson: '', contactNumber: '', invoiceNo: '',
+      terms: '30 days upon receipt of invoice',
+      payInOrderOf: letterheadFor('TXTAIRE OPC').payInOrderOf,
+      preparedBy: '', preparedByTitle: '', approvedBy: '', approvedByTitle: '',
+    };
+    // Working copy of the itemized line items -- always at least one row so the editor
+    // never renders empty, same convention as the voucher's particulars editor. Amount is
+    // derived (qty * unitPrice), not directly typed, matching the real form's math.
+    let items = (Array.isArray(v.items) && v.items.length)
+      ? v.items.map(it => ({ qty: it.qty === '' || it.qty == null ? '' : it.qty, unit: it.unit || '', description: it.description || '', unitPrice: it.unitPrice === '' || it.unitPrice == null ? '' : it.unitPrice }))
+      : [{ qty: 1, unit: 'lot', description: '', unitPrice: '' }];
+
+    openModal(`
+      <h2>${editing ? 'Edit Billing Invoice' : 'Add Billing Invoice'}</h2>
+      ${editing ? `<div class="modal-sub">BI No.: <strong>${escapeHtml(editing.biNo)}</strong></div>` : '<div class="modal-sub">A BI No. is assigned automatically when saved.</div>'}
+      <form id="billing-invoice-form">
+        <div class="modal-grid">
+          <div class="field"><label>Entity (issuing letterhead)</label>
+            <select name="entity" id="billing-invoice-entity">${ENTITY_OPTIONS.map(e => `<option ${e === v.entity ? 'selected' : ''}>${e}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Date</label><input type="date" name="date" value="${v.date}" required /></div>
+          <div class="field full"><label>Client Name</label><input name="clientName" value="${escapeHtml(v.clientName)}" required /></div>
+          <div class="field"><label>Client TIN</label><input name="clientTin" value="${escapeHtml(v.clientTin || '')}" placeholder="e.g. 000-000-000-000" /></div>
+          <div class="field"><label>Client Address</label><input name="clientAddress" value="${escapeHtml(v.clientAddress || '')}" /></div>
+          <div class="field"><label>Purchase Order No.</label><input name="purchaseOrderNo" value="${escapeHtml(v.purchaseOrderNo || '')}" /></div>
+          <div class="field"><label>Contact Person</label><input name="contactPerson" value="${escapeHtml(v.contactPerson || '')}" /></div>
+          <div class="field"><label>Contact Number</label><input name="contactNumber" value="${escapeHtml(v.contactNumber || '')}" /></div>
+          <div class="field"><label>Invoice No. <span class="dim" style="font-weight:400;">(Sales/Service Invoice, optional)</span></label><input name="invoiceNo" value="${escapeHtml(v.invoiceNo || '')}" /></div>
+          <div class="field"><label>Terms</label><input name="terms" value="${escapeHtml(v.terms || '')}" /></div>
+          <div class="field full">
+            <label>Items</label>
+            <div id="billing-invoice-items-rows"></div>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-add-billing-item" style="align-self:flex-start; margin-top:6px;">+ Add line</button>
+            <div class="dim" style="margin-top:6px;" id="billing-invoice-totals"></div>
+          </div>
+          <div class="field"><label>Pay In Order Of</label><input name="payInOrderOf" value="${escapeHtml(v.payInOrderOf || '')}" /></div>
+          <div class="field"></div>
+          <div class="field"><label>Prepared By — Name</label><input name="preparedBy" value="${escapeHtml(v.preparedBy || '')}" /></div>
+          <div class="field"><label>Prepared By — Title</label><input name="preparedByTitle" value="${escapeHtml(v.preparedByTitle || '')}" /></div>
+          <div class="field"><label>Approved By — Name</label><input name="approvedBy" value="${escapeHtml(v.approvedBy || '')}" /></div>
+          <div class="field"><label>Approved By — Title</label><input name="approvedByTitle" value="${escapeHtml(v.approvedByTitle || '')}" /></div>
+        </div>
+        <div class="modal-actions">
+          ${editing ? '<button type="button" class="btn btn-danger" id="btn-del-billing-invoice">Delete</button>' : ''}
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">${editing ? 'Save changes' : 'Add invoice'}</button>
+        </div>
+      </form>
+    `, (bd) => {
+      function itemAmount(it) { return (Number(it.qty) || 0) * (Number(it.unitPrice) || 0); }
+      function netTotal() { return items.reduce((s, it) => s + itemAmount(it), 0); }
+      function renderTotals() {
+        const net = netTotal();
+        const vat = net * 0.12;
+        qs('#billing-invoice-totals', bd).innerHTML =
+          `Net of VAT: <strong>${fmtMoney(net)}</strong> &nbsp;+&nbsp; 12% VAT: <strong>${fmtMoney(vat)}</strong> &nbsp;=&nbsp; Total: <strong>${fmtMoney(net + vat)}</strong>`;
+      }
+      function renderItemRows() {
+        const wrap = qs('#billing-invoice-items-rows', bd);
+        wrap.innerHTML = items.map((it, i) => `
+          <div style="display:flex; gap:8px; margin-bottom:6px; align-items:flex-start;">
+            <input type="number" min="0" step="0.01" placeholder="Qty" value="${it.qty === '' ? '' : it.qty}" data-item-qty="${i}" style="width:70px;" />
+            <input type="text" placeholder="Unit" value="${escapeHtml(it.unit)}" data-item-unit="${i}" style="width:70px;" />
+            <input type="text" placeholder="Description" value="${escapeHtml(it.description)}" data-item-desc="${i}" style="flex:1;" />
+            <input type="number" min="0" step="0.01" placeholder="Unit Price" value="${it.unitPrice === '' ? '' : it.unitPrice}" data-item-price="${i}" style="width:110px;" />
+            <span class="dim" style="width:90px; text-align:right; padding-top:8px;" data-item-amount="${i}">${fmtMoney(itemAmount(it))}</span>
+            <button type="button" class="link-btn" data-remove-item="${i}" style="color:var(--red);">✕</button>
+          </div>
+        `).join('');
+        qsa('[data-item-qty]', wrap).forEach(el => el.addEventListener('input', () => {
+          items[Number(el.dataset.itemQty)].qty = el.value === '' ? '' : Number(el.value);
+          syncItemRow(Number(el.dataset.itemQty));
+        }));
+        qsa('[data-item-unit]', wrap).forEach(el => el.addEventListener('input', () => {
+          items[Number(el.dataset.itemUnit)].unit = el.value;
+        }));
+        qsa('[data-item-desc]', wrap).forEach(el => el.addEventListener('input', () => {
+          items[Number(el.dataset.itemDesc)].description = el.value;
+        }));
+        qsa('[data-item-price]', wrap).forEach(el => el.addEventListener('input', () => {
+          items[Number(el.dataset.itemPrice)].unitPrice = el.value === '' ? '' : Number(el.value);
+          syncItemRow(Number(el.dataset.itemPrice));
+        }));
+        qsa('[data-remove-item]', wrap).forEach(el => el.addEventListener('click', () => {
+          items.splice(Number(el.dataset.removeItem), 1);
+          if (!items.length) items.push({ qty: 1, unit: 'lot', description: '', unitPrice: '' });
+          renderItemRows();
+          renderTotals();
+        }));
+        function syncItemRow(i) {
+          const amountEl = wrap.querySelector(`[data-item-amount="${i}"]`);
+          if (amountEl) amountEl.textContent = fmtMoney(itemAmount(items[i]));
+          renderTotals();
+        }
+      }
+      renderItemRows();
+      renderTotals();
+      qs('#btn-add-billing-item', bd).addEventListener('click', () => {
+        items.push({ qty: 1, unit: 'lot', description: '', unitPrice: '' });
+        renderItemRows();
+        renderTotals();
+      });
+      // Switching the issuing entity mid-form re-defaults Pay In Order Of to that
+      // entity's own name, unless the user already typed something else in for this field.
+      qs('#billing-invoice-entity', bd).addEventListener('change', (ev) => {
+        const payField = qs('input[name="payInOrderOf"]', bd);
+        const stillDefault = !editing && Object.values(BILLING_LETTERHEADS).some(l => l.payInOrderOf === payField.value);
+        if (stillDefault) payField.value = letterheadFor(ev.target.value).payInOrderOf;
+      });
+
+      qs('#billing-invoice-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const submitBtn = qs('button[type="submit"]', bd);
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saving…';
+        try {
+          const cleanItems = items
+            .filter(it => it.description.trim() || it.unitPrice !== '')
+            .map(it => ({ qty: it.qty === '' ? '' : Number(it.qty), unit: it.unit.trim(), description: it.description.trim(), unitPrice: it.unitPrice === '' ? '' : Number(it.unitPrice), amount: itemAmount(it) }));
+          const net = cleanItems.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+          const total = net * 1.12;
+          const patch = {
+            entity: fd.get('entity'),
+            date: fd.get('date'),
+            clientName: fd.get('clientName').trim(),
+            clientTin: fd.get('clientTin').trim(),
+            clientAddress: fd.get('clientAddress').trim(),
+            purchaseOrderNo: fd.get('purchaseOrderNo').trim(),
+            contactPerson: fd.get('contactPerson').trim(),
+            contactNumber: fd.get('contactNumber').trim(),
+            invoiceNo: fd.get('invoiceNo').trim(),
+            terms: fd.get('terms').trim(),
+            items: cleanItems,
+            amount: total,
+            amountInWords: amountToWords(total),
+            payInOrderOf: fd.get('payInOrderOf').trim(),
+            preparedBy: fd.get('preparedBy').trim(),
+            preparedByTitle: fd.get('preparedByTitle').trim(),
+            approvedBy: fd.get('approvedBy').trim(),
+            approvedByTitle: fd.get('approvedByTitle').trim(),
+          };
+          if (editing) {
+            await Store.updateBillingInvoice(editing.id, patch);
+            toast('✔ Billing invoice updated.');
+          } else {
+            patch.enteredBy = currentUserEmail();
+            await Store.addBillingInvoice(patch);
+            toast('✔ Billing invoice added.');
+          }
+          closeModal();
+          renderView(main);
+        } catch (err) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = editing ? 'Save changes' : 'Add invoice';
+        }
+      });
+      const delBtn = qs('#btn-del-billing-invoice', bd);
+      if (delBtn) delBtn.addEventListener('click', async () => {
+        if (!confirm('Delete this billing invoice? This cannot be undone.')) return;
+        await Store.deleteBillingInvoice(editing.id);
+        closeModal();
+        toast('✔ Billing invoice deleted.');
+        renderView(main);
+      });
+    });
+  }
+
+  function billingInvoiceCardHtml(v) {
+    const lh = BILLING_LETTERHEADS[v.entity] || BILLING_LETTERHEADS['TXTAIRE OPC'];
+    const items = Array.isArray(v.items) ? v.items : [];
+    const net = items.length ? items.reduce((s, it) => s + (Number(it.amount) || 0), 0) : (Number(v.amount) || 0) / 1.12;
+    const vat = net * 0.12;
+    const total = Number(v.amount) || (net + vat);
+    return `
+      <div class="billing-card">
+        <div class="billing-header">
+          <img src="${lh.logo}" class="billing-logo" style="height:${lh.logoHeight}px;" alt="${escapeHtml(v.entity)}" />
+          <div class="billing-header-text">
+            ${lh.name ? `<div class="billing-company-name">${escapeHtml(lh.name)} ${lh.nameSuffix ? `<span class="billing-company-suffix">${escapeHtml(lh.nameSuffix)}</span>` : ''}</div>` : ''}
+            ${lh.tagline ? `<div class="billing-tagline">"${escapeHtml(lh.tagline)}"</div>` : ''}
+            ${lh.lines.map(l => `<div class="billing-contact-line">${l}</div>`).join('')}
+            ${lh.vatTin ? `<div class="billing-contact-line">VAT Reg. TIN: <strong>${escapeHtml(lh.vatTin)}</strong></div>` : ''}
+          </div>
+        </div>
+        <div class="billing-title">BILLING INVOICE</div>
+        <div class="billing-meta-table">
+          <div class="billing-meta-row">
+            <div class="billing-meta-cell wide">
+              <div class="billing-label">Client Name</div>
+              <div class="billing-value">${escapeHtml(v.clientName)}</div>
+              ${v.clientTin ? `<div class="billing-value">TIN: ${escapeHtml(v.clientTin)}</div>` : ''}
+            </div>
+            <div class="billing-meta-cell wide">
+              <div class="billing-label">Client Address</div>
+              <div class="billing-value">${escapeHtml(v.clientAddress || '').replace(/\n/g, '<br/>')}</div>
+            </div>
+            <div class="billing-meta-cell">
+              <div class="billing-label">Date</div>
+              <div class="billing-value">${fmtDate(v.date)}</div>
+            </div>
+          </div>
+          <div class="billing-meta-row">
+            <div class="billing-meta-cell wide">
+              <div class="billing-label">Purchase Order No.</div>
+              <div class="billing-value">${escapeHtml(v.purchaseOrderNo || '—')}</div>
+            </div>
+            <div class="billing-meta-cell wide">
+              <div class="billing-label">Contact Person</div>
+              <div class="billing-value">${escapeHtml(v.contactPerson || '—')}</div>
+              <div class="billing-label" style="margin-top:4px;">Contact Number</div>
+              <div class="billing-value">${escapeHtml(v.contactNumber || '—')}</div>
+            </div>
+            <div class="billing-meta-cell">
+              <div class="billing-label">Invoice No.</div>
+              <div class="billing-value">${escapeHtml(v.invoiceNo || '—')}</div>
+              <div class="billing-label" style="margin-top:4px;">Terms</div>
+              <div class="billing-value">${escapeHtml(v.terms || '—')}</div>
+            </div>
+          </div>
+        </div>
+        <table class="billing-items-table">
+          <thead><tr><th class="item">Item</th><th class="qty">Qty</th><th class="unit">Unit</th><th>Description</th><th class="price">Unit Price</th><th class="price">Amount</th></tr></thead>
+          <tbody>
+            ${items.map((it, i) => `
+              <tr>
+                <td class="item">${['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][i] || (i + 1)}</td>
+                <td class="qty">${it.qty === '' || it.qty == null ? '' : Number(it.qty).toLocaleString()}</td>
+                <td class="unit">${escapeHtml(it.unit || '')}</td>
+                <td>${escapeHtml(it.description || '')}</td>
+                <td class="price">${it.unitPrice === '' || it.unitPrice == null ? '' : fmtMoney(Number(it.unitPrice))}</td>
+                <td class="price">${it.amount === '' || it.amount == null ? '' : fmtMoney(Number(it.amount))}</td>
+              </tr>
+            `).join('')}
+            <tr><td colspan="6" class="billing-nothing-follows">** NOTHING FOLLOWS **</td></tr>
+          </tbody>
+        </table>
+        <div class="billing-summary-row">
+          <div class="billing-words">
+            <div class="billing-label">Amount In Words:</div>
+            <div class="billing-value">${escapeHtml(v.amountInWords || amountToWords(total))}</div>
+            <div class="billing-label" style="margin-top:8px;">Pay In Order Of:</div>
+            <div class="billing-value" style="text-decoration:underline;">${escapeHtml(v.payInOrderOf || '')}</div>
+          </div>
+          <table class="billing-totals-table">
+            <tr><td>Net of VAT</td><td class="price">${fmtMoney(net)}</td></tr>
+            <tr><td>Add: 12% VAT</td><td class="price">${fmtMoney(vat)}</td></tr>
+            <tr class="total"><td>Total Amount</td><td class="price">${fmtMoney(total)}</td></tr>
+          </table>
+        </div>
+        <div class="billing-footer">
+          <div><span class="billing-label">Prepared By:</span><div class="billing-sig-blank"></div><span class="billing-value">${escapeHtml(v.preparedBy || '')}</span><br/><span class="billing-sig-title">${escapeHtml(v.preparedByTitle || '')}</span></div>
+          <div><span class="billing-label">Approved By:</span><div class="billing-sig-blank"></div><span class="billing-value">${escapeHtml(v.approvedBy || '')}</span><br/><span class="billing-sig-title">${escapeHtml(v.approvedByTitle || '')}</span></div>
+          <div><span class="billing-label">Received By:</span><div class="billing-sig-blank"></div><span class="billing-sig-title">Printed Name &amp; Signature</span></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function openBillingInvoicePrintView(invoicesIn) {
+    // Oldest-to-newest, same ledger convention as vouchers/expense reports. Unlike
+    // vouchers (2 short slips per sheet), a real Billing Invoice is a full standalone
+    // page, so one invoice = one page here.
+    const invoices = invoicesIn.slice().sort((a, b) => a.date.localeCompare(b.date));
+    const overlay = document.createElement('div');
+    overlay.className = 'billing-overlay';
+    overlay.innerHTML = `
+      <div class="billing-print">
+        <div class="billing-actions no-print">
+          <button class="btn btn-ghost btn-sm" id="billing-close">Close</button>
+          <button class="btn btn-primary btn-sm" id="billing-print-btn">Print / Save as PDF</button>
+        </div>
+        ${invoices.map(v => `<div class="billing-page">${billingInvoiceCardHtml(v)}</div>`).join('')}
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#billing-close').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#billing-print-btn').addEventListener('click', () => window.print());
   }
 
   return { render: renderView };

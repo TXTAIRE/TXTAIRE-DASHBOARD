@@ -729,6 +729,70 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .voucher-sig-blank { border-bottom: 1px solid #333; height: 24px; margin: 0 4px 4px 4px; }
 .voucher-sig-title { font-size: 8.5px; color: #555; }
 
+/* ---------- Billing Invoice print view -- matches the company's real paper form, one
+   full A4 page per invoice (unlike the half-page Payment Voucher above), letterhead
+   varying by issuing entity (TXTAIRE OPC / TXTAIRE REF / AVISO). Same overlay/print
+   pattern as the DTR and Payment Voucher. ---------- */
+.billing-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 150;
+  overflow-y: auto; padding: 30px 16px;
+}
+.billing-print {
+  background: #ffffff; color: #0a0a0a; max-width: 820px; margin: 0 auto;
+  border-radius: 10px; padding: 24px; box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+}
+.billing-actions { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 16px; }
+.billing-page { margin-bottom: 14mm; }
+.billing-page:last-child { margin-bottom: 0; }
+.billing-card { border: 1.5px solid #333; padding: 14px 16px; font-size: 11px; display: flex; flex-direction: column; }
+
+.billing-header { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 6px; }
+.billing-logo { width: auto; flex-shrink: 0; }
+.billing-header-text { flex: 1; }
+.billing-company-name { font-weight: 700; font-size: 13px; }
+.billing-company-suffix { font-weight: 400; font-size: 10px; font-style: italic; }
+.billing-tagline { font-style: italic; font-size: 10px; margin: 1px 0; }
+.billing-contact-line { font-size: 9.5px; color: #333; }
+.billing-title { text-align: center; font-weight: 700; font-size: 18px; margin: 8px 0; font-family: Georgia, 'Times New Roman', serif; }
+
+.billing-meta-table { border: 1px solid #333; border-bottom: none; }
+.billing-meta-row { display: flex; border-bottom: 1px solid #333; }
+.billing-meta-cell { flex: 1; padding: 5px 8px; }
+.billing-meta-cell.wide { flex: 1.4; }
+.billing-meta-cell + .billing-meta-cell { border-left: 1px solid #333; }
+.billing-label { font-size: 8.5px; color: #555; text-transform: uppercase; letter-spacing: 0.03em; }
+.billing-value { font-weight: 600; font-size: 10.5px; }
+
+.billing-items-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+.billing-items-table th, .billing-items-table td { border: 1px solid #333; padding: 4px 6px; text-align: left; vertical-align: top; }
+.billing-items-table th { font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; text-align: center; }
+.billing-items-table th.item, .billing-items-table td.item { width: 34px; text-align: center; }
+.billing-items-table th.qty, .billing-items-table td.qty { width: 44px; text-align: center; }
+.billing-items-table th.unit, .billing-items-table td.unit { width: 54px; text-align: center; }
+.billing-items-table th.price, .billing-items-table td.price { width: 92px; text-align: right; }
+.billing-items-table tbody tr:last-child td { border-top: none; }
+.billing-nothing-follows { text-align: center; font-style: italic; color: #666; border-top: none !important; }
+/* A short invoice (few items) still fills most of the page, same "own the space" feel
+   as the real printed form's very tall, mostly-blank items table. */
+.billing-items-table tbody { min-height: 400px; }
+
+.billing-summary-row { display: flex; gap: 16px; margin-top: 8px; align-items: flex-start; }
+/* Tables default to sizing off their own content (and to a min-width derived from that
+   content) even inside a flex container, so without explicit flex-basis/min-width here the
+   totals table was claiming most of the row and squeezing "Amount In Words" down to a
+   sliver. Fixed widths on both sides sidestep that entirely. */
+.billing-words { flex: 1 1 auto; min-width: 0; }
+.billing-totals-table { border-collapse: collapse; font-size: 10.5px; flex: 0 0 240px; width: 240px; min-width: 0; }
+.billing-totals-table td { padding: 3px 8px; }
+.billing-totals-table td.price { text-align: right; font-weight: 600; }
+.billing-totals-table tr.total td { border-top: 1.5px solid #333; font-weight: 700; }
+
+.billing-footer { display: flex; border-top: 1px solid #333; margin-top: 14px; padding-top: 10px; }
+.billing-footer > div { flex: 1; padding: 0 8px; text-align: center; font-size: 9.5px; }
+.billing-footer > div + div { border-left: 1px solid #333; }
+.billing-sig-blank { border-bottom: 1px solid #333; height: 30px; margin: 6px 4px 4px 4px; }
+.billing-sig-title { font-size: 8.5px; color: #555; }
+
 /* On-screen phone view (not print, which forces its own A4 layout below) -- tighter
    padding/type and a single-column meta grid so the DTR fits a narrow viewport without
    the page itself scrolling sideways; signatures stay side-by-side (still readable at
@@ -749,6 +813,15 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   .voucher-overlay { padding: 14px 6px; }
   .voucher-print { padding: 14px; border-radius: 8px; }
   .voucher-page { gap: 14px; }
+
+  .billing-overlay { padding: 14px 6px; }
+  .billing-print { padding: 14px; border-radius: 8px; }
+  .billing-header { flex-direction: column; gap: 6px; }
+  .billing-meta-row { flex-direction: column; }
+  .billing-meta-cell + .billing-meta-cell { border-left: none; border-top: 1px solid #333; }
+  .billing-summary-row { flex-direction: column; }
+  .billing-footer { flex-direction: column; gap: 10px; }
+  .billing-footer > div + div { border-left: none; border-top: 1px solid #333; padding-top: 10px; }
 }
 
 @media print {
@@ -757,8 +830,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   /* display:none (not visibility:hidden) so the hidden dashboard behind the DTR/voucher
      view is fully removed from layout — visibility:hidden keeps its height reserved, which
      was pushing the print engine to emit extra blank pages alongside it. */
-  body > *:not(.dtr-overlay):not(.voucher-overlay) { display: none !important; }
-  .dtr-overlay, .voucher-overlay { position: static; inset: auto; background: none; padding: 0; overflow: visible; }
+  body > *:not(.dtr-overlay):not(.voucher-overlay):not(.billing-overlay) { display: none !important; }
+  .dtr-overlay, .voucher-overlay, .billing-overlay { position: static; inset: auto; background: none; padding: 0; overflow: visible; }
   .dtr-print {
     box-shadow: none; max-width: 100%; width: 100%; margin: 0; border-radius: 0;
     padding: 0; font-size: 10px;
@@ -796,4 +869,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   .payslip-table { font-size: 11px; }
   .payslip-net { font-size: 13px; padding: 8px 12px; margin-top: 10px; }
   .payslip-ack { font-size: 10.5px; margin-top: 14px; }
+
+  .billing-print { box-shadow: none; max-width: 100%; width: 100%; margin: 0; border-radius: 0; padding: 0; }
+  .billing-page { page-break-after: always; margin-bottom: 0; min-height: 277mm; }
+  .billing-page:last-child { page-break-after: auto; }
 }
