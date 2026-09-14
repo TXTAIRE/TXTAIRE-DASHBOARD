@@ -6,6 +6,12 @@
       "runtimeExecutable": "powershell",
       "runtimeArgs": ["-ExecutionPolicy", "Bypass", "-File", "serve.ps1"],
       "port": 8899
+    },
+    {
+      "name": "static-server-alt",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-ExecutionPolicy", "Bypass", "-File", "serve-alt.ps1"],
+      "port": 8898
     }
   ]
 }
