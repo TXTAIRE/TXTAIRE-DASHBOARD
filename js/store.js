@@ -930,7 +930,18 @@ function computeRow(emp, from, to) {
   const isBasePayOverridden = !!(override && override.basePay != null);
   if (isBasePayOverridden) basePay = Number(override.basePay);
 
-  const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (workDays > 0 ? emp.rate / workDays : 0);
+  // For a Monthly (or Per Cutoff) employee, OT/NSD/holiday/rest-day pay all run off this
+  // hourly-rate-equivalent -- it MUST be a stable per-employee figure, not one that drifts
+  // by which cutoff happens to be open. Dividing by workDaysInRange(from, to) (this specific
+  // cutoff's own working-day count, which varies -- a short cutoff has fewer working days
+  // than a long one) used to make the same OT hour worth more in a short cutoff and less in
+  // a long one, for the exact same employee -- not a "regular rate of pay" under the Labor
+  // Code, which the rest of this file already treats as monthlyRate / 22 (see
+  // isBelowMinimumWage, computeRetirementPay, computeFinalPay's SIL cash-out -- all three
+  // call this "the 22-working-day assumption used elsewhere for monthly-paid staff"). This
+  // brings OT/NSD/holiday/rest-day pay onto that same fixed divisor instead of a fourth,
+  // inconsistent one.
+  const dailyRateEq = emp.payType === 'Daily' ? emp.rate : Number(emp.rate) / 22;
 
   // COLA and Housing Allowance are fixed per cutoff for every employee -- paid in full
   // regardless of attendance, not prorated by days present/absent. (allowancePerDay is
