@@ -38,7 +38,9 @@ The Filipino edition is the same sequence with `make-fil.js`, `topdf-fil.ps1`,
 `pagemap-fil-emp.py` / `out-fil-emp.*` (both use their language's `topdf` script).
 
 `lib.js` is shared by all four, so **rebuild and re-verify all four whenever you touch
-it** — a change made for one silently repaginates the others.
+it** — a change made for one silently repaginates the others. `eval-form.js` (Annex H) is
+shared the same way, and fails the build if a criterion exists in one language but not the
+other.
 
 `topdf.ps1` throws a COM exception on `Quit` after a successful export. It is
 harmless — check for the `PAGES=` line, which means the export completed.
@@ -119,10 +121,26 @@ should appear above ASCII.
 
 | Edition | Build | Pages | Delivered file |
 | --- | --- | --- | --- |
-| English, HR copy | `make.js` | 46 | `assets/docs/code-of-discipline-2026-en.pdf` |
-| Filipino, HR copy | `make-fil.js` | 47 | `assets/docs/code-of-discipline-2026-fil.pdf` |
-| English, employee copy | `make-emp.js` | 41 | `assets/docs/code-of-discipline-2026-en-employee.pdf` |
-| Filipino, employee copy | `make-fil-emp.js` | 43 | `assets/docs/code-of-discipline-2026-fil-employee.pdf` |
+| English, HR copy | `make.js` | 52 | `assets/docs/code-of-discipline-2026-en.pdf` |
+| Filipino, HR copy | `make-fil.js` | 54 | `assets/docs/code-of-discipline-2026-fil.pdf` |
+| English, employee copy | `make-emp.js` | 47 | `assets/docs/code-of-discipline-2026-en-employee.pdf` |
+| Filipino, employee copy | `make-fil-emp.js` | 49 | `assets/docs/code-of-discipline-2026-fil-employee.pdf` |
+
+Annex H (Monthly Performance Evaluation) added six pages to each edition.
+
+**The annexes are also published one per file**, because HR prints them one at a time:
+
+```
+python split-forms.py out.pdf     forms/en
+python split-forms.py out-fil.pdf forms/fil
+```
+
+Thirteen files per language — Annexes A to H, plus one sheet per trade under Annex H. The
+pages are CUT FROM THE BUILT PDF, never rebuilt: a second build path would be a second
+thing to keep in step, and the day the two diverged HR would be handing an employee a form
+that differs from the one in the Code they signed for. Banners are found by their heading
+formatting (12pt white), not by the word "Annex" — matching the word also caught prose that
+merely mentions an annex and cut the document in the wrong places.
 
 **My Portal links the employee copies; the HR copies are HR's.** Both remain on the
 server — the portal simply does not link them.

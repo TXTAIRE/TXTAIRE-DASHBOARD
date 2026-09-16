@@ -120,6 +120,7 @@ TARGETS = [
     ("anxD", "form", "CASE EVALUATION FORM"),
     ("anxE", "form", "NOTICE OF DECISION"),
     ("anxG", "form", "PAGKILALA AT PAGSANG-AYON NG EMPLEYADO"),
+    ("anxH", "form", "BUWANANG PAGSUSURI NG PERFORMANCE"),
 ]
 
 

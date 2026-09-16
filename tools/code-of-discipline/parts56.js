@@ -250,6 +250,7 @@ const part6 = () => [
 
   secHead('6.2  Performance Evaluation', 'rev'),
   p('Formal performance evaluations are conducted semi-annually for regular employees, and at the third and fifth month for probationary employees. The immediate superior rates the employee against the standards of the position and discusses the rating with them. The employee is entitled to see the completed evaluation, to write comments on it, and to receive a copy.'),
+  p('In addition, the immediate superior completes a monthly assessment of each employee on the form in Annex H and discusses it with them. The monthly sheet feeds the formal evaluation above; it does not replace it, and no penalty may be imposed through it.'),
   p('Where performance falls below standard, the response is a written Performance Improvement Plan (PIP), not discipline. A PIP shall state the specific gaps, the standard to be reached, the support and training the Company will provide, and a review period of not less than sixty (60) days. Only where the employee fails to meet the standard after a genuine PIP may the Company consider separation for gross and habitual neglect or for inefficiency, following Section 3.6.'),
   note('Poor performance is not misconduct', [
     'An employee who is trying and failing needs training. An employee who is capable and refusing needs discipline. Treating the first as though it were the second is the most common and most expensive mistake an employer makes.',

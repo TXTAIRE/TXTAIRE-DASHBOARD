@@ -1,4 +1,5 @@
 const L = require('./lib.js');
+const { evalAnnex } = require('./eval-form.js');
 const { d, C, W, run, p, gap, pageBreakBefore, partHead, cell, tCell, table, note, thin, noBorder } = L;
 
 const B = (t) => run(t, { bold: true });
@@ -309,6 +310,10 @@ const annexes = () => [
   note('Para sa HRD', [
     'Isampa ang pirmadong orihinal sa 201 file ng empleyado. Bigyan ang empleyado ng kopya ng pahinang ito kasama ng kopya niya ng Kodigo. Itala ang petsa ng pamamahagi sa talaan ng HRD — doon nagsisimula ang tatlumpung araw na bisa, at doon din nakasalalay ang kakayahan ng kompanyang patunayang talagang naipaalam ang Kodigo.',
   ], { edge: C.blue, fill: 'EEF3FB', labelColor: C.navy }),
+
+  // Annex H at ang limang papel para sa bawat trabaho -- galing sa eval-form.js,
+  // na siya ring ginagamit ng Ingles na edisyon.
+  ...evalAnnex('fil'),
 ];
 
 module.exports = { annexes };

@@ -102,6 +102,7 @@ const TOC_ENTRIES = [
   ['item', 'E', 'Notice of Decision', 'anxE'],
   ['item', 'F', 'Checklist sa Pagsunod', 'anxF'],
   ['item', 'G', 'Pagkilala at Pagsang-ayon ng Empleyado', 'anxG'],
+  ['item', 'H', 'Buwanang Pagsusuri ng Performance (Inhinyero, Welder, Drayber, Mason, Elektrisyan)', 'anxH'],
 ];
 
 const tocLine = (kind, num, title, page) => {

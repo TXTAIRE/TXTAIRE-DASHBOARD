@@ -296,6 +296,7 @@ const TOC_ENTRIES = [
   ['item', 'E', 'Notice of Decision', 'anxE'],
   ['item', 'F', 'Compliance Checklist as Headcount Grows', 'anxF'],
   ['item', 'G', 'Employee Acknowledgment and Conforme', 'anxG'],
+  ['item', 'H', 'Monthly Performance Evaluation (Engineer, Welder, Driver, Mason, Electrician)', 'anxH'],
 ];
 
 const tocLine = (kind, num, title, page) => {

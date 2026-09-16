@@ -1,4 +1,5 @@
 const L = require('./lib.js');
+const { evalAnnex } = require('./eval-form.js');
 const { d, C, W, img, run, p, bullet, gap, pageBreak, pageBreakBefore, partHead, secHead, subHead,
         cell, tCell, table, note, thin, noBorder } = L;
 
@@ -296,6 +297,10 @@ const annexes = () => [
   note('For HRD', [
     'File the signed original in the employee’s 201 file. Give the employee a copy of this page together with their copy of the Code. Record the date of distribution in the HRD register — the thirty-day effectivity period, and the Company’s ability to prove that the Code was actually communicated, both run from that date.',
   ], { edge: C.blue, fill: 'EEF3FB', labelColor: C.navy }),
+
+  // Annex H and its five trade sheets. Built by eval-form.js, which both language
+  // editions call, so the two cannot grade different things.
+  ...evalAnnex('en'),
 ];
 
 module.exports = { annexes };

@@ -126,6 +126,7 @@ TARGETS = [
     ("anxE", "form", "NOTICE OF DECISION"),
     ("anxF", "form", "COMPLIANCE CHECKLIST AS HEADCOUNT GROWS"),
     ("anxG", "form", "EMPLOYEE ACKNOWLEDGMENT AND CONFORME"),
+    ("anxH", "form", "MONTHLY PERFORMANCE EVALUATION"),
 ]
 
 

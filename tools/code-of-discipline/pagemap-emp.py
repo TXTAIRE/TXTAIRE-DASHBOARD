@@ -120,6 +120,7 @@ TARGETS = [
     ("anxD", "form", "CASE EVALUATION FORM"),
     ("anxE", "form", "NOTICE OF DECISION"),
     ("anxG", "form", "EMPLOYEE ACKNOWLEDGMENT AND CONFORME"),
+    ("anxH", "form", "MONTHLY PERFORMANCE EVALUATION"),
 ]
 
 
