@@ -38,7 +38,7 @@ The Filipino edition is the same sequence with `make-fil.js`, `topdf-fil.ps1`,
 `pagemap-fil-emp.py` / `out-fil-emp.*` (both use their language's `topdf` script).
 
 `lib.js` is shared by all four, so **rebuild and re-verify all four whenever you touch
-it** — a change made for one silently repaginates the others. `eval-form.js` (Annex H) is
+it** — a change made for one silently repaginates the others. `eval-form.js` (Annex 08) is
 shared the same way, and fails the build if a criterion exists in one language but not the
 other.
 
@@ -59,10 +59,21 @@ reviewer who was eyeballing the document instead of measuring it.
 | `dropcheck.py` | paragraphs the modules produce that never reached the document |
 | `pv.py` | renders pages to PNG for a visual pass |
 
-Use the `fil-` prefixed copies for the Filipino edition, `emp-` for the English employee
-copy and `fil-emp-` for the Filipino employee copy. `dropcheck.py` takes the edition as an argument:
-`python dropcheck.py out-fil.docx fil`, `python dropcheck.py out-emp.docx employee`,
-`python dropcheck.py out-fil-emp.docx fil-employee`.
+`orphans.py`, `blanks.py` and `fill.py` take the PDF to check (default `out.pdf`):
+`python orphans.py out-fil.pdf`. The resolver has one script per edition: `pagemap.py`,
+`pagemap-fil.py`, `pagemap-emp.py`, `pagemap-fil-emp.py`.
+
+`dropcheck.py` takes the DOCX **and the edition**, and the edition is not optional in
+practice: it decides which language and audience the content modules are asked to produce.
+Run `python dropcheck.py out-fil.docx full` and it compares the ENGLISH modules against the
+Filipino document and reports most of the English text as lost. The four correct calls are
+
+```
+python dropcheck.py out.docx
+python dropcheck.py out-fil.docx     fil
+python dropcheck.py out-emp.docx     employee
+python dropcheck.py out-fil-emp.docx fil-employee
+```
 
 ## Gotchas
 
@@ -112,6 +123,23 @@ and its label, so the page looked complete. `note()` now wraps bare strings, and
 `dropcheck.py` compares what the modules produce against what reaches the DOCX. Run it on
 every edition, every build.
 
+**The page map's targets and the table of contents are two separate lists.** The resolver
+(`pagemap*.py`) carries its own list of headings to find, and each build script carries its
+own contents rows. "mapped 66 of 66" means every heading the resolver looked for was FOUND
+in the document — it says nothing about whether a contents row points at it. Annex 08 sat in
+the Filipino employee edition for a whole build with no contents row at all: it resolved,
+the numbers ran forward, no page was blank or stranded, `dropcheck` was clean, and the form
+was simply unreachable from the contents. `lib.js`'s `assertTocCovers()` now fails the build
+when the map resolves a heading no contents row cites, and each build script calls it. Note
+that it cannot catch the reverse (a contents row for a heading that does not exist) — that
+one prints with a blank page number, which `pagemap` does report.
+
+**Word resolves a relative export path against its own working directory.** `topdf.ps1`
+resolved `-In` but passed `-Out` through unchanged, so `-Out out.pdf` wrote the PDF
+somewhere inside Word's idea of the current directory. `ExportAsFixedFormat` did not
+complain, `PAGES=52` was printed, and the build looked successful with no PDF where the next
+step expected one. Both export scripts now make `-Out` absolute before handing it to Word.
+
 **Watch for homoglyphs in the Filipino text.** Cyrillic characters reached a draft
 inside an otherwise-Latin word. Scan the built PDF's text layer for non-Latin
 scripts; only em/en dash, bullet, thin space, arrow, middle dot and the peso sign
@@ -126,7 +154,7 @@ should appear above ASCII.
 | English, employee copy | `make-emp.js` | 47 | `assets/docs/code-of-discipline-2026-en-employee.pdf` |
 | Filipino, employee copy | `make-fil-emp.js` | 49 | `assets/docs/code-of-discipline-2026-fil-employee.pdf` |
 
-Annex H (Monthly Performance Evaluation) added six pages to each edition.
+Annex 08 (Monthly Performance Evaluation) added six pages to each edition.
 
 **The annexes are also published one per file**, because HR prints them one at a time:
 
@@ -135,7 +163,11 @@ python split-forms.py out.pdf     forms/en
 python split-forms.py out-fil.pdf forms/fil
 ```
 
-Thirteen files per language — Annexes A to H, plus one sheet per trade under Annex H. The
+Thirteen files per language — Annexes A to G and Annex 08, plus one sheet per trade under
+Annex 08. Annex labels are therefore **lettered or numbered**: the performance-evaluation
+family is numbered 08 to match its form codes (CD-08, CD-08a … CD-08e), which is how HR
+files it. `split-forms.py`'s banner test accepts either, and anything added later must keep
+doing so. The
 pages are CUT FROM THE BUILT PDF, never rebuilt: a second build path would be a second
 thing to keep in step, and the day the two diverged HR would be handing an employee a form
 that differs from the one in the Code they signed for. Banners are found by their heading

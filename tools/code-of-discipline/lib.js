@@ -408,7 +408,22 @@ const legend = () => {
   ], widths);
 };
 
+// Every heading the page-map resolver located must also be cited by a contents row. The
+// resolver keeps its own target list, so "mapped 66 of 66" means those headings were found
+// in the document -- not that the table of contents names them. Annex 08 shipped in the
+// Filipino employee edition with no contents row pointing at it, and every other check
+// passed. An empty map (the first build of a new edition) asserts nothing.
+const assertTocCovers = (pageMap, entries) => {
+  const cited = new Set(entries.map((e) => e[3]));
+  const missing = Object.keys(pageMap || {}).filter((k) => !cited.has(k));
+  if (missing.length) {
+    throw new Error('the table of contents omits ' + missing.length
+      + ' heading(s) the page map resolved: ' + missing.join(', '));
+  }
+};
+
 module.exports = {
+  assertTocCovers,
   d, C, W, F, setLang, S, setAudience, forEmployee, pick, hrOnly, img, run, p, bullet, gap, pageBreak,
   pageBreakBefore,
   partHead, secHead, subHead, cell, tCell, table, note, chgRun, CHG,

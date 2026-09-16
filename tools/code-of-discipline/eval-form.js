@@ -1,4 +1,4 @@
-// Annex H -- Monthly Performance Evaluation, and the five trade sheets under it.
+// Annex 08 -- Monthly Performance Evaluation, and the five trade sheets under it.
 //
 // ONE builder, called by annex.js with 'en' and by fil-annex.js with 'fil'. The criteria
 // live here in both languages side by side, and assertSymmetry() fails the build if a
@@ -148,8 +148,8 @@ const MAX_SCORE = (COMMON.en.length + TRADES[0].en.items.length) * 5;
 
 const T = {
   en: {
-    annexTitle: 'Annex H  —  Monthly Performance Evaluation',
-    sheetTitle: (n) => 'Annex H  —  Monthly Performance Evaluation: ' + n,
+    annexTitle: 'Annex 08  —  Monthly Performance Evaluation',
+    sheetTitle: (n) => 'Annex 08  —  Monthly Performance Evaluation: ' + n,
     intro: 'This sheet is completed by the immediate superior for each employee, once a month, and discussed with the employee. It is the monthly assessment that feeds the formal evaluation under Section 6.2 — it does not replace that evaluation, whose cycle stays semi-annual for regular employees and at the third and fifth month for probationary employees.',
     duty: 'Failure to conduct, document or discuss it is an offense of the supervisor under Section 4.8, not of the employee being rated.',
     scaleTitle: 'The rating scale',
@@ -181,7 +181,7 @@ const T = {
     partA: 'PART A  —  COMMON TO ALL TRADES',
     partB: (n) => 'PART B  —  ' + n.toUpperCase(),
     total: 'TOTAL  (out of ' + MAX_SCORE + ')',
-    overall: 'Overall rating (from the band table in Annex H):',
+    overall: 'Overall rating (from the band table in Annex 08):',
     fields: ['Employee name', 'Position / Trade', 'Site / Department', 'Month evaluated', 'Immediate superior'],
     supComments: 'Supervisor’s comments, and the specific coaching actions agreed for next month',
     empComments: 'Employee’s comments (optional — the employee may write here, or attach a separate sheet)',
@@ -190,8 +190,8 @@ const T = {
     footer: 'File the signed original in the employee’s 201 file and give the employee a copy on the day it is discussed.',
   },
   fil: {
-    annexTitle: 'Annex H  —  Buwanang Pagsusuri ng Performance',
-    sheetTitle: (n) => 'Annex H  —  Buwanang Pagsusuri ng Performance: ' + n,
+    annexTitle: 'Annex 08  —  Buwanang Pagsusuri ng Performance',
+    sheetTitle: (n) => 'Annex 08  —  Buwanang Pagsusuri ng Performance: ' + n,
     intro: 'Ang papel na ito ay pinupunan ng immediate superior para sa bawat empleyado, minsan sa isang buwan, at pinag-uusapan kasama ang empleyado. Ito ang buwanang pagtataya na pinagbabatayan ng pormal na pagsusuri sa ilalim ng Seksyon 6.2 — hindi nito pinapalitan ang pagsusuring iyon, na nananatiling dalawang beses sa isang taon para sa regular na empleyado at sa ikatlo at ikalimang buwan para sa probationary.',
     duty: 'Ang hindi paggawa, hindi pagtatala, o hindi pagtalakay nito ay paglabag ng supervisor sa ilalim ng Seksyon 4.8 — hindi ng empleyadong sinusuri.',
     scaleTitle: 'Ang iskala ng pagmamarka',
@@ -223,7 +223,7 @@ const T = {
     partA: 'BAHAGI A  —  PARA SA LAHAT NG TRABAHO',
     partB: (n) => 'BAHAGI B  —  ' + n.toUpperCase(),
     total: 'KABUUAN  (mula sa ' + MAX_SCORE + ')',
-    overall: 'Pangkalahatang marka (mula sa talaan ng banda sa Annex H):',
+    overall: 'Pangkalahatang marka (mula sa talaan ng banda sa Annex 08):',
     fields: ['Pangalan ng empleyado', 'Posisyon / Trabaho', 'Site / Departamento', 'Buwang sinusuri', 'Immediate superior'],
     supComments: 'Komento ng supervisor, at ang tiyak na coaching na napagkasunduan para sa susunod na buwan',
     empComments: 'Komento ng empleyado (opsyonal — puwedeng dito sumulat, o maglakip ng hiwalay na papel)',

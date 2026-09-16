@@ -14,8 +14,10 @@ including its footer, which still carries the page number it occupies there, so 
 sheet can always be traced back to the edition it came from.
 
 A form runs from its banner page to the page before the next banner. Nothing is assumed
-about how many pages a form takes: Annex D runs to two pages and Annex H's trade sheets to
-one, and both come out whole.
+about how many pages a form takes: Annex D runs to two pages and Annex 08's trade sheets to
+one, and both come out whole. Annex labels are lettered (A-G) or numbered (08, the
+performance-evaluation family, whose sheets are Forms CD-08a to CD-08e), so the banner test
+below accepts either.
 """
 import os
 import re
@@ -36,7 +38,7 @@ doc = pymupdf.open(src_path)
 
 # A form banner is a HEADING, not any line that happens to say "Annex": formHead() renders
 # it at 12pt in white on the blue bar. Matching on the words alone also caught prose that
-# merely mentions an annex -- "the form in Annex H", "a Notice to Explain that omits any of
+# merely mentions an annex -- "the form in Annex 08", "a Notice to Explain that omits any of
 # the elements in Annex A is legally defective" -- and cut the document in the wrong
 # places. This is the same size-and-colour test the page-map resolver uses.
 WHITE = 0xFFFFFF
@@ -54,7 +56,7 @@ def banner_of(page):
                 if abs(span["size"] - BANNER_PT) < 0.3 and span["color"] == WHITE
             )
             text = " ".join(text.split())
-            if re.match(r"^Annex\s+[A-Z]\b", text, re.I):
+            if re.match(r"^Annex\s+(?:[A-Z]|\d{1,2})\b", text, re.I):
                 return text
     return None
 

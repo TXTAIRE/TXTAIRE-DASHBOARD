@@ -6,10 +6,12 @@ heading is larger, so "is the lowest text on the page bigger than body text" is 
 test without needing to know which heading style it is.
 """
 import os
+import sys
 import pymupdf
 
 b = os.path.dirname(os.path.abspath(__file__))
-d = pymupdf.open(os.path.join(b, "out.pdf"))
+src = sys.argv[1] if len(sys.argv) > 1 else "out.pdf"   # any edition: out-fil.pdf, out-emp.pdf, out-fil-emp.pdf
+d = pymupdf.open(os.path.join(b, src))
 FOOTER_TOP = 0.93
 BODY_PT = 10.5
 

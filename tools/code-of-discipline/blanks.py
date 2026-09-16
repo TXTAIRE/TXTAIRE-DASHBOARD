@@ -1,6 +1,7 @@
-import pymupdf, os, re
+import pymupdf, os, re, sys
 b=os.path.dirname(os.path.abspath(__file__))
-d=pymupdf.open(os.path.join(b,"out.pdf"))
+src=sys.argv[1] if len(sys.argv)>1 else "out.pdf"   # any edition
+d=pymupdf.open(os.path.join(b,src))
 for i in range(d.page_count):
     t=re.sub(r"\s+"," ",d[i].get_text()).strip()
     # strip running header/footer

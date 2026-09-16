@@ -102,7 +102,10 @@ const TOC_ENTRIES = [
   ['item', 'E', 'Notice of Decision', 'anxE'],
   ['item', 'F', 'Checklist sa Pagsunod', 'anxF'],
   ['item', 'G', 'Pagkilala at Pagsang-ayon ng Empleyado', 'anxG'],
+  ['item', '08', 'Buwanang Pagsusuri ng Performance (Inhinyero, Welder, Drayber, Mason, Elektrisyan)', 'anxH'],
 ];
+
+L.assertTocCovers(PAGEMAP, entriesFor());
 
 const tocLine = (kind, num, title, page) => {
   const isPart = kind === 'part';

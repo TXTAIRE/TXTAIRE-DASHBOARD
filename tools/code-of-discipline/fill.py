@@ -1,9 +1,11 @@
 """Report how full each page is, so sparse pages get found by measurement not by eye."""
 import os
+import sys
 import pymupdf
 
 b = os.path.dirname(os.path.abspath(__file__))
-d = pymupdf.open(os.path.join(b, "out.pdf"))
+src = sys.argv[1] if len(sys.argv) > 1 else "out.pdf"   # any edition: out-fil.pdf, out-emp.pdf, out-fil-emp.pdf
+d = pymupdf.open(os.path.join(b, src))
 FOOTER_TOP = 0.93   # ignore the running footer when measuring content depth
 
 rows = []

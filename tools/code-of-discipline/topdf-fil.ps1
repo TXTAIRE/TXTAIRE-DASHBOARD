@@ -4,6 +4,10 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $In = (Resolve-Path $In).Path
+# Word resolves a RELATIVE export path against its own working directory, not ours, and
+# reports success either way -- the PDF simply is not where it was asked for. Make it
+# absolute here so `-Out out-fil.pdf` means out-fil.pdf in the directory the build runs from.
+$Out = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($PWD.Path, $Out))
 $word = New-Object -ComObject Word.Application
 $word.Visible = $false
 $word.DisplayAlerts = 0
