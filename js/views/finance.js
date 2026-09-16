@@ -736,14 +736,20 @@ window.Views.finance = (function () {
   const BILLING_MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
   // The printed line item is still one plain string (billingInvoiceCardHtml, and the
-  // "billingInvoices" table, are unchanged) -- particulars/quarter/month are form-only
+  // "billingInvoices" table, are unchanged) -- particulars/quarter/month/year are form-only
   // inputs that compose into it. "Other" bypasses composition entirely, and an item
   // carried over from before this feature (plain free-typed description, no particulars
   // recorded) is treated the same way once re-opened, so nothing already saved is lost.
+  //
+  // Year is its own selectable field, not silently read off the invoice's own Date --
+  // a real, common case in the office's own ledger is billing a quarter/month AFTER it
+  // ends (e.g. "QUARTERLY BILLING (OCT-NOV-DEC2024)" invoiced into the following year), so
+  // the period being billed and the date the invoice is issued are not always the same
+  // year. dateStr only supplies the INITIAL default the first time a period is picked.
   function composeBillingParticulars(it, dateStr) {
     if (it.particulars === '__other__') return (it.customParticulars || '').trim();
     if (!it.particulars) return '';
-    const year = (dateStr || todayISO()).slice(0, 4);
+    const year = it.year || (dateStr || todayISO()).slice(0, 4);
     if (it.quarter) return `${BILLING_QUARTER_LABELS[it.quarter]} Quarter ${it.particulars} ${year}`;
     if (it.month) return `${it.particulars} – ${BILLING_MONTH_NAMES[Number(it.month) - 1]} ${year}`;
     return it.particulars;
@@ -1219,10 +1225,10 @@ window.Views.finance = (function () {
           qty: it.qty === '' || it.qty == null ? '' : it.qty, unit: it.unit || '',
           particulars: it.particulars || (it.description ? '__other__' : ''),
           customParticulars: it.particulars ? (it.customParticulars || '') : (it.description || ''),
-          quarter: it.quarter || '', month: it.month || '',
+          quarter: it.quarter || '', month: it.month || '', year: it.year || '',
           description: it.description || '', unitPrice: it.unitPrice === '' || it.unitPrice == null ? '' : it.unitPrice,
         }))
-      : [{ qty: 1, unit: 'lot', particulars: '', customParticulars: '', quarter: '', month: '', description: '', unitPrice: '' }];
+      : [{ qty: 1, unit: 'lot', particulars: '', customParticulars: '', quarter: '', month: '', year: '', description: '', unitPrice: '' }];
 
     openModal(`
       <h2>${editing ? 'Edit Billing Invoice' : 'Add Billing Invoice'}</h2>
@@ -1291,6 +1297,14 @@ window.Views.finance = (function () {
           `Net of VAT: <strong>${fmtMoney(net)}</strong> &nbsp;+&nbsp; 12% VAT: <strong>${fmtMoney(vat)}</strong> &nbsp;=&nbsp; Total: <strong>${fmtMoney(net + vat)}</strong>`;
       }
       function itemDateStr() { return qs('input[name="date"]', bd).value || v.date; }
+      // A few years back (a quarter/month can be billed late -- see composeBillingParticulars)
+      // through one year ahead, centered on the invoice's own year by default.
+      function billingYearOptions() {
+        const base = Number(itemDateStr().slice(0, 4)) || Number(todayISO().slice(0, 4));
+        const years = [];
+        for (let y = base - 3; y <= base + 1; y++) years.push(y);
+        return years;
+      }
       function renderItemRows() {
         const wrap = qs('#billing-invoice-items-rows', bd);
         wrap.innerHTML = items.map((it, i) => `
@@ -1323,6 +1337,11 @@ window.Views.finance = (function () {
                     ${BILLING_MONTH_NAMES.map((m, idx) => `<option value="${idx + 1}" ${it.month === String(idx + 1) ? 'selected' : ''}>${m}</option>`).join('')}
                   </select>
                 </label>
+                <label class="dim" style="display:flex; align-items:center; gap:4px; font-size:12px;">Year
+                  <select data-item-year="${i}" style="width:auto;">
+                    ${billingYearOptions().map(y => `<option value="${y}" ${String(it.year || itemDateStr().slice(0, 4)) === String(y) ? 'selected' : ''}>${y}</option>`).join('')}
+                  </select>
+                </label>
                 <span class="dim" style="font-size:11.5px;">${escapeHtml(composeBillingParticulars(it, itemDateStr()))}</span>
               ` : ''}
             </div>
@@ -1350,14 +1369,20 @@ window.Views.finance = (function () {
         qsa('[data-item-quarter]', wrap).forEach(el => el.addEventListener('change', () => {
           const it = items[Number(el.dataset.itemQuarter)];
           it.quarter = el.value;
-          if (el.value) it.month = '';
+          if (el.value) { it.month = ''; if (!it.year) it.year = itemDateStr().slice(0, 4); }
           it.description = composeBillingParticulars(it, itemDateStr());
           renderItemRows();
         }));
         qsa('[data-item-month]', wrap).forEach(el => el.addEventListener('change', () => {
           const it = items[Number(el.dataset.itemMonth)];
           it.month = el.value;
-          if (el.value) it.quarter = '';
+          if (el.value) { it.quarter = ''; if (!it.year) it.year = itemDateStr().slice(0, 4); }
+          it.description = composeBillingParticulars(it, itemDateStr());
+          renderItemRows();
+        }));
+        qsa('[data-item-year]', wrap).forEach(el => el.addEventListener('change', () => {
+          const it = items[Number(el.dataset.itemYear)];
+          it.year = el.value;
           it.description = composeBillingParticulars(it, itemDateStr());
           renderItemRows();
         }));
@@ -1367,7 +1392,7 @@ window.Views.finance = (function () {
         }));
         qsa('[data-remove-item]', wrap).forEach(el => el.addEventListener('click', () => {
           items.splice(Number(el.dataset.removeItem), 1);
-          if (!items.length) items.push({ qty: 1, unit: 'lot', particulars: '', customParticulars: '', quarter: '', month: '', description: '', unitPrice: '' });
+          if (!items.length) items.push({ qty: 1, unit: 'lot', particulars: '', customParticulars: '', quarter: '', month: '', year: '', description: '', unitPrice: '' });
           renderItemRows();
           renderTotals();
         }));
@@ -1380,7 +1405,7 @@ window.Views.finance = (function () {
       renderItemRows();
       renderTotals();
       qs('#btn-add-billing-item', bd).addEventListener('click', () => {
-        items.push({ qty: 1, unit: 'lot', particulars: '', customParticulars: '', quarter: '', month: '', description: '', unitPrice: '' });
+        items.push({ qty: 1, unit: 'lot', particulars: '', customParticulars: '', quarter: '', month: '', year: '', description: '', unitPrice: '' });
         renderItemRows();
         renderTotals();
       });
@@ -1478,7 +1503,7 @@ window.Views.finance = (function () {
             .map(it => ({
               qty: it.qty === '' ? '' : Number(it.qty), unit: it.unit.trim(),
               particulars: it.particulars || '', customParticulars: it.particulars === '__other__' ? it.customParticulars.trim() : '',
-              quarter: it.quarter || '', month: it.month || '',
+              quarter: it.quarter || '', month: it.month || '', year: it.year || '',
               description: it.description.trim(), unitPrice: it.unitPrice === '' ? '' : Number(it.unitPrice), amount: itemAmount(it),
             }));
           const net = cleanItems.reduce((s, it) => s + (Number(it.amount) || 0), 0);
