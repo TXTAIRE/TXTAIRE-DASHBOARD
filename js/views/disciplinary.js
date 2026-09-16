@@ -307,7 +307,6 @@ window.Views.disciplinary = (function () {
     const minDue = (issued) => addDays(issued || today, Store.NTE_MIN_ANSWER_DAYS);
     const s = {
       offenseCode: '',
-      manual: false,
       analogous: false,
       unlistedReason: '',
       dismissal: false,
@@ -319,7 +318,7 @@ window.Views.disciplinary = (function () {
 
     openModal(`
       <h2>Issue Notice to Explain</h2>
-      <div class="modal-sub">Describe what happened in your own words. The system suggests the matching offense from the Code of Discipline and drafts the notice in the Annex A format. You confirm the offense, and read the letter, before anything is issued.</div>
+      <div class="modal-sub">Select the employee and the offense from the Code of Discipline. The system drafts the notice in the Annex A format for you to read before anything is issued.</div>
       <form id="nte-form" novalidate>
         <div class="section-title" style="margin-top:0;">1 · Employee</div>
         <div class="modal-grid">
@@ -344,17 +343,14 @@ window.Views.disciplinary = (function () {
         </div>
 
         <div class="section-title">3 · Offense under the Code of Discipline</div>
-        <div id="nte-suggestions"></div>
-        <div id="nte-manual" style="display:none; margin-top:8px;">
-          <div class="modal-grid" style="margin-bottom:6px;">
-            <div class="field full"><label>Category</label>
-              <select id="nte-category">
-                <option value="">Select a category…</option>
-                ${Store.disciplineCatalog().map(cat => `<option value="${escapeHtml(cat.category)}">${escapeHtml(cat.category)}</option>`).join('')}
-              </select>
-            </div>
-            <div class="field full"><label>Offense</label><select id="nte-offense"><option value="">Select a category first…</option></select></div>
+        <div class="modal-grid" style="margin-bottom:6px;">
+          <div class="field full"><label>Category</label>
+            <select id="nte-category">
+              <option value="">Select a category…</option>
+              ${Store.disciplineCatalog().map(cat => `<option value="${escapeHtml(cat.category)}">${escapeHtml(cat.category)}</option>`).join('')}
+            </select>
           </div>
+          <div class="field full"><label>Offense</label><select id="nte-offense"><option value="">Select a category first…</option></select></div>
         </div>
         <div id="nte-charge"></div>
 
@@ -385,77 +381,18 @@ window.Views.disciplinary = (function () {
 
       const val = (sel) => ($(sel).value || '').trim();
 
-      // ---- suggestions
-      let suggestTimer = null;
-      function renderSuggestions() {
-        const box = $('#nte-suggestions');
-        const text = narrativeEl.value;
-        const manualLink = `<button type="button" class="link-btn" data-manual>${s.manual ? 'Hide the manual list' : 'Choose the offense manually'}</button>`;
-
-        if (text.trim().length < 12) {
-          box.innerHTML = `<div class="page-sub">Offenses that match the incident details will appear here as you type. Or ${manualLink}.</div>`;
-          wireSuggestionButtons(box);
-          return;
-        }
-
-        const r = OffenseMatcher.suggest(Store.disciplineCatalog(), text, { limit: 4 });
-        if (!r.suggestions.length) {
-          box.innerHTML = `<div class="page-sub">No offense in the Code matches these details. Add more about what was done, or ${manualLink}.</div>`;
-          wireSuggestionButtons(box);
-          return;
-        }
-
-        const cards = r.suggestions.map((sg) => {
-          const t = CLASS_TINT[sg.klass] || { bar: 'var(--border)' };
-          const selected = s.offenseCode === sg.code;
-          const weak = sg.confidence === 'low';
-          const below = !!sg.belowThreshold;
-          return `
-            <div style="border:1px solid var(--border-soft); border-left:4px solid ${t.bar}; border-radius:9px; padding:9px 11px; margin-bottom:7px;
-                        ${weak && !selected ? 'opacity:.7;' : ''} ${selected ? 'box-shadow:0 0 0 2px var(--blue,#2563eb);' : ''}">
-              <div style="display:flex; gap:10px; align-items:flex-start; justify-content:space-between;">
-                <div style="flex:1; min-width:0;">
-                  <div style="font-size:13px; line-height:1.4;">${escapeHtml(sg.label)}</div>
-                  <div class="page-sub" style="margin:4px 0 0;">${classChip(sg.klass)} &nbsp;${escapeHtml(sectionOf(sg.category))} · ${escapeHtml(sg.category)}${weak ? ' · <em>weak match</em>' : ''}</div>
-                </div>
-                <button type="button" class="btn ${selected ? 'btn-primary' : 'btn-ghost'} btn-sm" data-use="${escapeHtml(sg.code)}" ${below ? 'disabled title="Below the Code’s threshold"' : ''}>${selected ? 'Selected' : 'Use'}</button>
-              </div>
-              ${sg.matched.length ? `<div class="page-sub" style="margin:5px 0 0; font-size:11.5px;">Matched on: ${sg.matched.map(w => '“' + escapeHtml(w) + '”').join(', ')}</div>` : ''}
-              ${sg.tierReason ? `<div style="margin-top:6px; font-size:12px; padding:5px 8px; border-radius:6px; background:rgba(34,139,34,.08);">${escapeHtml(sg.tierReason)}</div>` : ''}
-              ${sg.needsFact ? `<div style="margin-top:6px; font-size:12px; padding:5px 8px; border-radius:6px; background:rgba(212,176,42,.16);"><strong>Add to the incident details:</strong> ${escapeHtml(sg.needsFact)}</div>` : ''}
-              ${below ? `<div style="margin-top:6px; font-size:12px; padding:5px 8px; border-radius:6px; background:rgba(208,90,90,.12);"><strong>No offense yet.</strong> ${escapeHtml(sg.belowThreshold)}</div>` : ''}
-              ${sg.classNote ? `<div class="page-sub" style="margin:6px 0 0; font-size:12px;">${escapeHtml(sg.classNote)}</div>` : ''}
-            </div>`;
-        }).join('');
-
-        box.innerHTML = `
-          <div class="page-sub" style="margin:0 0 8px;">Suggested from the words in the incident details — check each against what actually happened before using it.</div>
-          ${r.multiple ? `<div class="page-sub" style="margin:0 0 8px; padding:6px 9px; border-radius:7px; background:var(--bg-soft,#f4f4f5);">These details may describe more than one offense. Under Section 3.4, where one act violates more than one provision, only the highest applicable penalty is imposed — charge the most serious one that the facts support.</div>` : ''}
-          ${cards}
-          <div class="page-sub" style="margin-top:4px;">None of these fits? ${manualLink}.</div>`;
-        wireSuggestionButtons(box);
-      }
-
-      function wireSuggestionButtons(box) {
-        qsa('[data-use]', box).forEach(b => b.addEventListener('click', () => chooseOffense(b.dataset.use)));
-        qsa('[data-manual]', box).forEach(b => b.addEventListener('click', () => {
-          s.manual = !s.manual;
-          $('#nte-manual').style.display = s.manual ? '' : 'none';
-          renderSuggestions();
-        }));
-      }
-
       function chooseOffense(code) {
         s.offenseCode = code;
         s.dismissalTouched = false;
         s.longTouched = false;
         s.refNo = '';
-        renderSuggestions();
         renderCharge();
         invalidateReview();
       }
 
-      // ---- manual picker (the previous form's category -> offense lists)
+      // ---- offense picker: category -> offense, both plain dropdowns. HR already knows
+      // the Code; picking straight from it is faster and more reliable than writing a
+      // narrative for a keyword matcher to interpret.
       $('#nte-category').addEventListener('change', () => {
         const cat = Store.disciplineCatalog().find(c => c.category === $('#nte-category').value);
         $('#nte-offense').innerHTML = '<option value="">Select an offense…</option>' +
@@ -565,7 +502,9 @@ window.Views.disciplinary = (function () {
 
         $('#nte-clear-offense').addEventListener('click', () => {
           s.offenseCode = ''; s.analogous = false; s.unlistedReason = '';
-          renderSuggestions(); renderCharge(); invalidateReview();
+          $('#nte-category').value = '';
+          $('#nte-offense').innerHTML = '<option value="">Select a category first…</option>';
+          renderCharge(); invalidateReview();
         });
         $('#nte-dismissal').addEventListener('change', (e) => {
           s.dismissal = e.target.checked; s.dismissalTouched = true;
@@ -606,14 +545,6 @@ window.Views.disciplinary = (function () {
           dismissalConsidered: s.dismissal,
           minDays: Store.NTE_MIN_ANSWER_DAYS,
         });
-        // The suggestion card says when facts are under the Code's threshold. If HR has
-        // nonetheless picked that offense through the manual list, stop here too: there
-        // is no offense on the facts as written.
-        if (off) {
-          const check = OffenseMatcher.suggest(Store.disciplineCatalog(), narrativeEl.value, { limit: 8 })
-            .suggestions.find(x => x.code === off.code && x.belowThreshold);
-          if (check) { r.ok = false; r.problems.unshift('No offense yet on these facts. ' + check.belowThreshold); }
-        }
         // Sec. 3.11, and the order of events it depends on. Listed first: a prescribed
         // offense cannot be charged however well the notice is written.
         const procedural = [];
@@ -697,22 +628,23 @@ window.Views.disciplinary = (function () {
             btn.textContent = 'Issue this notice';
             return;   // Store.addCase has already said what went wrong
           }
-          toast('NTE issued. Print it from the case for the employee to sign.');
+          toast('NTE issued. Opening the printable notice…');
           closeModal();
           renderList(main);
           const created = Store.listCases()
             .filter(c => c.employeeId === empId && c.noticeText === final.text)
             .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
-          if (created) openCaseDetail(main, created.id);
+          if (created) {
+            openCaseDetail(main, created.id);
+            // Print pop-ups only need to be triggered once, right after issuance -- HR
+            // can still reprint later from the case's own "Print NTE" button (unchanged).
+            printStoredNotice(created);
+          }
         });
       });
 
       // ---- keeping things in step
-      narrativeEl.addEventListener('input', () => {
-        clearTimeout(suggestTimer);
-        suggestTimer = setTimeout(renderSuggestions, 220);
-        invalidateReview();
-      });
+      narrativeEl.addEventListener('input', invalidateReview);
       employeeEl.addEventListener('change', () => { s.refNo = ''; renderCharge(); invalidateReview(); });
       dateIssuedEl.addEventListener('change', () => {
         const issued = dateIssuedEl.value || today;
@@ -730,8 +662,6 @@ window.Views.disciplinary = (function () {
         $(sel).addEventListener('input', invalidateReview);
         $(sel).addEventListener('change', invalidateReview);
       });
-
-      renderSuggestions();
     });
   }
 
