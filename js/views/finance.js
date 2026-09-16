@@ -656,6 +656,135 @@ window.Views.finance = (function () {
     },
   };
 
+  // Seed client roster per entity, transcribed from the office's own 2026 receivables
+  // ledger (TXTAIRE RECEIVABLES 2026.xlsx) -- lets a Billing Invoice pick a client already
+  // on file, with their TIN and contact person filled in, even before this app has ever
+  // billed them itself. A client actually billed through this app (Store.listBillingInvoices)
+  // always overrides this seed, so the list only gets more accurate over time, never less.
+  const BILLING_CLIENTS = {
+    'TXTAIRE REF': {
+      'The Residences at Greenbelt Condominium Corp': { tin: '006-958-571-000', contactPerson: 'Pamela Tolentino', contactNumber: '9953164738' },
+      'GMV Materials Inc': { tin: '241-242-600-000', contactPerson: 'SG', contactNumber: '' },
+      'SouthEastAsia Retail Inc': { tin: '008-909-992-00000', contactPerson: 'Azielle Cristel Coprado', contactNumber: '' },
+      'Ayala Property Management Corp.': { tin: '000-106-866-000', contactPerson: 'Rona Grace Diaz', contactNumber: '' },
+      'Alveo Land Corp': { tin: '000-004-818-977', contactPerson: 'Rochelle Mae Tasarra', contactNumber: '9171877036' },
+      'Avida Towers Asten Condominium Corp': { tin: '009-936-709-00000', contactPerson: '', contactNumber: '' },
+      'High Park Towers Condominium Corp': { tin: '010-616-355-00000', contactPerson: 'Frankie Nicole Avila', contactNumber: '' },
+      'East Gallery Place Condominium Corp': { tin: '600-222-535-00000', contactPerson: 'Jeremiah Reyes', contactNumber: '' },
+      'Amaia Skies Shaw Condominium Corp': { tin: '', contactPerson: 'Domingo Paguyo', contactNumber: '' },
+      'Avida Towers San Lorenzo Condominium Corp': { tin: '', contactPerson: 'Emmanuel Dellosa', contactNumber: '' },
+      'Avida Towers Vireo Condominium Corp.': { tin: '603-687-401-00000', contactPerson: 'Clariz Paras', contactNumber: '9666303161' },
+      'Abrio Homeowners Association Inc.': { tin: '278-127-321', contactPerson: '', contactNumber: '' },
+      'Avida Towers Vita Condominium Corp.': { tin: '', contactPerson: 'Arriane Mabag', contactNumber: '' },
+      'Serendra Condominium Corporation': { tin: '006-990-491-000', contactPerson: 'H. Capo', contactNumber: '' },
+    },
+    'TXTAIRE OPC': {
+      'High Park Towers Condominium Corp.': { tin: '010-616-355', contactPerson: 'Frankie Nicolle A. Avila', contactNumber: '' },
+      'G2G All Spice Eatery': { tin: '637-564-111', contactPerson: 'Daisyrie G Cerdeña', contactNumber: '9566235446' },
+      'FERNDALE VILLAS': { tin: '477-543-022', contactPerson: '', contactNumber: '' },
+      'Avida Towers Prime Taft Condominium Corp.': { tin: '010-007-359', contactPerson: 'Arly B. Pabelico', contactNumber: '' },
+      'East Gallery Place Condominium Corp': { tin: '600-222-535', contactPerson: 'J. Reyes', contactNumber: '' },
+      'High Park Towers': { tin: '010-616-355', contactPerson: 'Frankie Nicolle Avila', contactNumber: '' },
+      'Amaia Parkway Nuvali Condominium Corp.': { tin: '010-312-394', contactPerson: 'Althea Jeanne Moya', contactNumber: '' },
+      'West Gallery Place Condominium Corp.': { tin: '609-458-064', contactPerson: 'Jaye Ann Bellezo', contactNumber: '' },
+      'Advanced Global Water Technologies Philippines Inc.': { tin: '009-934-692', contactPerson: 'Marineth S. Gerando', contactNumber: '' },
+      'Abrio Homeowners Association Inc.': { tin: '278-127-321', contactPerson: 'Josie V. Ponce', contactNumber: '' },
+      'Aquagen Technologies Inc.': { tin: '', contactPerson: 'Princess Peras', contactNumber: '' },
+      'Santierra Homeowners Association Inc.': { tin: '439-630-028', contactPerson: 'Jen', contactNumber: '' },
+      'The Lerato Condominium': { tin: '009-161-993', contactPerson: 'Winilyn P. Estojero', contactNumber: '' },
+      'Tapa King Inc.': { tin: '000-503-513-000', contactPerson: 'Jeffrey Lopez', contactNumber: '' },
+    },
+    'AVISO': {
+      'AGWT': { tin: '009-934-692-000', contactPerson: 'Marineth Geranco', contactNumber: '' },
+      'Sorrento Oasis Pasig Condominium': { tin: '008-200-035-000', contactPerson: '', contactNumber: '' },
+      'West Gallery Place': { tin: '609-458-064-000', contactPerson: '', contactNumber: '' },
+      'East Gallery Place': { tin: '600-222-535-00000', contactPerson: 'J. Reyes', contactNumber: '' },
+      'Avida Towers Sola': { tin: '605-203-214-00000', contactPerson: '', contactNumber: '' },
+      'Advanced Global Water Technologies': { tin: '009-934-692-000', contactPerson: 'Marineth S. Geranco', contactNumber: '' },
+      'Sunproperties Development Corp.': { tin: '', contactPerson: '', contactNumber: '' },
+      'Universal Re Condominium Corporation': { tin: '', contactPerson: '', contactNumber: '' },
+      'Avida Towers Asten Condominium Corp.': { tin: '009-936-709-00000', contactPerson: '', contactNumber: '' },
+    },
+  };
+
+  // Curated from the same ledger's own recurring Particulars phrasing -- a fixed list
+  // instead of free text, so HR selects the service instead of re-typing/misspelling it.
+  // "Other" is the one escape hatch, for the genuinely one-off job.
+  const BILLING_PARTICULARS_OPTIONS = [
+    'AC Preventive Maintenance Service (PMS)',
+    'Quarterly AC Preventive Maintenance Service (PMS)',
+    'System Reprocess',
+    'System Flushing, Vacuum & Leak Test',
+    'Leak Testing and Leak Repair',
+    'Recharging of Refrigerant',
+    'Repair Works',
+    'Emergency Repair',
+    'Supply and Delivery of AC Unit',
+    'Supply and Installation of AC Unit',
+    'Supply and Delivery of Parts',
+    'Replacement of Parts',
+    'Nitrogen Gas for Leak Testing',
+    'Progress Billing',
+    'Down Payment',
+    'Project Completion Payment',
+    'Consolidated Charges',
+    'Quarterly Billing',
+    'Bi-monthly Billing',
+    'PME Certification Services',
+  ];
+  const BILLING_QUARTER_LABELS = { Q1: '1st', Q2: '2nd', Q3: '3rd', Q4: '4th' };
+  const BILLING_MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  // The printed line item is still one plain string (billingInvoiceCardHtml, and the
+  // "billingInvoices" table, are unchanged) -- particulars/quarter/month are form-only
+  // inputs that compose into it. "Other" bypasses composition entirely, and an item
+  // carried over from before this feature (plain free-typed description, no particulars
+  // recorded) is treated the same way once re-opened, so nothing already saved is lost.
+  function composeBillingParticulars(it, dateStr) {
+    if (it.particulars === '__other__') return (it.customParticulars || '').trim();
+    if (!it.particulars) return '';
+    const year = (dateStr || todayISO()).slice(0, 4);
+    if (it.quarter) return `${BILLING_QUARTER_LABELS[it.quarter]} Quarter ${it.particulars} ${year}`;
+    if (it.month) return `${it.particulars} – ${BILLING_MONTH_NAMES[Number(it.month) - 1]} ${year}`;
+    return it.particulars;
+  }
+
+  // Three layers, each overriding the one before: the static ledger seed above; a client
+  // HR explicitly registered via "+ New client" (Store.billingClients -- deliberate roster
+  // data, not tied to any one invoice); then a client actually billed through this app,
+  // the freshest source of truth for their TIN/address/contact. Entity-scoped throughout,
+  // since TXTAIRE REF/OPC and AVISO are separate legal entities that may bill the "same"
+  // client (e.g. East Gallery Place) under different terms.
+  function computeKnownBillingClients(entity) {
+    const known = {};
+    const seed = BILLING_CLIENTS[entity] || {};
+    Object.keys(seed).forEach((name) => {
+      const c = seed[name];
+      known[name.toLowerCase()] = { clientName: name, clientTin: c.tin || '', clientAddress: '', contactPerson: c.contactPerson || '', contactNumber: c.contactNumber || '' };
+    });
+    Store.billingClientsForEntity(entity).forEach((c) => {
+      const name = (c.name || '').trim();
+      if (!name) return;
+      known[name.toLowerCase()] = {
+        clientName: name, clientTin: c.tin || '', clientAddress: c.address || '',
+        contactPerson: c.contactPerson || '', contactNumber: c.contactNumber || '',
+      };
+    });
+    Store.listBillingInvoices()
+      .filter(inv => inv.entity === entity)
+      .slice()
+      .sort((a, b) => (a.date < b.date ? -1 : 1))
+      .forEach((inv) => {
+        const name = (inv.clientName || '').trim();
+        if (!name) return;
+        known[name.toLowerCase()] = {
+          clientName: name, clientTin: inv.clientTin || '', clientAddress: inv.clientAddress || '',
+          contactPerson: inv.contactPerson || '', contactNumber: inv.contactNumber || '',
+        };
+      });
+    return known;
+  }
+
   function voucherSignatoryDefaultsCard(main) {
     const cName = Store.getAppSetting('voucherCertifiedCorrectByDefault', '');
     const aName = Store.getAppSetting('voucherApprovedByDefault', '');
@@ -1074,30 +1203,26 @@ window.Views.finance = (function () {
       payInOrderOf: letterheadFor('TXTAIRE OPC').payInOrderOf,
       preparedBy: '', preparedByTitle: '', approvedBy: '', approvedByTitle: '',
     };
-    // A client billed before shouldn't have to be re-typed -- keep the most recent
-    // TIN/address/contact on file per client name, keyed case-insensitively so
-    // "Sample Client Corp." and "sample client corp." are treated as the same client.
-    const knownClients = {};
-    Store.listBillingInvoices()
-      .slice()
-      .sort((a, b) => (a.date < b.date ? -1 : 1))
-      .forEach((inv) => {
-        const name = (inv.clientName || '').trim();
-        if (!name) return;
-        knownClients[name.toLowerCase()] = {
-          clientName: name,
-          clientTin: inv.clientTin || '',
-          clientAddress: inv.clientAddress || '',
-          contactPerson: inv.contactPerson || '',
-          contactNumber: inv.contactNumber || '',
-        };
-      });
+    // A client already on file (seeded from the ledger, or billed before through this app)
+    // shouldn't have to be re-typed -- keyed case-insensitively, re-scoped to whichever
+    // entity is currently selected (see computeKnownBillingClients).
+    let knownClients = computeKnownBillingClients(v.entity);
     // Working copy of the itemized line items -- always at least one row so the editor
     // never renders empty, same convention as the voucher's particulars editor. Amount is
     // derived (qty * unitPrice), not directly typed, matching the real form's math.
+    // particulars/quarter/month are new, form-only selection state (see
+    // composeBillingParticulars) -- an item saved before this feature existed has none of
+    // them, so it's treated as a free-typed "Other" entry, preserving its exact wording
+    // rather than discarding it.
     let items = (Array.isArray(v.items) && v.items.length)
-      ? v.items.map(it => ({ qty: it.qty === '' || it.qty == null ? '' : it.qty, unit: it.unit || '', description: it.description || '', unitPrice: it.unitPrice === '' || it.unitPrice == null ? '' : it.unitPrice }))
-      : [{ qty: 1, unit: 'lot', description: '', unitPrice: '' }];
+      ? v.items.map(it => ({
+          qty: it.qty === '' || it.qty == null ? '' : it.qty, unit: it.unit || '',
+          particulars: it.particulars || (it.description ? '__other__' : ''),
+          customParticulars: it.particulars ? (it.customParticulars || '') : (it.description || ''),
+          quarter: it.quarter || '', month: it.month || '',
+          description: it.description || '', unitPrice: it.unitPrice === '' || it.unitPrice == null ? '' : it.unitPrice,
+        }))
+      : [{ qty: 1, unit: 'lot', particulars: '', customParticulars: '', quarter: '', month: '', description: '', unitPrice: '' }];
 
     openModal(`
       <h2>${editing ? 'Edit Billing Invoice' : 'Add Billing Invoice'}</h2>
@@ -1109,9 +1234,26 @@ window.Views.finance = (function () {
           </div>
           <div class="field"><label>Date</label><input type="date" name="date" value="${v.date}" required /></div>
           <div class="field full"><label>Client Name</label>
-            <input name="clientName" id="billing-invoice-client-name" list="billing-known-clients" value="${escapeHtml(v.clientName)}" autocomplete="off" required />
+            <div style="display:flex; gap:8px;">
+              <input name="clientName" id="billing-invoice-client-name" list="billing-known-clients" value="${escapeHtml(v.clientName)}" autocomplete="off" required style="flex:1;" />
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-new-billing-client">+ New client</button>
+            </div>
             <datalist id="billing-known-clients">${Object.values(knownClients).map(c => `<option value="${escapeHtml(c.clientName)}">`).join('')}</datalist>
-            <div class="dim" style="margin-top:4px;">Pick a name already on file to fill in their TIN, address, and contact details.</div>
+            <div class="dim" style="margin-top:4px;">Pick a name already on file to fill in their TIN, address, and contact details, or add a new one.</div>
+            <div id="billing-new-client-panel" style="display:none; margin-top:8px; border:1px solid var(--border-soft); border-radius:8px; padding:10px;">
+              <div class="modal-grid">
+                <div class="field full"><label>New client's name</label><input id="new-client-name" /></div>
+                <div class="field"><label>TIN</label><input id="new-client-tin" placeholder="e.g. 000-000-000-000" /></div>
+                <div class="field"><label>Contact Person</label><input id="new-client-contact-person" /></div>
+                <div class="field"><label>Contact Number</label><input id="new-client-contact-number" /></div>
+                <div class="field"><label>Address</label><input id="new-client-address" /></div>
+              </div>
+              <div class="dim" style="margin:2px 0 8px;">Saved for <strong id="new-client-entity-label">${escapeHtml(v.entity)}</strong> -- switch Entity above first if this client bills under a different one.</div>
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="btn btn-primary btn-sm" id="btn-save-new-client">Save client</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-cancel-new-client">Cancel</button>
+              </div>
+            </div>
           </div>
           <div class="field"><label>Client TIN</label><input name="clientTin" value="${escapeHtml(v.clientTin || '')}" placeholder="e.g. 000-000-000-000" /></div>
           <div class="field"><label>Client Address</label><input name="clientAddress" value="${escapeHtml(v.clientAddress || '')}" /></div>
@@ -1148,16 +1290,42 @@ window.Views.finance = (function () {
         qs('#billing-invoice-totals', bd).innerHTML =
           `Net of VAT: <strong>${fmtMoney(net)}</strong> &nbsp;+&nbsp; 12% VAT: <strong>${fmtMoney(vat)}</strong> &nbsp;=&nbsp; Total: <strong>${fmtMoney(net + vat)}</strong>`;
       }
+      function itemDateStr() { return qs('input[name="date"]', bd).value || v.date; }
       function renderItemRows() {
         const wrap = qs('#billing-invoice-items-rows', bd);
         wrap.innerHTML = items.map((it, i) => `
-          <div style="display:flex; gap:8px; margin-bottom:6px; align-items:flex-start;">
-            <input type="number" min="0" step="0.01" placeholder="Qty" value="${it.qty === '' ? '' : it.qty}" data-item-qty="${i}" style="width:70px;" />
-            <input type="text" placeholder="Unit" value="${escapeHtml(it.unit)}" data-item-unit="${i}" style="width:70px;" />
-            <input type="text" placeholder="Description" value="${escapeHtml(it.description)}" data-item-desc="${i}" style="flex:1;" />
-            <input type="number" min="0" step="0.01" placeholder="Unit Price" value="${it.unitPrice === '' ? '' : it.unitPrice}" data-item-price="${i}" style="width:110px;" />
-            <span class="dim" style="width:90px; text-align:right; padding-top:8px;" data-item-amount="${i}">${fmtMoney(itemAmount(it))}</span>
-            <button type="button" class="link-btn" data-remove-item="${i}" style="color:var(--red);">✕</button>
+          <div style="border:1px solid var(--border-soft); border-radius:8px; padding:8px; margin-bottom:8px;">
+            <div style="display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap;">
+              <input type="number" min="0" step="0.01" placeholder="Qty" value="${it.qty === '' ? '' : it.qty}" data-item-qty="${i}" style="width:70px;" />
+              <input type="text" placeholder="Unit" value="${escapeHtml(it.unit)}" data-item-unit="${i}" style="width:70px;" />
+              <select data-item-particulars="${i}" style="flex:1; min-width:200px;">
+                <option value="">Select particulars…</option>
+                ${BILLING_PARTICULARS_OPTIONS.map(p => `<option value="${escapeHtml(p)}" ${it.particulars === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
+                <option value="__other__" ${it.particulars === '__other__' ? 'selected' : ''}>Other (type below)…</option>
+              </select>
+              <input type="number" min="0" step="0.01" placeholder="Unit Price" value="${it.unitPrice === '' ? '' : it.unitPrice}" data-item-price="${i}" style="width:110px;" />
+              <span class="dim" style="width:90px; text-align:right; padding-top:8px;" data-item-amount="${i}">${fmtMoney(itemAmount(it))}</span>
+              <button type="button" class="link-btn" data-remove-item="${i}" style="color:var(--red);">✕</button>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center; margin-top:6px; flex-wrap:wrap;">
+              ${it.particulars === '__other__' ? `
+                <input type="text" placeholder="Custom particulars" value="${escapeHtml(it.customParticulars || '')}" data-item-custom="${i}" style="flex:1; min-width:220px;" />
+              ` : it.particulars ? `
+                <label class="dim" style="display:flex; align-items:center; gap:4px; font-size:12px;">Quarter
+                  <select data-item-quarter="${i}" style="width:auto;">
+                    <option value="">—</option>
+                    ${['Q1', 'Q2', 'Q3', 'Q4'].map(q => `<option value="${q}" ${it.quarter === q ? 'selected' : ''}>${q}</option>`).join('')}
+                  </select>
+                </label>
+                <label class="dim" style="display:flex; align-items:center; gap:4px; font-size:12px;">Month
+                  <select data-item-month="${i}" style="width:auto;">
+                    <option value="">—</option>
+                    ${BILLING_MONTH_NAMES.map((m, idx) => `<option value="${idx + 1}" ${it.month === String(idx + 1) ? 'selected' : ''}>${m}</option>`).join('')}
+                  </select>
+                </label>
+                <span class="dim" style="font-size:11.5px;">${escapeHtml(composeBillingParticulars(it, itemDateStr()))}</span>
+              ` : ''}
+            </div>
           </div>
         `).join('');
         qsa('[data-item-qty]', wrap).forEach(el => el.addEventListener('input', () => {
@@ -1167,8 +1335,31 @@ window.Views.finance = (function () {
         qsa('[data-item-unit]', wrap).forEach(el => el.addEventListener('input', () => {
           items[Number(el.dataset.itemUnit)].unit = el.value;
         }));
-        qsa('[data-item-desc]', wrap).forEach(el => el.addEventListener('input', () => {
-          items[Number(el.dataset.itemDesc)].description = el.value;
+        qsa('[data-item-particulars]', wrap).forEach(el => el.addEventListener('change', () => {
+          const it = items[Number(el.dataset.itemParticulars)];
+          it.particulars = el.value;
+          it.description = composeBillingParticulars(it, itemDateStr());
+          renderItemRows();
+          renderTotals();
+        }));
+        qsa('[data-item-custom]', wrap).forEach(el => el.addEventListener('input', () => {
+          const it = items[Number(el.dataset.itemCustom)];
+          it.customParticulars = el.value;
+          it.description = composeBillingParticulars(it, itemDateStr());
+        }));
+        qsa('[data-item-quarter]', wrap).forEach(el => el.addEventListener('change', () => {
+          const it = items[Number(el.dataset.itemQuarter)];
+          it.quarter = el.value;
+          if (el.value) it.month = '';
+          it.description = composeBillingParticulars(it, itemDateStr());
+          renderItemRows();
+        }));
+        qsa('[data-item-month]', wrap).forEach(el => el.addEventListener('change', () => {
+          const it = items[Number(el.dataset.itemMonth)];
+          it.month = el.value;
+          if (el.value) it.quarter = '';
+          it.description = composeBillingParticulars(it, itemDateStr());
+          renderItemRows();
         }));
         qsa('[data-item-price]', wrap).forEach(el => el.addEventListener('input', () => {
           items[Number(el.dataset.itemPrice)].unitPrice = el.value === '' ? '' : Number(el.value);
@@ -1176,7 +1367,7 @@ window.Views.finance = (function () {
         }));
         qsa('[data-remove-item]', wrap).forEach(el => el.addEventListener('click', () => {
           items.splice(Number(el.dataset.removeItem), 1);
-          if (!items.length) items.push({ qty: 1, unit: 'lot', description: '', unitPrice: '' });
+          if (!items.length) items.push({ qty: 1, unit: 'lot', particulars: '', customParticulars: '', quarter: '', month: '', description: '', unitPrice: '' });
           renderItemRows();
           renderTotals();
         }));
@@ -1189,7 +1380,7 @@ window.Views.finance = (function () {
       renderItemRows();
       renderTotals();
       qs('#btn-add-billing-item', bd).addEventListener('click', () => {
-        items.push({ qty: 1, unit: 'lot', description: '', unitPrice: '' });
+        items.push({ qty: 1, unit: 'lot', particulars: '', customParticulars: '', quarter: '', month: '', description: '', unitPrice: '' });
         renderItemRows();
         renderTotals();
       });
@@ -1208,12 +1399,70 @@ window.Views.finance = (function () {
         setIfBlank('contactPerson', known.contactPerson);
         setIfBlank('contactNumber', known.contactNumber);
       });
-      // Switching the issuing entity mid-form re-defaults Pay In Order Of to that
-      // entity's own name, unless the user already typed something else in for this field.
+      // Switching the issuing entity mid-form re-defaults Pay In Order Of to that entity's
+      // own name (unless already changed to something else), and refreshes the known-client
+      // list/datalist to that entity's own roster -- TXTAIRE REF/OPC and AVISO are separate
+      // legal entities with separate client rosters.
       qs('#billing-invoice-entity', bd).addEventListener('change', (ev) => {
         const payField = qs('input[name="payInOrderOf"]', bd);
         const stillDefault = !editing && Object.values(BILLING_LETTERHEADS).some(l => l.payInOrderOf === payField.value);
         if (stillDefault) payField.value = letterheadFor(ev.target.value).payInOrderOf;
+        knownClients = computeKnownBillingClients(ev.target.value);
+        qs('#billing-known-clients', bd).innerHTML = Object.values(knownClients).map(c => `<option value="${escapeHtml(c.clientName)}">`).join('');
+        qs('#new-client-entity-label', bd).textContent = ev.target.value;
+      });
+      // Changing the invoice date changes which year a Quarter/Month composes into.
+      qs('input[name="date"]', bd).addEventListener('change', () => {
+        items.forEach((it) => { it.description = composeBillingParticulars(it, itemDateStr()); });
+        renderItemRows();
+      });
+
+      // "+ New client" -- registers a client (Store.billingClients) for whichever entity is
+      // currently selected, so it's pickable from the datalist immediately, without first
+      // having to bill them through an actual invoice. Also fills THIS invoice's own client
+      // fields right away, so adding the client and using it on the invoice being filled in
+      // is one step, not two.
+      qs('#btn-new-billing-client', bd).addEventListener('click', () => {
+        qs('#billing-new-client-panel', bd).style.display = '';
+        qs('#new-client-name', bd).value = qs('#billing-invoice-client-name', bd).value.trim();
+        qs('#new-client-name', bd).focus();
+      });
+      qs('#btn-cancel-new-client', bd).addEventListener('click', () => {
+        qs('#billing-new-client-panel', bd).style.display = 'none';
+      });
+      qs('#btn-save-new-client', bd).addEventListener('click', async () => {
+        const name = qs('#new-client-name', bd).value.trim();
+        if (!name) { toast('Enter the client’s name first.'); return; }
+        const payload = {
+          entity: qs('#billing-invoice-entity', bd).value,
+          name,
+          tin: qs('#new-client-tin', bd).value.trim(),
+          address: qs('#new-client-address', bd).value.trim(),
+          contactPerson: qs('#new-client-contact-person', bd).value.trim(),
+          contactNumber: qs('#new-client-contact-number', bd).value.trim(),
+        };
+        const btn = qs('#btn-save-new-client', bd);
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+        try {
+          await Store.addBillingClient(payload);
+        } catch (e) {
+          btn.disabled = false;
+          btn.textContent = 'Save client';
+          return;   // Store.addBillingClient has already said what went wrong
+        }
+        toast('✔ Client added.');
+        knownClients = computeKnownBillingClients(payload.entity);
+        qs('#billing-known-clients', bd).innerHTML = Object.values(knownClients).map(c => `<option value="${escapeHtml(c.clientName)}">`).join('');
+        qs('#billing-invoice-client-name', bd).value = payload.name;
+        qs('[name="clientTin"]', bd).value = payload.tin;
+        qs('[name="clientAddress"]', bd).value = payload.address;
+        qs('[name="contactPerson"]', bd).value = payload.contactPerson;
+        qs('[name="contactNumber"]', bd).value = payload.contactNumber;
+        ['#new-client-name', '#new-client-tin', '#new-client-address', '#new-client-contact-person', '#new-client-contact-number'].forEach((sel) => { qs(sel, bd).value = ''; });
+        qs('#billing-new-client-panel', bd).style.display = 'none';
+        btn.disabled = false;
+        btn.textContent = 'Save client';
       });
 
       qs('#billing-invoice-form', bd).addEventListener('submit', async (ev) => {
@@ -1224,8 +1473,14 @@ window.Views.finance = (function () {
         submitBtn.textContent = 'Saving…';
         try {
           const cleanItems = items
+            .map(it => Object.assign({}, it, { description: composeBillingParticulars(it, fd.get('date')) }))
             .filter(it => it.description.trim() || it.unitPrice !== '')
-            .map(it => ({ qty: it.qty === '' ? '' : Number(it.qty), unit: it.unit.trim(), description: it.description.trim(), unitPrice: it.unitPrice === '' ? '' : Number(it.unitPrice), amount: itemAmount(it) }));
+            .map(it => ({
+              qty: it.qty === '' ? '' : Number(it.qty), unit: it.unit.trim(),
+              particulars: it.particulars || '', customParticulars: it.particulars === '__other__' ? it.customParticulars.trim() : '',
+              quarter: it.quarter || '', month: it.month || '',
+              description: it.description.trim(), unitPrice: it.unitPrice === '' ? '' : Number(it.unitPrice), amount: itemAmount(it),
+            }));
           const net = cleanItems.reduce((s, it) => s + (Number(it.amount) || 0), 0);
           const total = net * 1.12;
           const patch = {

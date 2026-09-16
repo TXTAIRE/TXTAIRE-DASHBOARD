@@ -1042,6 +1042,7 @@ const Store = (function () {
     scheduleChangeRequests: 'scheduleChangeRequests',
     paymentVouchers: 'paymentVouchers',
     billingInvoices: 'billingInvoices',
+    billingClients: 'billingClients',
     auditLog: 'auditLog',
     notifications: 'notifications',
     payrollReleases: 'payrollReleases',
@@ -1072,7 +1073,7 @@ const Store = (function () {
     employees: [], candidates: [], disciplinaryCases: [], complaints: [],
     attendance: [], deductions: [], bonuses: [], probationRecords: [], payrollOverrides: [], holidays: [],
     payCutoffSettings: [],
-    leaveRequests: [], attendanceCorrections: [], scheduleChangeRequests: [], paymentVouchers: [], billingInvoices: [], auditLog: [],
+    leaveRequests: [], attendanceCorrections: [], scheduleChangeRequests: [], paymentVouchers: [], billingInvoices: [], billingClients: [], auditLog: [],
     notifications: [], payrollReleases: [], appSettings: [],
     expenses: [], bills: [], officeFiles: [],
     employmentHistory: [], employeeDocuments: [],
@@ -2472,6 +2473,25 @@ const Store = (function () {
     await deleteRow('billingInvoices', id);
   }
 
+  // ---- Billing Clients (the "+ New client" roster behind the Billing Invoice form) ----
+  // A client HR explicitly registers here shows up in the Client Name picker -- with TIN/
+  // address/contact filled in -- immediately, on the very next invoice, without first
+  // having to bill them once through the app. Entity-scoped like billingInvoices itself:
+  // TXTAIRE REF/OPC and AVISO are separate legal entities with separate client rosters.
+  function listBillingClients() { return state.billingClients.slice(); }
+  function billingClientsForEntity(entity) { return state.billingClients.filter(c => c.entity === entity); }
+  async function addBillingClient(c) {
+    c.id = genId('bc');
+    return insertRow('billingClients', c);
+  }
+  async function updateBillingClient(id, patch) {
+    await updateRow('billingClients', id, patch);
+    return state.billingClients.find(c => c.id === id);
+  }
+  async function deleteBillingClient(id) {
+    await deleteRow('billingClients', id);
+  }
+
   // ---- 13th Month Pay (PD 851) ----
   // Statutory: total basic salary actually earned within the calendar year, divided by
   // 12. Pure computation over the same computeRow(emp, from, to).basePay used everywhere
@@ -2844,6 +2864,7 @@ const Store = (function () {
     listBills, getBill, addBill, updateBill, deleteBill, payBill,
     listPaymentVouchers, getPaymentVoucher, paymentVouchersInRange, addPaymentVoucher, updatePaymentVoucher, deletePaymentVoucher,
     listBillingInvoices, getBillingInvoice, billingInvoicesInRange, addBillingInvoice, updateBillingInvoice, deleteBillingInvoice,
+    listBillingClients, billingClientsForEntity, addBillingClient, updateBillingClient, deleteBillingClient,
     listOfficeFiles, uploadOfficeFile, getSignedOfficeFileUrl, deleteOfficeFile, updateOfficeFile, duplicateOfficeFile,
     listMaterialRequests, addMaterialRequest, updateMaterialRequest, deleteMaterialRequest,
     employeeDocumentsForEmployee, uploadEmployeeDocument, getSignedEmployeeDocumentUrl, updateEmployeeDocument, deleteEmployeeDocument,

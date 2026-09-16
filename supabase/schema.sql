@@ -3258,3 +3258,26 @@ begin
   return NEW;
 end;
 $$;
+
+-- "+ New client" roster behind the Billing Invoice form's Client Name picker (js/views/
+-- finance.js computeKnownBillingClients) -- lets HR register a client's TIN/address/
+-- contact once, up front, instead of only picking up their details after the fact from a
+-- past invoice. Entity-scoped like billingInvoices itself -- same admin-only pattern.
+create table if not exists "billingClients" (
+  id text primary key,
+  entity text not null default 'TXTAIRE OPC',   -- 'TXTAIRE OPC' | 'TXTAIRE REF' | 'AVISO'
+  name text not null,
+  tin text default '',
+  address text default '',
+  "contactPerson" text default '',
+  "contactNumber" text default '',
+  created_at timestamptz not null default now()
+);
+
+alter table "billingClients" enable row level security;
+
+drop policy if exists "admin full access" on "billingClients";
+create policy "admin full access" on "billingClients"
+  for all to authenticated using (is_admin()) with check (is_admin());
+
+alter publication supabase_realtime add table "billingClients";
