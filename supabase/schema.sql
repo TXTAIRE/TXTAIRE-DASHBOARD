@@ -3281,3 +3281,35 @@ create policy "admin full access" on "billingClients"
   for all to authenticated using (is_admin()) with check (is_admin());
 
 alter publication supabase_realtime add table "billingClients";
+
+-- Cash Vouchers -- a separate section from Payment Vouchers (js/views/finance.js), with its
+-- own paper template (full letterhead, single Distribution-of-Account table) and its own
+-- independent "<year>-B<seq>" numbering.
+create table if not exists "cashVouchers" (
+  id text primary key,
+  entity text not null default 'TXTAIRE OPC',   -- 'TXTAIRE OPC' | 'TXTAIRE REF' | 'AVISO'
+  "refNo" text not null,
+  date date not null,
+  "payTo" text not null default '',
+  "payeeAccountInfo" text default '',
+  particulars jsonb default '[]'::jsonb,        -- [{text, amount}]
+  amount numeric(12,2) not null default 0,
+  "sumOfWords" text default '',
+  "bankName" text default '',
+  "checkNumber" text default '',
+  "paymentMethod" text default 'Cash',
+  "certifiedCorrectBy" text default '',
+  "certifiedCorrectByTitle" text default '',
+  "approvedBy" text default '',
+  "approvedByTitle" text default '',
+  "enteredBy" text,
+  created_at timestamptz not null default now()
+);
+
+alter table "cashVouchers" enable row level security;
+
+drop policy if exists "admin full access" on "cashVouchers";
+create policy "admin full access" on "cashVouchers"
+  for all to authenticated using (is_admin()) with check (is_admin());
+
+alter publication supabase_realtime add table "cashVouchers";

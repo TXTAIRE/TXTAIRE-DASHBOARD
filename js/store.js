@@ -1041,6 +1041,7 @@ const Store = (function () {
     attendanceCorrections: 'attendanceCorrections',
     scheduleChangeRequests: 'scheduleChangeRequests',
     paymentVouchers: 'paymentVouchers',
+    cashVouchers: 'cashVouchers',
     billingInvoices: 'billingInvoices',
     billingClients: 'billingClients',
     auditLog: 'auditLog',
@@ -1073,7 +1074,7 @@ const Store = (function () {
     employees: [], candidates: [], disciplinaryCases: [], complaints: [],
     attendance: [], deductions: [], bonuses: [], probationRecords: [], payrollOverrides: [], holidays: [],
     payCutoffSettings: [],
-    leaveRequests: [], attendanceCorrections: [], scheduleChangeRequests: [], paymentVouchers: [], billingInvoices: [], billingClients: [], auditLog: [],
+    leaveRequests: [], attendanceCorrections: [], scheduleChangeRequests: [], paymentVouchers: [], cashVouchers: [], billingInvoices: [], billingClients: [], auditLog: [],
     notifications: [], payrollReleases: [], appSettings: [],
     expenses: [], bills: [], officeFiles: [],
     employmentHistory: [], employeeDocuments: [],
@@ -2443,6 +2444,32 @@ const Store = (function () {
     await deleteRow('paymentVouchers', id);
   }
 
+  // ---- Cash Vouchers (Office & Finance, admin-only) -- a separate section from Payment
+  // Vouchers above: different paper template (full letterhead, single Distribution-of-
+  // Account table), and its own independent "<year>-B<seq>" numbering, not sharing
+  // paymentVouchers' counter even though both happen to use the same "B" prefix on the
+  // real paper forms.
+  function listCashVouchers() { return state.cashVouchers.slice(); }
+  function getCashVoucher(id) { return state.cashVouchers.find(v => v.id === id); }
+  function cashVouchersInRange(from, to) { return state.cashVouchers.filter(v => v.date >= from && v.date <= to); }
+  function nextCashVoucherRefNo(dateStr) {
+    const year = (dateStr || todayISO()).slice(0, 4);
+    const countThisYear = state.cashVouchers.filter(v => (v.refNo || '').startsWith(year + '-B')).length;
+    return year + '-B' + String(countThisYear + 1).padStart(3, '0');
+  }
+  async function addCashVoucher(v) {
+    v.id = genId('cv');
+    v.refNo = nextCashVoucherRefNo(v.date);
+    return insertRow('cashVouchers', v);
+  }
+  async function updateCashVoucher(id, patch) {
+    await updateRow('cashVouchers', id, patch);
+    return getCashVoucher(id);
+  }
+  async function deleteCashVoucher(id) {
+    await deleteRow('cashVouchers', id);
+  }
+
   function listBillingInvoices() { return state.billingInvoices.slice(); }
   function getBillingInvoice(id) { return state.billingInvoices.find(v => v.id === id); }
   function billingInvoicesInRange(from, to) { return state.billingInvoices.filter(v => v.date >= from && v.date <= to); }
@@ -2863,6 +2890,7 @@ const Store = (function () {
     uploadReceiptPhoto, getSignedReceiptUrl, deleteReceiptPhoto,
     listBills, getBill, addBill, updateBill, deleteBill, payBill,
     listPaymentVouchers, getPaymentVoucher, paymentVouchersInRange, addPaymentVoucher, updatePaymentVoucher, deletePaymentVoucher,
+    listCashVouchers, getCashVoucher, cashVouchersInRange, addCashVoucher, updateCashVoucher, deleteCashVoucher,
     listBillingInvoices, getBillingInvoice, billingInvoicesInRange, addBillingInvoice, updateBillingInvoice, deleteBillingInvoice,
     listBillingClients, billingClientsForEntity, addBillingClient, updateBillingClient, deleteBillingClient,
     listOfficeFiles, uploadOfficeFile, getSignedOfficeFileUrl, deleteOfficeFile, updateOfficeFile, duplicateOfficeFile,

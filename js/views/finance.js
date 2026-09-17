@@ -18,6 +18,7 @@ window.Views.finance = (function () {
   // catch-up session should land in August's report, not get scattered back into May's.
   let expenseFilterBy = 'encoded'; // 'encoded' | 'issued'
   let voucherMonth = todayISO().slice(0, 7); // 'YYYY-MM'
+  let cashVoucherMonth = todayISO().slice(0, 7); // 'YYYY-MM'
   let billingInvoiceMonth = todayISO().slice(0, 7); // 'YYYY-MM'
   let thirteenthMonthYear = new Date(todayISO() + 'T00:00:00').getFullYear();
 
@@ -32,6 +33,7 @@ window.Views.finance = (function () {
         ${activeTab === 'expenses' ? '<button class="btn btn-primary" id="btn-new-expense">+ Add expense</button>' : ''}
         ${activeTab === 'bills' ? '<button class="btn btn-primary" id="btn-new-bill">+ Add bill</button>' : ''}
         ${activeTab === 'vouchers' ? '<button class="btn btn-primary" id="btn-new-voucher">+ Add payment voucher</button>' : ''}
+        ${activeTab === 'cashVouchers' ? '<button class="btn btn-primary" id="btn-new-cash-voucher">+ Add cash voucher</button>' : ''}
         ${activeTab === 'billingInvoices' ? '<button class="btn btn-primary" id="btn-new-billing-invoice">+ Add billing invoice</button>' : ''}
       </div>
 
@@ -39,6 +41,7 @@ window.Views.finance = (function () {
         <div class="tab ${activeTab === 'expenses' ? 'active' : ''}" data-tab="expenses">Expenses &amp; Receipts</div>
         <div class="tab ${activeTab === 'bills' ? 'active' : ''}" data-tab="bills">Bill Reminders</div>
         <div class="tab ${activeTab === 'vouchers' ? 'active' : ''}" data-tab="vouchers">Payment Vouchers</div>
+        <div class="tab ${activeTab === 'cashVouchers' ? 'active' : ''}" data-tab="cashVouchers">Cash Vouchers</div>
         <div class="tab ${activeTab === 'billingInvoices' ? 'active' : ''}" data-tab="billingInvoices">Billing Invoices</div>
         <div class="tab ${activeTab === 'thirteenthMonth' ? 'active' : ''}" data-tab="thirteenthMonth">13th Month Pay</div>
       </div>
@@ -53,12 +56,15 @@ window.Views.finance = (function () {
     if (btnNewBill) btnNewBill.addEventListener('click', () => openBillForm(main));
     const btnNewVoucher = qs('#btn-new-voucher', main);
     if (btnNewVoucher) btnNewVoucher.addEventListener('click', () => openVoucherForm(main));
+    const btnNewCashVoucher = qs('#btn-new-cash-voucher', main);
+    if (btnNewCashVoucher) btnNewCashVoucher.addEventListener('click', () => openCashVoucherForm(main));
     const btnNewBillingInvoice = qs('#btn-new-billing-invoice', main);
     if (btnNewBillingInvoice) btnNewBillingInvoice.addEventListener('click', () => openBillingInvoiceForm(main));
 
     if (activeTab === 'expenses') renderExpensesTab(qs('#tab-body', main), main);
     else if (activeTab === 'bills') renderBillsTab(qs('#tab-body', main), main);
     else if (activeTab === 'vouchers') renderVouchersTab(qs('#tab-body', main), main);
+    else if (activeTab === 'cashVouchers') renderCashVouchersTab(qs('#tab-body', main), main);
     else if (activeTab === 'billingInvoices') renderBillingInvoicesTab(qs('#tab-body', main), main);
     else render13thMonthTab(qs('#tab-body', main), main);
   }
@@ -639,7 +645,8 @@ window.Views.finance = (function () {
       lines: [
         'Tel No.: (049) 549 2847 / (049) 546 6253&nbsp;&nbsp;&nbsp;Mobile: +63969 647 0000&nbsp;&nbsp;&nbsp;Email: service@txtaire.com',
         'Main Office: No.112 Lawin St. San Jose Village, Brgy.Biñan, City of Biñan, Laguna 4024',
-        'Field Offices: Unit 301, 141-Q BGC Residence, East Rembo, Makati City',
+        'Field Office: Unit 301, 141-Q BGC Residences, East Rembo, Makati City',
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Forest Side Villas Phase 1 B7 L6 New Era, Tandang Sora, Quezon City',
       ],
       vatTin: '902-637-379-00000',
       payInOrderOf: 'TXTAIRE OPC',
@@ -1131,6 +1138,360 @@ window.Views.finance = (function () {
     document.body.appendChild(overlay);
     overlay.querySelector('#voucher-close').addEventListener('click', () => overlay.remove());
     overlay.querySelector('#voucher-print-btn').addEventListener('click', () => window.print());
+  }
+
+  // ---------------- Cash Vouchers ----------------
+  // A separate section from Payment Vouchers above -- different paper template (full
+  // letterhead, single Distribution-of-Account table, "Received Payment by" set apart from
+  // the Prepared/Certified/Approved row) transcribed from the office's own blank "CASH
+  // VOUCHER" form (CASH VOUCHER TXTAIRE AUGUST_1.docx), and its own independent numbering
+  // (Store.nextCashVoucherRefNo), not shared with paymentVouchers' counter.
+
+  function cashVoucherSignatoryDefaultsCard(main) {
+    const cName = Store.getAppSetting('cashVoucherCertifiedCorrectByDefault', '');
+    const aName = Store.getAppSetting('cashVoucherApprovedByDefault', '');
+    return `
+      <div class="panel" style="margin-bottom:8px; padding:10px 14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <span>✍️ Default Signatories:</span>
+        <span class="dim" style="font-size:12px;">${cName ? escapeHtml(cName) : '(not set)'} — Certified Correct By &middot; ${aName ? escapeHtml(aName) : '(not set)'} — Approved By</span>
+        <button type="button" class="link-btn" id="btn-cash-voucher-signatory-settings">Manage</button>
+      </div>
+    `;
+  }
+
+  function openCashVoucherSignatoryDefaultsModal(main) {
+    const cName = Store.getAppSetting('cashVoucherCertifiedCorrectByDefault', '');
+    const cTitle = Store.getAppSetting('cashVoucherCertifiedCorrectByTitleDefault', '');
+    const aName = Store.getAppSetting('cashVoucherApprovedByDefault', '');
+    const aTitle = Store.getAppSetting('cashVoucherApprovedByTitleDefault', '');
+    openModal(`
+      <h2>✍️ Default Cash Voucher Signatories</h2>
+      <div class="modal-sub" style="margin-bottom:10px;">Pre-fills every NEW cash voucher's Certified Correct By / Approved By fields — still editable per voucher afterward, and doesn't change any voucher already saved.</div>
+      <form id="cash-voucher-signatory-form">
+        <div class="modal-grid">
+          <div class="field"><label>Certified Correct By — Name</label><input name="cName" value="${escapeHtml(cName)}" /></div>
+          <div class="field"><label>Certified Correct By — Title</label><input name="cTitle" value="${escapeHtml(cTitle)}" /></div>
+          <div class="field"><label>Approved By — Name</label><input name="aName" value="${escapeHtml(aName)}" /></div>
+          <div class="field"><label>Approved By — Title</label><input name="aTitle" value="${escapeHtml(aTitle)}" /></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    `, (bd) => {
+      qs('#cash-voucher-signatory-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        await Store.setAppSetting('cashVoucherCertifiedCorrectByDefault', fd.get('cName').trim());
+        await Store.setAppSetting('cashVoucherCertifiedCorrectByTitleDefault', fd.get('cTitle').trim());
+        await Store.setAppSetting('cashVoucherApprovedByDefault', fd.get('aName').trim());
+        await Store.setAppSetting('cashVoucherApprovedByTitleDefault', fd.get('aTitle').trim());
+        toast('✔ Default signatories saved.');
+        closeModal();
+        renderView(main);
+      });
+    });
+  }
+
+  function renderCashVouchersTab(body, main) {
+    const from = cashVoucherMonth + '-01';
+    const to = cashVoucherMonth + '-31';
+    const rows = Store.cashVouchersInRange(from, to).slice().sort((a, b) => b.date.localeCompare(a.date));
+    const total = rows.reduce((s, r) => s + Number(r.amount), 0);
+    const monthLabel = new Date(cashVoucherMonth + '-01T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    body.innerHTML = `
+      ${cashVoucherSignatoryDefaultsCard(main)}
+      <div class="filters">
+        <div class="field"><label>Month</label><input type="month" id="cash-voucher-month-input" value="${cashVoucherMonth}" /></div>
+        <button class="btn btn-ghost btn-sm" id="btn-print-cash-vouchers" style="align-self:flex-end;" ${rows.length ? '' : 'disabled'}>🖨 Print Cash Vouchers</button>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="kpi-label">Total Cash Vouchers — ${monthLabel}</div><div class="kpi-value" style="font-size:20px;">${fmtMoney(total)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Entries</div><div class="kpi-value">${rows.length}</div></div>
+      </div>
+
+      <div class="panel">
+        ${rows.length ? `
+        <table>
+          <thead><tr><th>No.</th><th>Date</th><th>Entity</th><th class="num">Amount</th><th>Method</th><th>Payee</th><th>Certified Correct By</th><th>Approved By</th><th>Entered By</th><th></th></tr></thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td class="name">${escapeHtml(r.refNo)}</td>
+                <td class="dim">${fmtDate(r.date)}</td>
+                <td class="dim">${escapeHtml(r.entity)}</td>
+                <td class="num">${fmtMoney(r.amount)}</td>
+                <td class="dim">${escapeHtml(r.paymentMethod)}${r.paymentMethod === 'Check' && r.checkNumber ? ' #' + escapeHtml(r.checkNumber) : ''}</td>
+                <td class="dim">${escapeHtml(r.payTo)}</td>
+                <td class="dim">${escapeHtml(r.certifiedCorrectBy || '—')}</td>
+                <td class="dim">${escapeHtml(r.approvedBy || '—')}</td>
+                <td class="dim">${escapeHtml(r.enteredBy || '—')}</td>
+                <td style="white-space:nowrap;">
+                  <button class="link-btn" data-print-cash-voucher="${r.id}">Print</button>
+                  <button class="link-btn" data-edit-cash-voucher="${r.id}">Edit</button>
+                  <button class="link-btn" data-delete-cash-voucher="${r.id}" style="color:var(--red);">Delete</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>` : '<div class="empty">No cash vouchers logged for this month.</div>'}
+      </div>
+    `;
+
+    qs('#cash-voucher-month-input', body).addEventListener('change', (ev) => { cashVoucherMonth = ev.target.value; renderCashVouchersTab(body, main); });
+    const settingsBtn = qs('#btn-cash-voucher-signatory-settings', body);
+    if (settingsBtn) settingsBtn.addEventListener('click', () => openCashVoucherSignatoryDefaultsModal(main));
+    const printAllBtn = qs('#btn-print-cash-vouchers', body);
+    if (printAllBtn && !printAllBtn.disabled) printAllBtn.addEventListener('click', () => openCashVoucherPrintView(rows));
+    qsa('[data-print-cash-voucher]', body).forEach(b => b.addEventListener('click', () => {
+      const r = Store.getCashVoucher(b.dataset.printCashVoucher);
+      if (r) openCashVoucherPrintView([r]);
+    }));
+    qsa('[data-edit-cash-voucher]', body).forEach(b => b.addEventListener('click', () => {
+      const r = Store.getCashVoucher(b.dataset.editCashVoucher);
+      if (r) openCashVoucherForm(main, r);
+    }));
+    qsa('[data-delete-cash-voucher]', body).forEach(b => b.addEventListener('click', async () => {
+      const r = Store.getCashVoucher(b.dataset.deleteCashVoucher);
+      if (!r) return;
+      if (!confirm(`Delete cash voucher ${r.refNo} (${fmtMoney(r.amount)})? This cannot be undone.`)) return;
+      await Store.deleteCashVoucher(r.id);
+      toast('✔ Cash voucher deleted.');
+      renderCashVouchersTab(body, main);
+    }));
+  }
+
+  function openCashVoucherForm(main, editing) {
+    const letterheadFor = (entity) => BILLING_LETTERHEADS[entity] || BILLING_LETTERHEADS['TXTAIRE OPC'];
+    const v = editing || {
+      entity: 'TXTAIRE OPC', date: todayISO(), paymentMethod: 'Cash', checkNumber: '', bankName: '',
+      payTo: '', payeeAccountInfo: '',
+      certifiedCorrectBy: Store.getAppSetting('cashVoucherCertifiedCorrectByDefault', ''),
+      certifiedCorrectByTitle: Store.getAppSetting('cashVoucherCertifiedCorrectByTitleDefault', ''),
+      approvedBy: Store.getAppSetting('cashVoucherApprovedByDefault', ''),
+      approvedByTitle: Store.getAppSetting('cashVoucherApprovedByTitleDefault', ''),
+    };
+    // Working copy of the itemized particulars -- always at least one row so the editor
+    // never renders empty. Amount may be blank on a row that's purely an annotation (e.g.
+    // "REQUESTED BY: JRB"), matching the real paper form's particulars column.
+    let particulars = (Array.isArray(v.particulars) && v.particulars.length)
+      ? v.particulars.map(p => ({ text: p.text || '', amount: p.amount === '' || p.amount == null ? '' : p.amount }))
+      : [{ text: '', amount: '' }];
+
+    openModal(`
+      <h2>${editing ? 'Edit Cash Voucher' : 'Add Cash Voucher'}</h2>
+      ${editing ? `<div class="modal-sub">No.: <strong>${escapeHtml(editing.refNo)}</strong></div>` : '<div class="modal-sub">A voucher No. is assigned automatically when saved.</div>'}
+      <form id="cash-voucher-form">
+        <div class="modal-grid">
+          <div class="field"><label>Entity (issuing letterhead)</label>
+            <select name="entity">${ENTITY_OPTIONS.map(e => `<option ${e === v.entity ? 'selected' : ''}>${e}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Date</label><input type="date" name="date" value="${v.date}" required /></div>
+          <div class="field"><label>Method of Payment</label>
+            <select name="paymentMethod">${PAYMENT_METHODS.map(m => `<option ${m === v.paymentMethod ? 'selected' : ''}>${m}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Bank <span class="dim" style="font-weight:400;">(if Check)</span></label><input name="bankName" value="${escapeHtml(v.bankName || '')}" /></div>
+          <div class="field"><label>Check # <span class="dim" style="font-weight:400;">(if Check)</span></label><input name="checkNumber" value="${escapeHtml(v.checkNumber || '')}" /></div>
+          <div class="field full"><label>Payee</label><input name="payTo" value="${escapeHtml(v.payTo)}" required /></div>
+          <div class="field full"><label>Payee Payment Details <span class="dim" style="font-weight:400;">(optional — bank/GCash account, printed under the payee name)</span></label><textarea name="payeeAccountInfo" rows="2">${escapeHtml(v.payeeAccountInfo || '')}</textarea></div>
+          <div class="field full">
+            <label>Particulars</label>
+            <div id="cash-voucher-particulars-rows"></div>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-add-cash-particular" style="align-self:flex-start; margin-top:6px;">+ Add line</button>
+            <div class="dim" style="margin-top:6px;">Total Amount: <strong id="cash-voucher-particulars-total">${fmtMoney(0)}</strong></div>
+          </div>
+          <div class="field"><label>Certified Correct By — Name</label><input name="certifiedCorrectBy" value="${escapeHtml(v.certifiedCorrectBy || '')}" /></div>
+          <div class="field"><label>Certified Correct By — Title</label><input name="certifiedCorrectByTitle" value="${escapeHtml(v.certifiedCorrectByTitle || '')}" /></div>
+          <div class="field"><label>Approved By — Name</label><input name="approvedBy" value="${escapeHtml(v.approvedBy || '')}" /></div>
+          <div class="field"><label>Approved By — Title</label><input name="approvedByTitle" value="${escapeHtml(v.approvedByTitle || '')}" /></div>
+        </div>
+        <div class="modal-actions">
+          ${editing ? '<button type="button" class="btn btn-danger" id="btn-del-cash-voucher">Delete</button>' : ''}
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">${editing ? 'Save changes' : 'Add cash voucher'}</button>
+        </div>
+      </form>
+    `, (bd) => {
+      function particularsTotal() {
+        return particulars.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      }
+      function renderParticularRows() {
+        const wrap = qs('#cash-voucher-particulars-rows', bd);
+        wrap.innerHTML = particulars.map((p, i) => `
+          <div style="display:flex; gap:8px; margin-bottom:6px;">
+            <input type="text" placeholder="Particular / description" value="${escapeHtml(p.text)}" data-cv-particular-text="${i}" style="flex:1;" />
+            <input type="number" min="0" step="0.01" placeholder="Amount" value="${p.amount === '' ? '' : p.amount}" data-cv-particular-amount="${i}" style="width:110px;" />
+            <button type="button" class="link-btn" data-cv-remove-particular="${i}" style="color:var(--red);">✕</button>
+          </div>
+        `).join('');
+        qsa('[data-cv-particular-text]', wrap).forEach(el => el.addEventListener('input', () => {
+          particulars[Number(el.dataset.cvParticularText)].text = el.value;
+        }));
+        qsa('[data-cv-particular-amount]', wrap).forEach(el => el.addEventListener('input', () => {
+          particulars[Number(el.dataset.cvParticularAmount)].amount = el.value === '' ? '' : Number(el.value);
+          qs('#cash-voucher-particulars-total', bd).textContent = fmtMoney(particularsTotal());
+        }));
+        qsa('[data-cv-remove-particular]', wrap).forEach(el => el.addEventListener('click', () => {
+          particulars.splice(Number(el.dataset.cvRemoveParticular), 1);
+          if (!particulars.length) particulars.push({ text: '', amount: '' });
+          renderParticularRows();
+          qs('#cash-voucher-particulars-total', bd).textContent = fmtMoney(particularsTotal());
+        }));
+      }
+      renderParticularRows();
+      qs('#cash-voucher-particulars-total', bd).textContent = fmtMoney(particularsTotal());
+      qs('#btn-add-cash-particular', bd).addEventListener('click', () => {
+        particulars.push({ text: '', amount: '' });
+        renderParticularRows();
+      });
+
+      qs('#cash-voucher-form', bd).addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const submitBtn = qs('button[type="submit"]', bd);
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saving…';
+        try {
+          const cleanParticulars = particulars
+            .filter(p => p.text.trim() || p.amount !== '')
+            .map(p => ({ text: p.text.trim(), amount: p.amount === '' ? '' : Number(p.amount) }));
+          const amount = particularsTotal();
+          const patch = {
+            entity: fd.get('entity'),
+            date: fd.get('date'),
+            amount,
+            paymentMethod: fd.get('paymentMethod'),
+            bankName: fd.get('bankName').trim(),
+            checkNumber: fd.get('checkNumber').trim(),
+            payTo: fd.get('payTo').trim(),
+            payeeAccountInfo: fd.get('payeeAccountInfo').trim(),
+            particulars: cleanParticulars,
+            sumOfWords: amountToWords(amount),
+            certifiedCorrectBy: fd.get('certifiedCorrectBy').trim(),
+            certifiedCorrectByTitle: fd.get('certifiedCorrectByTitle').trim(),
+            approvedBy: fd.get('approvedBy').trim(),
+            approvedByTitle: fd.get('approvedByTitle').trim(),
+          };
+          if (editing) {
+            await Store.updateCashVoucher(editing.id, patch);
+            toast('✔ Cash voucher updated.');
+          } else {
+            patch.enteredBy = currentUserEmail();
+            await Store.addCashVoucher(patch);
+            toast('✔ Cash voucher added.');
+          }
+          closeModal();
+          renderView(main);
+        } catch (err) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = editing ? 'Save changes' : 'Add cash voucher';
+        }
+      });
+      const delBtn = qs('#btn-del-cash-voucher', bd);
+      if (delBtn) delBtn.addEventListener('click', async () => {
+        if (!confirm('Delete this cash voucher? This cannot be undone.')) return;
+        await Store.deleteCashVoucher(editing.id);
+        closeModal();
+        toast('✔ Cash voucher deleted.');
+        renderView(main);
+      });
+    });
+  }
+
+  // One printable page per voucher, transcribed from the office's own blank "CASH VOUCHER"
+  // form: full letterhead (reusing the Billing Invoice's per-entity letterhead), a bordered
+  // Payee box beside a red voucher No./Date, itemized Particulars/Amount, Distribution of
+  // Account (ONE blank Account Title/Debit/Credit table, with the Pesos amount-in-words and
+  // Bank/Check No. beside it -- not two side-by-side tables), "Received Payment by" set
+  // apart on its own line, then the Prepared/Certified Correct/Approved signature row.
+  function cashVoucherCardHtml(v) {
+    if (!v) return '<div class="cv-card empty"></div>';
+    const lh = BILLING_LETTERHEADS[v.entity] || BILLING_LETTERHEADS['TXTAIRE OPC'];
+    const particulars = Array.isArray(v.particulars) ? v.particulars : [];
+    const total = particulars.length ? particulars.reduce((s, p) => s + (Number(p.amount) || 0), 0) : Number(v.amount) || 0;
+    return `
+      <div class="cv-card">
+        <div class="billing-header">
+          <img src="${lh.logo}" class="billing-logo" style="height:${lh.logoHeight}px;" alt="${escapeHtml(v.entity)}" />
+          <div class="billing-header-text">
+            ${lh.name ? `<div class="billing-company-name">${escapeHtml(lh.name)} ${lh.nameSuffix ? `<span class="billing-company-suffix">${escapeHtml(lh.nameSuffix)}</span>` : ''}</div>` : ''}
+            ${lh.tagline ? `<div class="billing-tagline">"${escapeHtml(lh.tagline)}"</div>` : ''}
+            ${lh.lines.map(l => `<div class="billing-contact-line">${l}</div>`).join('')}
+          </div>
+        </div>
+        <div class="cv-title">CASH VOUCHER</div>
+        <div class="cv-meta-row">
+          <div class="cv-payee-box">
+            <div class="cv-payee-label">PAYEE:</div>
+            <div class="cv-payee-value">${escapeHtml(v.payTo)}</div>
+            ${v.payeeAccountInfo ? `<div class="cv-payee-sub">${escapeHtml(v.payeeAccountInfo).replace(/\n/g, '<br/>')}</div>` : ''}
+          </div>
+          <div class="cv-nodate-box">
+            <div class="cv-no-row"><span class="cv-field-label">No.:</span> <span class="cv-no-value">${escapeHtml(v.refNo)}</span></div>
+            <div class="cv-date-row"><span class="cv-field-label">Date:</span> <span class="cv-dotted-value">${fmtDate(v.date)}</span></div>
+          </div>
+        </div>
+        <table class="cv-particulars-table">
+          <thead><tr><th>PARTICULARS</th><th>AMOUNT</th></tr></thead>
+          <tbody>
+            ${(particulars.length ? particulars : [{ text: '', amount: '' }]).map(p => `
+              <tr><td>${escapeHtml(p.text)}</td><td class="num">${p.amount === '' || p.amount == null ? '' : fmtMoney(Number(p.amount))}</td></tr>
+            `).join('')}
+          </tbody>
+          <tfoot><tr><td>TOTAL AMOUNT</td><td class="num">${fmtMoney(total)}</td></tr></tfoot>
+        </table>
+        <div class="cv-dist-row">
+          <span class="cv-field-label">Distribution of Account:</span>
+          <span class="cv-field-label" style="margin-left:auto;">PESOS:</span>
+        </div>
+        <div class="cv-accounts-row">
+          <table class="cv-account-table">
+            <thead><tr><th>ACCOUNT TITLE</th><th>DEBIT</th><th>CREDIT</th></tr></thead>
+            <tbody>${Array.from({ length: 9 }).map(() => '<tr><td>&nbsp;</td><td></td><td></td></tr>').join('')}</tbody>
+            <tfoot><tr><td>TOTAL</td><td>—</td><td>—</td></tr></tfoot>
+          </table>
+          <div class="cv-bank-block">
+            <div class="cv-pesos-value">${escapeHtml(v.sumOfWords || amountToWords(total))}</div>
+            <div class="cv-bank-row"><span class="cv-field-label">BANK:</span> <span class="cv-dotted-value">${escapeHtml(v.bankName || '')}</span></div>
+            <div class="cv-bank-row"><span class="cv-field-label">CHECK NO.:</span> <span class="cv-dotted-value">${escapeHtml(v.paymentMethod === 'Check' ? (v.checkNumber || '') : '')}</span></div>
+          </div>
+        </div>
+        <div class="cv-received-row">
+          <div class="cv-sig-blank"></div>
+          <span class="cv-field-label">Received Payment by:</span>
+        </div>
+        <div class="cv-footer">
+          <div><div class="cv-sig-blank"></div><span class="cv-field-label">Prepared by:</span><br/><span class="cv-sig-title">Accounting Officer</span></div>
+          <div><div class="cv-sig-blank"></div><span class="cv-field-label">Certified Correct by:</span><br/><span class="cv-value">${escapeHtml(v.certifiedCorrectBy || '')}</span><br/><span class="cv-sig-title">${escapeHtml(v.certifiedCorrectByTitle || '')}</span></div>
+          <div><div class="cv-sig-blank"></div><span class="cv-field-label">Approved by:</span><br/><span class="cv-value">${escapeHtml(v.approvedBy || '')}</span><br/><span class="cv-sig-title">${escapeHtml(v.approvedByTitle || '')}</span></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function openCashVoucherPrintView(vouchersIn) {
+    // One voucher per full A4 page, oldest-to-newest -- same ledger convention as every
+    // other printable list in this app (Expense Report, Payment Vouchers, Billing
+    // Invoices). Unlike the compact Payment Voucher slip, a Cash Voucher now carries a full
+    // letterhead, so it prints one-per-page like a Billing Invoice, not two-per-sheet.
+    const vouchers = vouchersIn.slice().sort((a, b) => a.date.localeCompare(b.date));
+    const overlay = document.createElement('div');
+    overlay.className = 'cv-overlay';
+    overlay.innerHTML = `
+      <div class="cv-print">
+        <div class="cv-actions no-print">
+          <button class="btn btn-ghost btn-sm" id="cv-close">Close</button>
+          <button class="btn btn-primary btn-sm" id="cv-print-btn">Print / Save as PDF</button>
+        </div>
+        ${(vouchers.length ? vouchers : [null]).map(v => `<div class="cv-page">${cashVoucherCardHtml(v)}</div>`).join('')}
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#cv-close').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#cv-print-btn').addEventListener('click', () => window.print());
   }
 
   // ---------------- Billing Invoices ----------------
