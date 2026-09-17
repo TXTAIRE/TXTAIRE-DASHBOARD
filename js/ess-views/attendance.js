@@ -798,6 +798,62 @@ window.EssViews.attendance = (function () {
     return `${lat}, ${lon}${acc}`;
   }
 
+  // One reverse-geocode attempt against Nominatim, with its own hard timeout (via
+  // AbortController) so a single slow/hanging request can't stall the retry loop below
+  // for longer than this. Returns the parsed address text, or null on any failure
+  // (network error, non-OK response, or timeout) -- null specifically means "try again",
+  // never a valid empty result.
+  function reverseGeocodeOnce(latitude, longitude, signal) {
+    // zoom=18 + addressdetails=1 -- building/street-level detail (vs. the previous
+    // zoom=12 city/region-only lookup), so the structured address object below actually
+    // has road/building/village/suburb/postcode to pull from.
+    return fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`, { signal })
+      .then((res) => { if (!res.ok) throw new Error('bad response'); return res.json(); })
+      .then((data) => {
+        const a = data.address || {};
+        // Nominatim/OSM has no dedicated "barangay" field -- Philippine barangays are
+        // typically tagged as suburb or quarter. village/neighbourhood is kept separate
+        // since a subdivision/village name and its barangay are often different things.
+        const street = [a.house_number, a.road].filter(Boolean).join(' ');
+        const building = a.building && a.building !== street ? a.building : '';
+        const village = a.village || a.neighbourhood || '';
+        // OSM's suburb/quarter tag for a PH barangay sometimes already includes the word
+        // "Barangay" in its name -- strip it before comparing/prefixing, or a suburb tagged
+        // exactly the same as the village produces a duplicated "Brgy. Barangay X".
+        const barangaySrc = (a.suburb || a.quarter || a.city_district || '').replace(/^barangay\s+/i, '');
+        const barangay = barangaySrc && barangaySrc !== village ? 'Brgy. ' + barangaySrc : '';
+        const city = a.city || a.town || a.municipality || '';
+        const postcode = a.postcode || '';
+        const line = [building, street, village, barangay, city].filter(Boolean).join(', ');
+        const text = postcode ? [line, postcode].filter(Boolean).join(' ') : line;
+        return text || data.display_name || '';
+      });
+  }
+
+  // Retries the reverse-geocode step itself, separately from the GPS fix -- Nominatim is a
+  // free, shared, rate-limited public service with no SLA, and a single transient failure
+  // there (a dropped request, a slow response, an occasional 429) previously meant the
+  // employee's location saved with GPS coordinates but no readable barangay/city/zip at
+  // all, even though a second try moments later usually succeeds. Up to 3 attempts, each
+  // capped at 4 seconds so a hanging request can't stall this long past the others, with a
+  // short pause between tries.
+  async function reverseGeocodeWithRetry(latitude, longitude) {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4000);
+      try {
+        const text = await reverseGeocodeOnce(latitude, longitude, controller.signal);
+        clearTimeout(timeout);
+        if (text) return text;
+      } catch (err) {
+        clearTimeout(timeout);
+      }
+      if (attempt < maxAttempts) await new Promise((resolve) => setTimeout(resolve, 700));
+    }
+    return '';
+  }
+
   // Returns { text, coordsText } — text is a full best-effort street address (building,
   // street, village, barangay, city, postal code — reverse-geocoded), coordsText is the
   // exact GPS coordinates straight from the device, always included whenever a location
@@ -811,30 +867,8 @@ window.EssViews.attendance = (function () {
         clearTimeout(timer);
         const { latitude, longitude, accuracy } = pos.coords;
         const coordsText = formatCoords(latitude, longitude, accuracy);
-        try {
-          // zoom=18 + addressdetails=1 -- building/street-level detail (vs. the previous
-          // zoom=12 city/region-only lookup), so the structured address object below
-          // actually has road/building/village/suburb/postcode to pull from.
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`);
-          const data = await res.json();
-          const a = data.address || {};
-          // Nominatim/OSM has no dedicated "barangay" field -- Philippine barangays are
-          // typically tagged as suburb or quarter. village/neighbourhood is kept separate
-          // since a subdivision/village name and its barangay are often different things.
-          const street = [a.house_number, a.road].filter(Boolean).join(' ');
-          const building = a.building && a.building !== street ? a.building : '';
-          const village = a.village || a.neighbourhood || '';
-          // OSM's suburb/quarter tag for a PH barangay sometimes already includes the word
-          // "Barangay" in its name -- strip it before comparing/prefixing, or a suburb tagged
-          // exactly the same as the village produces a duplicated "Brgy. Barangay X".
-          const barangaySrc = (a.suburb || a.quarter || a.city_district || '').replace(/^barangay\s+/i, '');
-          const barangay = barangaySrc && barangaySrc !== village ? 'Brgy. ' + barangaySrc : '';
-          const city = a.city || a.town || a.municipality || '';
-          const postcode = a.postcode || '';
-          const line = [building, street, village, barangay, city].filter(Boolean).join(', ');
-          const text = postcode ? [line, postcode].filter(Boolean).join(' ') : line;
-          resolve({ text: text || data.display_name || '', coordsText });
-        } catch (e) { resolve({ text: '', coordsText }); }
+        const text = await reverseGeocodeWithRetry(latitude, longitude);
+        resolve({ text, coordsText });
       }, () => { clearTimeout(timer); resolve({ text: '', coordsText: '' }); }, { timeout: 6000, enableHighAccuracy: true });
     });
   }
