@@ -26,23 +26,28 @@ window.EssViews.attendance = (function () {
   // covered by that window, so they stay requestable/editable anytime. Past that window for
   // OT, Request/Request-again/Edit are hidden — same boundary as openEditDayModal, same
   // "use Report Attendance Concern instead" story.
+  // OT specifically is never age-gated here (product decision) -- unlike a Time In/Out/
+  // Status correction (which is genuinely rewriting what already happened, so it's locked
+  // to 24 hours -- see withinEditWindow/dayCard below), requesting overtime on an older
+  // day is asking for something new: pay for hours actually worked, still subject to HR
+  // approval before it counts for anything (computeDayPay only counts otPay once
+  // otStatus is 'Approved'). The matching DB trigger (enforce_employee_attendance_update
+  // in supabase/schema.sql) carries its own narrow exception for exactly this case, so
+  // this isn't just a client-side show/hide -- the server actually allows it too.
   function requestRow(rec, statusVal, label, valueWhenApproved, kind, eligible) {
     const recId = rec.id;
-    const timeGated = kind === 'ot' && !withinEditWindow(rec);
     let action;
     if (statusVal === 'Approved') {
       action = `<strong>${escapeHtml(valueWhenApproved)}</strong> <span class="badge badge-green">Approved</span>` +
-        (timeGated ? '' : ` <button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Edit</button>`);
+        ` <button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Edit</button>`;
     } else if (statusVal === 'Requested') {
       const requestedAtText = kind === 'ot' && rec.otRequestedAt ? ` <span class="dim" style="font-size:11px;">requested ${fmtDateTime(rec.otRequestedAt)}</span>` : '';
       action = `<span class="badge badge-yellow">Pending approval</span>${requestedAtText} <button type="button" class="link-btn" data-cancel-request="${kind}" data-rec-id="${recId}">Cancel</button>`;
     } else if (statusVal === 'Rejected') {
       action = `<span class="badge badge-red">Rejected</span>` +
-        (timeGated ? '' : ` <button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Request again</button>`);
+        ` <button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Request again</button>`;
     } else if (eligible) {
-      action = timeGated
-        ? `<span class="dim" title="More than 24 hours old — use Report Attendance Concern instead">—</span>`
-        : `<button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Request</button>`;
+      action = `<button type="button" class="link-btn" data-request="${kind}" data-rec-id="${recId}">Request</button>`;
     } else {
       action = `<span class="dim">—</span>`;
     }
