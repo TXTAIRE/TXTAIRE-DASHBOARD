@@ -301,17 +301,17 @@ window.EssViews.attendance = (function () {
     const deleteRedoBtn = qs('#btn-delete-redo', main);
     if (deleteRedoBtn) deleteRedoBtn.addEventListener('click', () => deleteAndRedoToday(main, emp, todayRec));
     qs('#btn-photo-gallery', main).addEventListener('click', () => openPhotoGallery(main, emp));
-    qsa('[data-request]', main).forEach(b => b.addEventListener('click', async () => {
+    qsa('[data-request]', main).forEach(b => b.addEventListener('click', () => {
       const kind = b.dataset.request;
       const recId = b.dataset.recId;
-      if (kind === 'ot') {
-        const rec = recId === (todayRec && todayRec.id) ? todayRec : records.find(r => r.id === recId);
-        if (rec) openOtRequestModal(main, emp, rec);
-        return;
-      }
-      await Store.updateAttendance(recId, { [kind + 'Status']: 'Requested' });
-      toast('✔ Requested — waiting on HR approval.');
-      render(main, emp);
+      const rec = recId === (todayRec && todayRec.id) ? todayRec : records.find(r => r.id === recId);
+      if (!rec) return;
+      // Same modal-with-a-preview-then-confirm pattern for all three request types now,
+      // instead of NSD/Holiday being a single silent tap while only OT asked for
+      // confirmation first.
+      if (kind === 'ot') openOtRequestModal(main, emp, rec);
+      else if (kind === 'nsd') openNsdRequestModal(main, emp, rec);
+      else if (kind === 'holiday') openHolidayRequestModal(main, emp, rec, holidayByDate[rec.date]);
     }));
     qsa('[data-cancel-request]', main).forEach(b => b.addEventListener('click', async () => {
       const field = b.dataset.cancelRequest + 'Status';
@@ -437,6 +437,61 @@ window.EssViews.attendance = (function () {
         }
         await Store.updateAttendance(rec.id, { timeOut: newTimeOut, hours: newHours, otStatus: 'Requested' });
         toast('✔ Overtime requested — waiting on HR approval.');
+        closeEssModal();
+        render(main, emp);
+      });
+    });
+  }
+
+  // Same modal-with-a-preview pattern as Overtime above (for UI consistency across all
+  // three request types), even though there's nothing to actually type in here -- Night
+  // Shift Differential is entirely derived from the day's already-recorded Time In/Out
+  // (nightOverlapHours), so this just shows what HR would see and asks for confirmation
+  // before filing the request, instead of the previous single silent tap.
+  function openNsdRequestModal(main, emp, rec) {
+    const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (emp.rate / (workDaysInRange(rec.date, rec.date) || 1));
+    const hourlyRate = dailyRateEq / 8;
+    const nsdHrs = nightOverlapHours(rec.timeIn, rec.timeOut);
+    const nsdPay = nsdHrs * hourlyRate * 0.10;
+    openEssModal(`
+      <h2>Request Night Shift Differential</h2>
+      <div class="modal-sub">${fmtDate(rec.date)} — based on your recorded Time In/Out (${to12Hour(rec.timeIn)}–${rec.timeOut ? to12Hour(rec.timeOut) : '—'}). HR will review and approve before it counts toward pay.</div>
+      <div class="modal-sub">Hours worked 10 PM–6 AM: <strong>${nsdHrs.toFixed(2)} hr</strong> — differential (+10% of hourly rate): <strong>${fmtMoney(nsdPay)}</strong></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-nsd-submit">Submit Request</button>
+      </div>
+    `, (bd) => {
+      qs('#btn-nsd-submit', bd).addEventListener('click', async () => {
+        await Store.updateAttendance(rec.id, { nsdStatus: 'Requested' });
+        toast('✔ Night Shift Differential requested — waiting on HR approval.');
+        closeEssModal();
+        render(main, emp);
+      });
+    });
+  }
+
+  // Same pattern again -- Holiday Pay is derived from the day already being on the
+  // Holidays calendar plus the hours actually worked, nothing to type in, just a
+  // preview-then-confirm step instead of the previous single silent tap.
+  function openHolidayRequestModal(main, emp, rec, holiday) {
+    const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (emp.rate / (workDaysInRange(rec.date, rec.date) || 1));
+    const effHrs = Number(rec.hours) || 0;
+    const regHrs = Math.min(effHrs, 8);
+    const mult = holiday.type === 'Regular' ? 2.0 : 1.3;
+    const holidayPay = dailyRateEq * (mult - 1) * (regHrs / 8);
+    openEssModal(`
+      <h2>Request Holiday Pay</h2>
+      <div class="modal-sub">${fmtDate(rec.date)} — ${escapeHtml(holiday.name)} (${escapeHtml(holiday.type)} Holiday). HR will review and approve before it counts toward pay.</div>
+      <div class="modal-sub">Hours worked: <strong>${regHrs.toFixed(2)} hr</strong> — holiday pay premium: <strong>${fmtMoney(holidayPay)}</strong></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-holiday-submit">Submit Request</button>
+      </div>
+    `, (bd) => {
+      qs('#btn-holiday-submit', bd).addEventListener('click', async () => {
+        await Store.updateAttendance(rec.id, { holidayStatus: 'Requested' });
+        toast('✔ Holiday Pay requested — waiting on HR approval.');
         closeEssModal();
         render(main, emp);
       });
