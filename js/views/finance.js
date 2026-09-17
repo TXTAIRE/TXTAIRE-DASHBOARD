@@ -1283,12 +1283,13 @@ window.Views.finance = (function () {
 
     openModal(`
       <h2>${editing ? 'Edit Cash Voucher' : 'Add Cash Voucher'}</h2>
-      ${editing ? `<div class="modal-sub">No.: <strong>${escapeHtml(editing.refNo)}</strong></div>` : '<div class="modal-sub">A voucher No. is assigned automatically when saved.</div>'}
+      <div class="modal-sub">${editing ? 'Editing an issued voucher.' : `Suggested next No. is filled in below — edit it if this voucher should use a different number.`}</div>
       <form id="cash-voucher-form">
         <div class="modal-grid">
           <div class="field"><label>Entity (issuing letterhead)</label>
             <select name="entity">${ENTITY_OPTIONS.map(e => `<option ${e === v.entity ? 'selected' : ''}>${e}</option>`).join('')}</select>
           </div>
+          <div class="field"><label>No.</label><input name="refNo" value="${escapeHtml(v.refNo || Store.nextCashVoucherRefNo(v.date))}" required /></div>
           <div class="field"><label>Date</label><input type="date" name="date" value="${v.date}" required /></div>
           <div class="field"><label>Method of Payment</label>
             <select name="paymentMethod">${PAYMENT_METHODS.map(m => `<option ${m === v.paymentMethod ? 'selected' : ''}>${m}</option>`).join('')}</select>
@@ -1361,6 +1362,7 @@ window.Views.finance = (function () {
           const amount = particularsTotal();
           const patch = {
             entity: fd.get('entity'),
+            refNo: fd.get('refNo').trim(),
             date: fd.get('date'),
             amount,
             paymentMethod: fd.get('paymentMethod'),

@@ -2459,7 +2459,10 @@ const Store = (function () {
   }
   async function addCashVoucher(v) {
     v.id = genId('cv');
-    v.refNo = nextCashVoucherRefNo(v.date);
+    // The form pre-fills the suggested next No. but HR can edit it (e.g. to match an
+    // already-numbered paper voucher) -- only fall back to auto-numbering if it arrives
+    // blank.
+    if (!v.refNo) v.refNo = nextCashVoucherRefNo(v.date);
     return insertRow('cashVouchers', v);
   }
   async function updateCashVoucher(id, patch) {
@@ -2890,7 +2893,7 @@ const Store = (function () {
     uploadReceiptPhoto, getSignedReceiptUrl, deleteReceiptPhoto,
     listBills, getBill, addBill, updateBill, deleteBill, payBill,
     listPaymentVouchers, getPaymentVoucher, paymentVouchersInRange, addPaymentVoucher, updatePaymentVoucher, deletePaymentVoucher,
-    listCashVouchers, getCashVoucher, cashVouchersInRange, addCashVoucher, updateCashVoucher, deleteCashVoucher,
+    listCashVouchers, getCashVoucher, cashVouchersInRange, addCashVoucher, updateCashVoucher, deleteCashVoucher, nextCashVoucherRefNo,
     listBillingInvoices, getBillingInvoice, billingInvoicesInRange, addBillingInvoice, updateBillingInvoice, deleteBillingInvoice,
     listBillingClients, billingClientsForEntity, addBillingClient, updateBillingClient, deleteBillingClient,
     listOfficeFiles, uploadOfficeFile, getSignedOfficeFileUrl, deleteOfficeFile, updateOfficeFile, duplicateOfficeFile,
