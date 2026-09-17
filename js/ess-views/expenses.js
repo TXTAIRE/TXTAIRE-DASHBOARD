@@ -76,6 +76,8 @@ window.EssViews.expenses = (function () {
       <div class="ess-card">
         <div class="ess-card-label">Receipt Photo</div>
         <input type="file" id="expense-receipt-input" accept="image/*" capture="environment" />
+        <div class="ess-sub" style="margin:8px 0;">Have a stack of receipts? Shoot them all first with your phone's own camera app (no waiting between shots), then add them here all at once:</div>
+        <input type="file" id="expense-receipt-batch-input" accept="image/*" multiple />
       </div>
       <div id="expense-status" class="ess-sub" style="margin-top:8px;"></div>
       <div id="expense-review-wrap"></div>
@@ -91,7 +93,13 @@ window.EssViews.expenses = (function () {
 
     qs('#expense-receipt-input', main).addEventListener('change', (ev) => {
       const file = ev.target.files[0];
+      ev.target.value = '';
       if (file) handleReceiptFile(main, emp, file);
+    });
+    qs('#expense-receipt-batch-input', main).addEventListener('change', (ev) => {
+      const files = [...ev.target.files];
+      ev.target.value = '';
+      if (files.length) handleReceiptFiles(main, emp, files);
     });
 
     qs('#btn-refresh-history', main).addEventListener('click', () => refreshHistory(main, emp, true));
@@ -240,46 +248,53 @@ window.EssViews.expenses = (function () {
     return result;
   }
 
-  async function handleReceiptFile(main, emp, file) {
-    const statusEl = qs('#expense-status', main);
-    qs('#expense-review-wrap', main).innerHTML = '';
-    statusEl.textContent = 'Preparing photo…';
-
+  // Shared by both the single-shot and batch flows below -- uploads (for the permanent
+  // record) and scans a receipt photo at the same time, since the scan doesn't need the
+  // photo already in storage, so waiting for the upload first would add its time on top of
+  // the scan's instead of overlapping them. `onStatus(text)` reports progress back to
+  // whichever status element the caller is showing (a shared one for a single photo, a
+  // per-item one when processing a batch).
+  async function scanOneReceipt(file, onStatus) {
+    onStatus('Preparing photo…');
     let resizedBlob;
     try {
       resizedBlob = await resizeImageToBlob(file, 1600, 0.82);
     } catch (err) {
-      statusEl.textContent = 'Could not read that photo — try again.';
-      return;
+      return { fields: emptyFields(), receiptPath: null, statusHtml: 'Could not read that photo — try again.', failed: true };
     }
 
-    statusEl.textContent = 'Scanning receipt…';
-
-    // Upload (for the permanent record) and the Gemini scan run at the same time -- the
-    // scan doesn't need the photo to already be in storage, so waiting for the upload
-    // first would add its time on top of the scan's instead of overlapping them.
+    onStatus('Scanning receipt…');
     const uploadPromise = Store.uploadReceiptPhoto(resizedBlob, 'receipt.jpg');
-
     const scanPromise = blobToBase64(resizedBlob).then((base64Data) =>
-      scanReceiptWithRetry(base64Data, 'image/jpeg', statusEl)
+      scanReceiptWithRetry(base64Data, 'image/jpeg', { set textContent(v) { onStatus(v); } })
     );
-
     const [uploadResult, scanResult] = await Promise.allSettled([uploadPromise, scanPromise]);
 
     if (uploadResult.status !== 'fulfilled') {
-      statusEl.textContent = 'Could not upload the photo — try again.';
-      return;
+      return { fields: emptyFields(), receiptPath: null, statusHtml: 'Could not upload the photo — try again.', failed: true };
     }
     const receiptPath = uploadResult.value;
 
     let fields = emptyFields();
+    let statusHtml;
     if (scanResult.status === 'fulfilled' && scanResult.value.ok && scanResult.value.json.success) {
       const scanned = scanResult.value.json.fields;
       fields = Object.assign(emptyFields(), scanned, { date: scanned.date || emptyFields().date });
-      statusEl.textContent = '✔ Receipt scanned — please check the details below before saving.';
+      // The API call itself can succeed while genuinely extracting nothing (a blurry/dark
+      // photo, or the vision model just not finding anything on it) -- vendor blank AND no
+      // amount is a real receipt failing to be read, not a receipt with no vendor or a free
+      // item. Showing the same green "✔ Receipt scanned" message in that case looked like a
+      // false success -- the form was blank with nothing telling the encoder WHY, so
+      // re-taking the exact same photo kept "succeeding" empty over and over with no signal
+      // that repeating it wasn't going to help.
+      if (!fields.vendor && !fields.amount) {
+        statusHtml = '<strong style="color:var(--red, #dc2626);">⚠️ Couldn\'t read any details from this photo.</strong> Try a closer, well-lit, non-blurry shot with the receipt filling the frame — or fill in the fields below manually.';
+      } else {
+        statusHtml = '✔ Receipt scanned — please check the details below before saving.';
+      }
     } else {
       const errMsg = scanResult.status === 'fulfilled' ? (scanResult.value.json.error || 'Could not read that receipt') : 'Could not reach the scanning service';
-      statusEl.textContent = errMsg + ' — please fill in the fields manually below.';
+      statusHtml = errMsg + ' — please fill in the fields manually below.';
     }
 
     if (fields.vendor) {
@@ -289,13 +304,55 @@ window.EssViews.expenses = (function () {
       } catch (err) { /* best-effort -- the scanned/blank values still work fine without this */ }
     }
 
-    renderReviewForm(main, emp, fields, receiptPath);
+    return { fields, receiptPath, statusHtml, failed: false };
+  }
+
+  async function handleReceiptFile(main, emp, file) {
+    const statusEl = qs('#expense-status', main);
+    qs('#expense-review-wrap', main).innerHTML = '';
+    const result = await scanOneReceipt(file, (text) => { statusEl.textContent = text; });
+    statusEl.innerHTML = result.statusHtml;
+    renderReviewForm(main, emp, result.fields, result.receiptPath);
+  }
+
+  // Processes a batch of already-taken photos one at a time (not in parallel -- keeps the
+  // per-item progress readable and avoids bursting the scan-receipt function with
+  // simultaneous requests), appending a review card for each as soon as it's done rather
+  // than waiting for the whole batch -- the encoder can start reviewing/saving the first
+  // ones while later ones are still scanning. This is the actual point of "batch add from
+  // gallery": all the photo-taking happens up front, at normal camera-app speed with no
+  // per-shot waiting, and the scanning/reviewing happens afterward as one pass instead of
+  // being interleaved with it.
+  async function handleReceiptFiles(main, emp, files) {
+    const statusEl = qs('#expense-status', main);
+    const wrap = qs('#expense-review-wrap', main);
+    for (let i = 0; i < files.length; i++) {
+      const itemEl = document.createElement('div');
+      wrap.appendChild(itemEl);
+      const progressPrefix = 'Photo ' + (i + 1) + ' of ' + files.length + ': ';
+      statusEl.textContent = progressPrefix + 'Preparing…';
+      const result = await scanOneReceipt(files[i], (text) => { statusEl.textContent = progressPrefix + text; });
+      renderReviewForm(main, emp, result.fields, result.receiptPath, null, itemEl);
+      const noticeEl = document.createElement('div');
+      noticeEl.className = 'ess-sub';
+      noticeEl.style.marginTop = '-4px';
+      noticeEl.style.marginBottom = '10px';
+      noticeEl.innerHTML = result.statusHtml;
+      itemEl.insertBefore(noticeEl, itemEl.firstChild);
+    }
+    statusEl.textContent = '✔ Done — ' + files.length + ' photo' + (files.length > 1 ? 's' : '') + ' processed. Review each below before saving.';
   }
 
   // `existing` is the real expenses row when editing a past submission (fields === existing
   // in that case), or omitted when reviewing a fresh scan before its first save.
-  function renderReviewForm(main, emp, fields, receiptPath, existing) {
-    const wrap = qs('#expense-review-wrap', main);
+  // `targetEl`, when given, renders into that specific element instead of the shared
+  // #expense-review-wrap -- used by the batch flow above so multiple review cards can
+  // coexist side by side, each independently editable/savable, instead of one replacing
+  // another. All lookups below are scoped to whichever container is actually in play, so
+  // the (duplicate, one per card) #expense-review-form id inside each one never collides
+  // with another card's.
+  function renderReviewForm(main, emp, fields, receiptPath, existing, targetEl) {
+    const wrap = targetEl || qs('#expense-review-wrap', main);
     const isEdit = !!existing;
     const entity = fields.entity || ENTITY_OPTIONS[0];
 
@@ -349,7 +406,17 @@ window.EssViews.expenses = (function () {
           }));
           toast('✔ Expense saved.');
         }
-        render(main, emp);
+        // A full render(main, emp) would wipe #expense-review-wrap entirely -- fine for the
+        // single-shot/edit flow (nothing else is in there), but a batch review can have
+        // several OTHER still-unsaved cards sitting alongside this one. When this is a
+        // batch card (targetEl was passed in), only remove this one card and refresh the
+        // history list -- everything else pending stays exactly as the encoder left it.
+        if (targetEl) {
+          targetEl.remove();
+          refreshHistory(main, emp, true);
+        } else {
+          render(main, emp);
+        }
       } catch (err) {
         submitBtn.disabled = false;
         submitBtn.textContent = isEdit ? 'Save Changes' : 'Save Expense';

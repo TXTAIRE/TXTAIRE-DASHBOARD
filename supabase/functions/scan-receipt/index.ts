@@ -99,17 +99,28 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Image data is required' }, 400);
   }
 
-  var instructions = 'This is a photo of a receipt or invoice. Read it and return a JSON object with ' +
-    'exactly these keys: ' +
-    '"date" (the transaction date in YYYY-MM-DD format), ' +
-    '"invoiceNumber" (the service/sales invoice or receipt number), ' +
-    '"vendor" (the business/vendor name), ' +
-    '"tinNumber" (the vendor\'s TIN -- on Philippine receipts this is usually printed as ' +
-    '"VATREGTIN", "VAT REG TIN", or just "TIN", formatted like 000-000-000-00000 if shown), ' +
-    '"location" (the vendor\'s city/municipality and region, e.g. "QUEZON CITY, NCR"), ' +
-    '"category" (a short 1-3 word description of what was purchased, e.g. "MATERIALS", "FUEL", "OFFICE SUPPLIES"), ' +
-    '"amount" (the total amount paid, as a plain number with no currency symbol or commas). ' +
-    'If a field is not legible or not present on the receipt, use an empty string for text fields or 0 for amount -- never guess or invent a value.';
+  var instructions = 'This is a photo of a Philippine business receipt or invoice -- read it carefully ' +
+    'and return a JSON object with exactly these keys: ' +
+    '"date" (the transaction date, in YYYY-MM-DD format -- Philippine receipts are often ' +
+    'MM/DD/YYYY or DD-Mon-YYYY; convert it), ' +
+    '"invoiceNumber" (the invoice/receipt number -- look for labels like "SI No.", "OR No.", ' +
+    '"Invoice No.", "Receipt No.", or "SI#"/"OR#", copying the full number including any ' +
+    'leading zeros exactly as printed), ' +
+    '"vendor" (the business name at the top of the receipt, not a franchise/branch sub-label), ' +
+    '"tinNumber" (the vendor\'s TIN, usually printed near "VAT REG TIN", "VATREGTIN", or "TIN" -- ' +
+    'read every digit carefully and format it 000-000-000-000 or 000-000-000-00000 if a branch ' +
+    'code suffix is shown), ' +
+    '"location" (the vendor\'s city/municipality and region as printed, e.g. "QUEZON CITY, NCR"), ' +
+    '"category" (a short 1-3 word description of what was purchased, e.g. "MATERIALS", "FUEL", ' +
+    '"OFFICE SUPPLIES"), ' +
+    '"amount" (the FINAL total amount actually paid -- look for "TOTAL", "TOTAL AMOUNT DUE", ' +
+    '"GRAND TOTAL", or "AMOUNT DUE", NOT a subtotal or line-item price; return a plain number ' +
+    'with no currency symbol, commas, or spaces). ' +
+    'Look at the WHOLE image, including faint or small text, before deciding a field isn\'t ' +
+    'there -- only use an empty string (or 0 for amount) for a field that is genuinely not ' +
+    'legible or not present after a careful look, never because it took extra effort to find. ' +
+    'This photo was taken specifically to be read by you, so assume it does contain a real ' +
+    'receipt unless the image is truly blank or unrelated.';
 
   var groqUrl = 'https://api.groq.com/openai/v1/chat/completions';
   var groqBody = JSON.stringify({
@@ -122,7 +133,11 @@ Deno.serve(async (req) => {
       ],
     }],
     response_format: { type: 'json_object' },
-    max_tokens: 500,
+    // 0 rather than the API default -- this is a one-shot factual reading task (copy what's
+    // printed on the receipt), not a creative one, so the deterministic reading at each step
+    // is exactly what accuracy calls for here.
+    temperature: 0,
+    max_tokens: 600,
   });
 
   // A single attempt only -- retrying with backoff inside one function call risked running
