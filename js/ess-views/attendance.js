@@ -56,7 +56,11 @@ window.EssViews.attendance = (function () {
 
   function dayCard(emp, date, rec, holiday) {
     const dow = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (emp.rate / (workDaysInRange(date, date) || 1));
+    // Same monthlyRate / 22 convention as computeRow() (js/store.js) -- dividing by
+    // workDaysInRange(date, date), the working-day count of a single-day range (1, or a
+    // Sunday's 0 falling back to 1 either way), was treating a Monthly-rate employee's
+    // entire monthly salary as a single day's rate here.
+    const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (Number(emp.rate) / 22);
     const pay = rec ? computeDayPay(dailyRateEq, rec, holiday, emp) : null;
     const nsdRawHrs = rec ? nightOverlapHours(rec.timeIn, rec.timeOut) : 0;
     const holidayLabel = holiday ? `Holiday Pay — ${escapeHtml(holiday.name)} (${escapeHtml(holiday.type)} Holiday)` : 'Holiday Pay';
@@ -449,7 +453,9 @@ window.EssViews.attendance = (function () {
   // (nightOverlapHours), so this just shows what HR would see and asks for confirmation
   // before filing the request, instead of the previous single silent tap.
   function openNsdRequestModal(main, emp, rec) {
-    const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (emp.rate / (workDaysInRange(rec.date, rec.date) || 1));
+    // Same monthlyRate / 22 convention as computeRow() (js/store.js) -- see the note in
+    // dayCard() above.
+    const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (Number(emp.rate) / 22);
     const hourlyRate = dailyRateEq / 8;
     const nsdHrs = nightOverlapHours(rec.timeIn, rec.timeOut);
     const nsdPay = nsdHrs * hourlyRate * 0.10;
@@ -475,7 +481,9 @@ window.EssViews.attendance = (function () {
   // Holidays calendar plus the hours actually worked, nothing to type in, just a
   // preview-then-confirm step instead of the previous single silent tap.
   function openHolidayRequestModal(main, emp, rec, holiday) {
-    const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (emp.rate / (workDaysInRange(rec.date, rec.date) || 1));
+    // Same monthlyRate / 22 convention as computeRow() (js/store.js) -- see the note in
+    // dayCard() above.
+    const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (Number(emp.rate) / 22);
     const effHrs = Number(rec.hours) || 0;
     const regHrs = Math.min(effHrs, 8);
     const mult = holiday.type === 'Regular' ? 2.0 : 1.3;

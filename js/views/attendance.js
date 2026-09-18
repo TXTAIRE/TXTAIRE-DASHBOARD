@@ -123,7 +123,13 @@ window.Views.attendance = (function () {
             ${pending.map(r => {
               const emp = empById[r.employeeId];
               if (!emp) return '';
-              const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (emp.rate / (workDaysInRange(r.date, r.date) || 1));
+              // Same monthlyRate / 22 convention as computeRow() (js/store.js) -- dividing by
+              // workDaysInRange(r.date, r.date) used to mean "how many working days are in
+              // this ONE day's range" (1, or 0 on a Sunday falling back to 1 either way), so
+              // a Monthly-rate employee's entire monthly salary was being treated as a single
+              // day's rate here -- the same bug already fixed for the Payroll tab's own
+              // computation, just never fixed in this separate preview.
+              const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (Number(emp.rate) / 22);
               const holiday = holidayByDate[r.date];
               const previewPay = computeDayPay(dailyRateEq, Object.assign({}, r, { nsdStatus: 'Approved', otStatus: 'Approved', holidayStatus: 'Approved' }), holiday, emp);
               const otTime = r.timeIn ? `${to12Hour(r.timeIn)}–${r.timeOut ? to12Hour(r.timeOut) : '—'}` : '—';
@@ -232,7 +238,9 @@ window.Views.attendance = (function () {
   // so the calendar doubles as a live per-cutoff pay preview — no separate calculation.
   function calDayCell(emp, date, rec, holiday) {
     const dow = new Date(date + 'T00:00:00').getDay();
-    const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (emp.rate / (workDaysInRange(date, date) || 1));
+    // Same monthlyRate / 22 convention as computeRow() (js/store.js) -- see the note above
+    // renderRequestsTab's own copy of this fix.
+    const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (Number(emp.rate) / 22);
     const pay = rec ? computeDayPay(dailyRateEq, rec, holiday, emp) : null;
     const badges = [];
     if (pay && pay.nsdHrs) badges.push('<span class="badge badge-blue" title="Night Shift Differential">NSD</span>');

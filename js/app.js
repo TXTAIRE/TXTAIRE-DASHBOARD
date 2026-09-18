@@ -310,7 +310,13 @@ function openDTR(emp, from, to) {
   holidays.forEach(h => { holidayByDate[h.date] = h; });
 
   const workDays = workDaysInRange(from, to);
-  const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (workDays > 0 ? emp.rate / workDays : 0);
+  // Same monthlyRate / 22 convention as computeRow() (js/store.js) -- dividing by this
+  // cutoff's own working-day count made a Monthly-rate employee's OT/NSD hourly rate here
+  // drift by which cutoff happened to be open (a short cutoff has fewer working days than a
+  // long one), the same bug already fixed for the Payroll tab's own computation. Currently
+  // only feeds computeDayPay()'s .otHrs/.nsdHrs below, which don't depend on rate at all --
+  // but .holidayPay/.restDayPay do, so this stays correct if this DTR ever prints those.
+  const dailyRateEq = emp.payType === 'Daily' ? emp.rate : Number(emp.rate) / 22;
   // Only pulled for the SIL/Holiday Pay line below the table -- everything else
   // (gross/net, NSD/OT pay) lives on the separate Payslip print instead.
   const row = computeRow(emp, from, to);

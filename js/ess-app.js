@@ -701,7 +701,9 @@ function openDTR(emp, from, to) {
   holidays.forEach(h => { holidayByDate[h.date] = h; });
 
   const workDays = workDaysInRange(from, to);
-  const dailyRateEq = emp.payType === 'Daily' ? emp.rate : (workDays > 0 ? emp.rate / workDays : 0);
+  // Same monthlyRate / 22 convention as computeRow() (js/store.js) -- see the equivalent
+  // note in js/app.js's own openDTR().
+  const dailyRateEq = emp.payType === 'Daily' ? emp.rate : Number(emp.rate) / 22;
   const row = computeRow(emp, from, to);
   const silDays = silDaysInRange(emp.id, from, to);
 
