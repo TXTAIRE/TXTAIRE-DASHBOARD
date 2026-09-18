@@ -29,11 +29,13 @@ window.Views.materials = (function () {
       <div class="panel">
         ${rows.length ? `
         <table>
-          <thead><tr><th>Purpose</th><th style="width:130px;">Amount (PHP)</th><th>Notes</th><th class="dim">Requested by</th><th class="dim">Added</th><th></th></tr></thead>
+          <thead><tr><th>Purpose</th><th>Payee</th><th>Supplier</th><th style="width:130px;">Total Amount (PHP)</th><th>Notes</th><th class="dim">Requested by</th><th class="dim">Added</th><th></th></tr></thead>
           <tbody>
             ${rows.map(r => `
               <tr>
                 <td class="name">${escapeHtml(r.purpose)}</td>
+                <td class="dim">${escapeHtml(r.payTo || '—')}</td>
+                <td class="dim">${escapeHtml(r.supplier || '—')}</td>
                 <td><input type="number" class="days-input amount-input" min="0" step="0.01" value="${r.amount}" data-id="${r.id}" /></td>
                 <td class="dim">${escapeHtml(r.notes || '—')}</td>
                 <td class="dim">${escapeHtml(r.requestedBy || '—')}</td>
@@ -47,6 +49,7 @@ window.Views.materials = (function () {
           </tbody>
           <tfoot><tr>
             <td style="font-weight:600;">Total</td>
+            <td colspan="2"></td>
             <td style="font-weight:600;">${fmtMoney(total)}</td>
             <td colspan="4"></td>
           </tr></tfoot>
@@ -86,7 +89,10 @@ window.Views.materials = (function () {
       <form id="material-form">
         <div class="modal-grid">
           <div class="field full"><label>Purpose</label><input name="purpose" required placeholder="e.g. Fare for site visit" value="${existing ? escapeHtml(existing.purpose) : ''}" /></div>
-          <div class="field"><label>Amount (PHP)</label><input type="number" name="amount" min="0" step="0.01" required value="${existing ? existing.amount : ''}" /></div>
+          <div class="field"><label>Payee</label><input name="payTo" required placeholder="Who the cash is given to" value="${existing ? escapeHtml(existing.payTo || '') : ''}" /></div>
+          <div class="field"><label>Supplier</label><input name="supplier" placeholder="Optional — vendor/business, if any" value="${existing ? escapeHtml(existing.supplier || '') : ''}" /></div>
+          <div class="field"><label>Total Amount (PHP)</label><input type="number" name="amount" min="0" step="0.01" required value="${existing ? existing.amount : ''}" /></div>
+          <div class="field"><label>Requested by</label><input name="requestedBy" required value="${escapeHtml((existing ? existing.requestedBy : null) || currentUserEmail() || '')}" /></div>
           <div class="field full"><label>Notes</label><textarea name="notes" rows="2" placeholder="Optional — job reference, who it's for, etc.">${existing ? escapeHtml(existing.notes || '') : ''}</textarea></div>
         </div>
         <div class="modal-actions">
@@ -100,14 +106,16 @@ window.Views.materials = (function () {
         const fd = new FormData(ev.target);
         const patch = {
           purpose: fd.get('purpose').trim(),
+          payTo: fd.get('payTo').trim(),
+          supplier: fd.get('supplier').trim(),
           amount: Number(fd.get('amount')) || 0,
           notes: fd.get('notes').trim(),
+          requestedBy: fd.get('requestedBy').trim(),
         };
         if (existing) {
           await Store.updatePettyCashRequest(existing.id, patch);
           toast('✔ Request updated.');
         } else {
-          patch.requestedBy = currentUserEmail();
           await Store.addPettyCashRequest(patch);
           toast('✔ Request added.');
         }
@@ -138,24 +146,27 @@ window.Views.materials = (function () {
         </div>
         <div class="dtr-meta">
           <div><strong>Date:</strong> ${fmtWhen(new Date().toISOString())}</div>
-          <div><strong>Requested by:</strong> ${escapeHtml(currentUserEmail() || '—')}</div>
         </div>
         <div class="dtr-table-wrap">
         <table class="dtr-table">
-          <thead><tr><th>Purpose</th><th class="num">Amount</th><th>Notes</th></tr></thead>
+          <thead><tr><th>Purpose</th><th>Payee</th><th>Supplier</th><th class="num">Total Amount</th><th>Notes</th><th>Requested by</th></tr></thead>
           <tbody>
             ${rows.map(r => `
               <tr>
                 <td>${escapeHtml(r.purpose)}</td>
+                <td>${escapeHtml(r.payTo || '')}</td>
+                <td>${escapeHtml(r.supplier || '')}</td>
                 <td class="num">${fmtMoney(r.amount)}</td>
                 <td class="dim">${escapeHtml(r.notes || '')}</td>
+                <td class="dim">${escapeHtml(r.requestedBy || '')}</td>
               </tr>
             `).join('')}
           </tbody>
           <tfoot><tr>
             <td style="font-weight:600;">Total</td>
+            <td colspan="2"></td>
             <td class="num" style="font-weight:600;">${fmtMoney(total)}</td>
-            <td></td>
+            <td colspan="2"></td>
           </tr></tfoot>
         </table>
         </div>
