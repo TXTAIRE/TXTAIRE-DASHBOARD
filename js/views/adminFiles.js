@@ -8,7 +8,7 @@ window.Views.adminFiles = (function () {
   // fallback used the very first time, before anyone has customized it.
   const DEFAULT_FOLDERS = [
     'Billing Invoice', 'Billing Statements', 'Bills', 'Delivery Receipt', 'Excel Encoded',
-    'Gate Pass', 'HR', 'Materials Request', 'Office', 'Plant Activity Report',
+    'Gate Pass', 'HR', 'Petty Cash Request', 'Office', 'Plant Activity Report',
     'Quarterly Self-Monitoring Report', 'Receipts', 'Sales Invoice', 'Service Report',
     'Start-Up and Commissioning Report', 'Trouble Call Report', 'TxTAIRE Logo & Org Chart', 'Other',
   ];

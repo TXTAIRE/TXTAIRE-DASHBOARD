@@ -1056,6 +1056,7 @@ const Store = (function () {
     pushSubscriptions: 'pushSubscriptions',
     employeePushSubscriptions: 'employeePushSubscriptions',
     materialRequests: 'materialRequests',
+    pettyCashRequests: 'pettyCashRequests',
     thirteenthMonthPay: 'thirteenthMonthPay',
     leaveTypePolicies: 'leaveTypePolicies',
     offboarding: 'offboarding',
@@ -1079,7 +1080,7 @@ const Store = (function () {
     expenses: [], bills: [], officeFiles: [],
     employmentHistory: [], employeeDocuments: [],
     pushSubscriptions: [], employeePushSubscriptions: [],
-    materialRequests: [],
+    materialRequests: [], pettyCashRequests: [],
     thirteenthMonthPay: [], leaveTypePolicies: [], offboarding: [],
     sssContributionBrackets: [], contributionRates: [], regionalMinimumWage: [],
     safetyIncidents: [], employeeRelationsCases: [], adminCodiMembers: [],
@@ -2775,6 +2776,22 @@ const Store = (function () {
     await deleteRow('materialRequests', id);
   }
 
+  // ---- Petty Cash Request (js/views/materials.js) ----
+  // Same simple "running list, no approval workflow" shape as Materials Request above,
+  // just money instead of items -- a peso amount + purpose, printable as a petty cash
+  // voucher slip with Requested by/Approved by signature lines.
+  function listPettyCashRequests() { return state.pettyCashRequests.slice(); }
+  async function addPettyCashRequest(r) {
+    r.id = genId('pc');
+    return insertRow('pettyCashRequests', r);
+  }
+  async function updatePettyCashRequest(id, patch) {
+    await updateRow('pettyCashRequests', id, patch);
+  }
+  async function deletePettyCashRequest(id) {
+    await deleteRow('pettyCashRequests', id);
+  }
+
   // ---- 201 File (employee documents/requirements) ----
   // Both the employee (My Portal -> My Profile) and admins can upload; every upload
   // starts 'Pending' -- the trigger-enforced RLS policy (enforce_employee_document_insert
@@ -2898,6 +2915,7 @@ const Store = (function () {
     listBillingClients, billingClientsForEntity, addBillingClient, updateBillingClient, deleteBillingClient,
     listOfficeFiles, uploadOfficeFile, getSignedOfficeFileUrl, deleteOfficeFile, updateOfficeFile, duplicateOfficeFile,
     listMaterialRequests, addMaterialRequest, updateMaterialRequest, deleteMaterialRequest,
+    listPettyCashRequests, addPettyCashRequest, updatePettyCashRequest, deletePettyCashRequest,
     employeeDocumentsForEmployee, uploadEmployeeDocument, getSignedEmployeeDocumentUrl, updateEmployeeDocument, deleteEmployeeDocument,
     listPushSubscriptions, savePushSubscription, deletePushSubscriptionByEndpoint,
     saveEmployeePushSubscription, deleteEmployeePushSubscriptionByEndpoint,

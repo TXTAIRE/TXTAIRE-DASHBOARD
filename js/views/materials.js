@@ -1,3 +1,8 @@
+// Petty Cash Request -- a running list of small cash disbursements requested (fare, minor
+// supplies, meals, etc.), replacing the old Materials Request page entirely. Same simple
+// shape as that page had (an editable running list, no multi-step approval workflow, print
+// a slip when ready) since HR/office staff already worked that way for materials -- just a
+// peso amount + purpose instead of an item + quantity.
 window.Views.materials = (function () {
   function fmtWhen(iso) {
     if (!iso) return '—';
@@ -5,62 +10,69 @@ window.Views.materials = (function () {
   }
 
   function renderList(main) {
-    const rows = Store.listMaterialRequests().slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    const rows = Store.listPettyCashRequests().slice().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    const total = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
 
     main.innerHTML = `
       <div class="crumb">Admin</div>
       <div class="page-head">
         <div>
-          <h1 class="page-title">Materials Request</h1>
-          <div class="page-sub">Running list of materials/supplies to order — add items, keep quantities up to date, and print a requisition slip when ready.</div>
+          <h1 class="page-title">Petty Cash Request</h1>
+          <div class="page-sub">Running list of petty cash disbursements — add requests, keep amounts up to date, and print a petty cash voucher when ready.</div>
         </div>
         <div style="display:flex; gap:8px;">
           <button class="btn btn-ghost" id="btn-print-materials" ${rows.length ? '' : 'disabled'}>🖨 Print / Save as PDF</button>
-          <button class="btn btn-primary" id="btn-add-material">+ Add material</button>
+          <button class="btn btn-primary" id="btn-add-material">+ Add request</button>
         </div>
       </div>
 
       <div class="panel">
         ${rows.length ? `
         <table>
-          <thead><tr><th>Material</th><th style="width:110px;">Quantity</th><th>Notes / Supplier</th><th class="dim">Added</th><th></th></tr></thead>
+          <thead><tr><th>Purpose</th><th style="width:130px;">Amount (PHP)</th><th>Notes</th><th class="dim">Requested by</th><th class="dim">Added</th><th></th></tr></thead>
           <tbody>
-            ${rows.map(m => `
+            ${rows.map(r => `
               <tr>
-                <td class="name">${escapeHtml(m.materialName)}</td>
-                <td><input type="number" class="days-input qty-input" min="0" step="1" value="${m.quantity}" data-id="${m.id}" /></td>
-                <td class="dim">${escapeHtml(m.notes || '—')}</td>
-                <td class="dim">${fmtWhen(m.created_at)}</td>
+                <td class="name">${escapeHtml(r.purpose)}</td>
+                <td><input type="number" class="days-input amount-input" min="0" step="0.01" value="${r.amount}" data-id="${r.id}" /></td>
+                <td class="dim">${escapeHtml(r.notes || '—')}</td>
+                <td class="dim">${escapeHtml(r.requestedBy || '—')}</td>
+                <td class="dim">${fmtWhen(r.created_at)}</td>
                 <td style="text-align:right; white-space:nowrap;">
-                  <button class="link-btn" data-edit="${m.id}">Edit</button>
-                  <button class="link-btn" data-del="${m.id}">Delete</button>
+                  <button class="link-btn" data-edit="${r.id}">Edit</button>
+                  <button class="link-btn" data-del="${r.id}">Delete</button>
                 </td>
               </tr>
             `).join('')}
           </tbody>
-        </table>` : '<div class="empty">No materials on the list yet — click "+ Add material" to start one.</div>'}
+          <tfoot><tr>
+            <td style="font-weight:600;">Total</td>
+            <td style="font-weight:600;">${fmtMoney(total)}</td>
+            <td colspan="4"></td>
+          </tr></tfoot>
+        </table>` : '<div class="empty">No petty cash requests yet — click "+ Add request" to start one.</div>'}
       </div>
     `;
 
     qs('#btn-add-material', main).addEventListener('click', () => openMaterialForm(main));
     qsa('[data-edit]', main).forEach(btn => btn.addEventListener('click', () => {
-      const m = rows.find(r => r.id === btn.dataset.edit);
-      if (m) openMaterialForm(main, m);
+      const r = rows.find(x => x.id === btn.dataset.edit);
+      if (r) openMaterialForm(main, r);
     }));
     qsa('[data-del]', main).forEach(btn => btn.addEventListener('click', async () => {
-      const m = rows.find(r => r.id === btn.dataset.del);
-      if (!m) return;
-      if (!confirm(`Remove "${m.materialName}" from the list?`)) return;
-      await Store.deleteMaterialRequest(m.id);
+      const r = rows.find(x => x.id === btn.dataset.del);
+      if (!r) return;
+      if (!confirm(`Remove "${r.purpose}" from the list?`)) return;
+      await Store.deletePettyCashRequest(r.id);
       toast('Removed.');
       renderList(main);
     }));
-    qsa('.qty-input', main).forEach(input => {
+    qsa('.amount-input', main).forEach(input => {
       input.addEventListener('change', async () => {
         const val = Number(input.value);
-        if (isNaN(val) || val < 0) { input.value = rows.find(r => r.id === input.dataset.id).quantity; return; }
-        await Store.updateMaterialRequest(input.dataset.id, { quantity: val });
-        toast('✔ Quantity updated.');
+        if (isNaN(val) || val < 0) { input.value = rows.find(r => r.id === input.dataset.id).amount; return; }
+        await Store.updatePettyCashRequest(input.dataset.id, { amount: val });
+        toast('✔ Amount updated.');
         renderList(main);
       });
     });
@@ -70,16 +82,16 @@ window.Views.materials = (function () {
 
   function openMaterialForm(main, existing) {
     openModal(`
-      <h2>${existing ? 'Edit material' : 'Add material'}</h2>
+      <h2>${existing ? 'Edit request' : 'Add request'}</h2>
       <form id="material-form">
         <div class="modal-grid">
-          <div class="field full"><label>Material</label><input name="materialName" required value="${existing ? escapeHtml(existing.materialName) : ''}" /></div>
-          <div class="field"><label>Quantity</label><input type="number" name="quantity" min="0" step="1" required value="${existing ? existing.quantity : 1}" /></div>
-          <div class="field full"><label>Notes / Supplier</label><textarea name="notes" rows="2" placeholder="Optional — preferred supplier, job reference, etc.">${existing ? escapeHtml(existing.notes || '') : ''}</textarea></div>
+          <div class="field full"><label>Purpose</label><input name="purpose" required placeholder="e.g. Fare for site visit" value="${existing ? escapeHtml(existing.purpose) : ''}" /></div>
+          <div class="field"><label>Amount (PHP)</label><input type="number" name="amount" min="0" step="0.01" required value="${existing ? existing.amount : ''}" /></div>
+          <div class="field full"><label>Notes</label><textarea name="notes" rows="2" placeholder="Optional — job reference, who it's for, etc.">${existing ? escapeHtml(existing.notes || '') : ''}</textarea></div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
-          <button type="submit" class="btn btn-primary">${existing ? 'Save' : 'Add material'}</button>
+          <button type="submit" class="btn btn-primary">${existing ? 'Save' : 'Add request'}</button>
         </div>
       </form>
     `, (bd) => {
@@ -87,17 +99,17 @@ window.Views.materials = (function () {
         ev.preventDefault();
         const fd = new FormData(ev.target);
         const patch = {
-          materialName: fd.get('materialName').trim(),
-          quantity: Number(fd.get('quantity')) || 0,
+          purpose: fd.get('purpose').trim(),
+          amount: Number(fd.get('amount')) || 0,
           notes: fd.get('notes').trim(),
         };
         if (existing) {
-          await Store.updateMaterialRequest(existing.id, patch);
-          toast('✔ Material updated.');
+          await Store.updatePettyCashRequest(existing.id, patch);
+          toast('✔ Request updated.');
         } else {
           patch.requestedBy = currentUserEmail();
-          await Store.addMaterialRequest(patch);
-          toast('✔ Material added.');
+          await Store.addPettyCashRequest(patch);
+          toast('✔ Request added.');
         }
         closeModal();
         renderList(main);
@@ -105,12 +117,12 @@ window.Views.materials = (function () {
     });
   }
 
-  // Printable requisition slip -- same overlay/print convention as the DTR (js/app.js
+  // Printable petty cash voucher -- same overlay/print convention as the DTR (js/app.js
   // openDTR): a fixed .dtr-overlay that @media print rules in styles.css isolate to a
   // clean printed/PDF page, hiding the rest of the app.
   function openMaterialsPrint(rows) {
     qsa('.dtr-overlay').forEach(el => el.remove());
-    const totalQty = rows.reduce((s, m) => s + (Number(m.quantity) || 0), 0);
+    const total = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
 
     const overlay = document.createElement('div');
     overlay.className = 'dtr-overlay';
@@ -122,7 +134,7 @@ window.Views.materials = (function () {
         </div>
         <div class="dtr-header">
           <img src="assets/logo.svg" class="dtr-logo" alt="TxTAIRE" />
-          <h2>Materials Request</h2>
+          <h2>Petty Cash Voucher</h2>
         </div>
         <div class="dtr-meta">
           <div><strong>Date:</strong> ${fmtWhen(new Date().toISOString())}</div>
@@ -130,19 +142,19 @@ window.Views.materials = (function () {
         </div>
         <div class="dtr-table-wrap">
         <table class="dtr-table">
-          <thead><tr><th>Material</th><th class="num">Quantity</th><th>Notes / Supplier</th></tr></thead>
+          <thead><tr><th>Purpose</th><th class="num">Amount</th><th>Notes</th></tr></thead>
           <tbody>
-            ${rows.map(m => `
+            ${rows.map(r => `
               <tr>
-                <td>${escapeHtml(m.materialName)}</td>
-                <td class="num">${m.quantity}</td>
-                <td class="dim">${escapeHtml(m.notes || '')}</td>
+                <td>${escapeHtml(r.purpose)}</td>
+                <td class="num">${fmtMoney(r.amount)}</td>
+                <td class="dim">${escapeHtml(r.notes || '')}</td>
               </tr>
             `).join('')}
           </tbody>
           <tfoot><tr>
-            <td style="font-weight:600;">Total items: ${rows.length}</td>
-            <td class="num" style="font-weight:600;">${totalQty}</td>
+            <td style="font-weight:600;">Total</td>
+            <td class="num" style="font-weight:600;">${fmtMoney(total)}</td>
             <td></td>
           </tr></tfoot>
         </table>
@@ -151,6 +163,7 @@ window.Views.materials = (function () {
         <div class="dtr-signatures">
           <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Requested by</div></div>
           <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Approved by</div></div>
+          <div class="dtr-sig"><div class="dtr-sig-line"></div><div>Released by</div></div>
         </div>
       </div>
     `;
