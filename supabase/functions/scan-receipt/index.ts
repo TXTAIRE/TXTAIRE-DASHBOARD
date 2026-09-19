@@ -137,7 +137,8 @@ Deno.serve(async (req) => {
   try {
     if (geminiApiKey) {
       provider = 'Gemini';
-      apiRes = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+      var geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest';
+      apiRes = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + geminiModel + ':generateContent', {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-goog-api-key': geminiApiKey },
         body: JSON.stringify({
@@ -148,7 +149,6 @@ Deno.serve(async (req) => {
           generationConfig: {
             temperature: 0,
             responseMimeType: 'application/json',
-            thinkingConfig: { thinkingBudget: 0 },
           },
         }),
       });
