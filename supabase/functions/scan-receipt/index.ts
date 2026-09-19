@@ -123,67 +123,78 @@ Deno.serve(async (req) => {
     'This photo was taken specifically to be read by you, so assume it does contain a real ' +
     'receipt unless the image is truly blank or unrelated.';
 
-  // Gemini 2.5 Flash is the primary reader (much stronger OCR on small printed receipt text;
-  // thinking is switched off so it answers directly). Groq's Llama 4 Scout (a plain, non-
-  // reasoning vision model) is the fallback when no GEMINI_API_KEY secret is set. The
-  // earlier Groq qwen3.6 preview model was a reasoning model whose hidden thinking used up
-  // max_tokens, returning an empty reply -- the "blank details" bug.
-  //
-  // A single attempt only -- retrying with backoff inside one function call risked running
-  // past this project's execution-time limit; transient "busy" replies are retried from the
-  // CLIENT (js/ess-views/expenses.js) as fresh function calls instead.
-  var apiRes;
-  var provider;
-  try {
-    if (geminiApiKey) {
-      provider = 'Gemini';
-      var geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest';
-      apiRes = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + geminiModel + ':generateContent', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-goog-api-key': geminiApiKey },
-        body: JSON.stringify({
-          contents: [{ parts: [
-            { text: instructions },
-            { inline_data: { mime_type: mediaType, data: base64Data } },
-          ] }],
-          generationConfig: {
-            temperature: 0,
-            responseMimeType: 'application/json',
-          },
-        }),
-      });
-    } else {
-      provider = 'Groq';
-      apiRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + groqApiKey },
-        body: JSON.stringify({
-          model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'text', text: instructions },
-              { type: 'image_url', image_url: { url: 'data:' + mediaType + ';base64,' + base64Data } },
-            ],
-          }],
-          response_format: { type: 'json_object' },
-          temperature: 0,
-          max_tokens: 800,
-        }),
-      });
-    }
-  } catch (err) {
-    return jsonResponse({ error: 'Could not reach the receipt-scanning service' }, 502);
+  // Tries each Gemini model in turn (any of them can be overloaded or retired at a given
+  // moment -- 503 "high demand", 404 "no longer available"), then Groq's Llama 4 Scout (a
+  // plain non-reasoning vision model) if a GROQ_API_KEY is set. First good reply wins.
+  // All failures are quick, so the whole chain stays well inside the execution-time limit.
+  function callGemini(model) {
+    return fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': geminiApiKey },
+      body: JSON.stringify({
+        contents: [{ parts: [
+          { text: instructions },
+          { inline_data: { mime_type: mediaType, data: base64Data } },
+        ] }],
+        generationConfig: { temperature: 0, responseMimeType: 'application/json' },
+      }),
+    });
+  }
+  function callGroq() {
+    return fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + groqApiKey },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: instructions },
+            { type: 'image_url', image_url: { url: 'data:' + mediaType + ';base64,' + base64Data } },
+          ],
+        }],
+        response_format: { type: 'json_object' },
+        temperature: 0,
+        max_tokens: 800,
+      }),
+    });
   }
 
-  if (!apiRes.ok) {
-    var errText = await apiRes.text();
-    console.error(provider + ' API error:', apiRes.status, errText);
-    var retryable = apiRes.status === 503 || apiRes.status === 429;
+  var attempts = [];
+  if (geminiApiKey) {
+    var customModel = Deno.env.get('GEMINI_MODEL');
+    var geminiModels = [customModel, 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+    var seen = {};
+    geminiModels.forEach(function (m) {
+      if (m && !seen[m]) { seen[m] = true; attempts.push({ provider: 'Gemini', model: m }); }
+    });
+  }
+  if (groqApiKey) attempts.push({ provider: 'Groq', model: 'llama-4-scout' });
+
+  var apiJson = null;
+  var provider = '';
+  var lastStatus = 0;
+  for (var i = 0; i < attempts.length && !apiJson; i++) {
+    var attempt = attempts[i];
+    try {
+      var res = attempt.provider === 'Gemini' ? await callGemini(attempt.model) : await callGroq();
+      if (res.ok) {
+        apiJson = await res.json();
+        provider = attempt.provider;
+      } else {
+        lastStatus = res.status;
+        console.error(attempt.provider + ' ' + attempt.model + ' API error:', res.status, await res.text());
+      }
+    } catch (err) {
+      console.error(attempt.provider + ' ' + attempt.model + ' request failed:', String(err));
+    }
+  }
+
+  if (!apiJson) {
+    var retryable = lastStatus === 503 || lastStatus === 429;
     return jsonResponse({ error: 'The receipt-scanning service is busy right now -- please try again in a moment', retryable: retryable }, 502);
   }
 
-  var apiJson = await apiRes.json();
   var rawText;
   if (provider === 'Gemini') {
     var parts = apiJson && apiJson.candidates && apiJson.candidates[0] &&
